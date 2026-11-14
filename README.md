@@ -1,4 +1,66 @@
-# agent-plugins-toolkit
+# Unified Plugin Framework
+
+[![Status](https://img.shields.io/badge/status-foundation-orange)](https://linear.app/agentical-monolithics/project/unified-plugin-framework-fc59ba6d3fd4/overview)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10.14-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![Upstream](https://img.shields.io/badge/upstream-Agent_Plugins_Toolkit-blue)](https://github.com/Monolith-INC/agent-plugins-toolkit)
+
+A reference implementation of an independent Unified Plugin Contract: declare plugin dependencies, discover exported capabilities, compose adapters and overlays, and coordinate safe installation and updates.
+
+This repository is a linked fork of [Agent Plugins Toolkit](https://github.com/Monolith-INC/agent-plugins-toolkit). The inherited toolkit works today; dependency composition, capability matching, overlays, and coordinated updates are planned work.
+
+> **Core principle:** one shared planner describes the changes; separately approved operations apply them.
+
+## Why this exists
+
+Plugins need a shared way to describe what they depend on and what they offer. The framework will make those relationships explicit so tools can check compatibility before changing an installation, preserve dependency source files, and recover when an operation fails.
+
+## Project and roadmap
+
+Planning and delivery are tracked in [Unified Plugin Framework on Linear](https://linear.app/agentical-monolithics/project/unified-plugin-framework-fc59ba6d3fd4/overview).
+
+| Stage | Planned outcome |
+| --- | --- |
+| Fork foundation | Record the upstream baseline, establish ownership and verify inherited behavior |
+| Composition foundation | Independent contract, dependency resolution, capability matching and read-only planning |
+| Managed composition | Approved graph installation, capability broker and source-preserving wrappers |
+| Lifecycle and portability | Compatible updates, recovery and verified host support |
+
+See the [implementation plan](https://linear.app/agentical-monolithics/document/implementation-plan-v02-fork-first-75791b38aa14) and [architecture and research](https://linear.app/agentical-monolithics/document/unified-plugin-contract-architecture-and-research-c56dbc4f9dd4).
+
+## Development setup
+
+Requires Node.js 22 or newer and pnpm 10.14.0, as pinned in `package.json`.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm typecheck
+pnpm test
+pnpm payloads:verify
+```
+
+## Delivery tooling
+
+This checkout uses [Monolithic Dev Harness v0.7.0-rc.13](https://github.com/Monolith-INC/monolithic-dev-harness/releases/tag/v0.7.0-rc.13), installed for this project in Codex. Work belongs to the Linear project above; plans and specifications belong under `docs/work-items/`.
+
+To install the same release for another checkout:
+
+```sh
+gh release download v0.7.0-rc.13 --repo Monolith-INC/monolithic-dev-harness --pattern install.sh --output install-harness.sh
+bash install-harness.sh --version 0.7.0-rc.13 --scope local --host codex --project "$PWD" --yes
+```
+
+## Upstream baseline and licensing
+
+Forked from `Monolith-INC/agent-plugins-toolkit` at commit [`b75aaa5c627599f1fdb25caff154e9a22d2e2640`](https://github.com/Monolith-INC/agent-plugins-toolkit/commit/b75aaa5c627599f1fdb25caff154e9a22d2e2640) on 2026-11-14. Original history and package names are preserved. Use the `upstream` remote to review future changes before merging them through a pull request.
+
+The inherited baseline has no root license file. This fork adds no license grant; licensing and package publication remain decisions for the foundation stage.
+
+## Inherited toolkit
+
+The following reference describes the existing toolkit behavior.
 
 Reference implementation and CLI for the Agent Plugins v1.0.0 portable architecture.
 
