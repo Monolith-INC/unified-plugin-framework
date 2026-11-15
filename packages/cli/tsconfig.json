@@ -12,23 +12,11 @@
     {
       "path": "../core"
     },
-    {
-      "path": "../compiler"
-    },
-    {
-      "path": "../installer"
-    },
-    {
-      "path": "../adapter-claude"
-    },
-    {
-      "path": "../adapter-codex"
-    },
-    {
-      "path": "../adapter-cursor"
-    },
-    {
-      "path": "../workflows"
-    }
+    { "path": "../compiler" },
+    { "path": "../installer" },
+    { "path": "../adapter-claude" },
+    { "path": "../adapter-codex" },
+    { "path": "../adapter-cursor" },
+    { "path": "../workflows" }
   ]
 }

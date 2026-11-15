@@ -13,7 +13,7 @@ Check these steps in order. Stop at the first one that fails, tell the user whic
 
 1. **Declared:** the framework's manifest declares `monolithic-code-review-toolkit` for the `code-review` adapter.
 2. **Installed and enabled:** the skill `monolithic-code-review-toolkit:review-task` is available in this session. If it is not, report that the review toolkit is not installed or not enabled for this host.
-3. **Bound:** `.project-knowledge.json` names a `knowledgeRoot`, and if `.monolithic-code-review/sources.json` names a `knowledge.root`, both point to the same directory. If no store is configured, offer `setup-project-knowledge`.
+3. **Bound:** `.project-knowledge.json` names a `knowledgeRoot`, and `.monolithic-code-review/sources.json` sets `knowledge.root` to the same directory. The toolkit reads only its own setting, so both must be set. If the project store is missing, offer `setup-project-knowledge`; if the toolkit's is missing or different, offer the toolkit's `review-setup` and point it at the project store.
 
 From a checkout, `agent-plugin adapter-check` runs the same steps; see `docs/workflows/code-review.md`.
 

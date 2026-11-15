@@ -17,20 +17,12 @@ import { onboardedDiagnosticCodes, readOnboardedPlugins, type OnboardedPlugin } 
 export {
   UPF_EXTENSION,
   WORKFLOW_ADAPTERS,
+  WORKFLOW_NAMES,
   readOnboardedPlugins,
   type OnboardedPlugin,
   type OnboardedPluginsRead,
+  type WorkflowName,
 } from "./onboarded.js";
-
-export {
-  adapterPlugins,
-  checkAdapterReadiness,
-  type PluginSkillRef,
-  type Readiness,
-  type ReadinessFacts,
-  type ReadinessStep,
-  type WorkflowAdapter,
-} from "./workflow-adapter.js";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
 

@@ -9,7 +9,7 @@ The toolkit is a pnpm workspace with explicit package boundaries:
 - `packages/adapter-codex` — Codex payload rendering, validation, install planning, schema evidence, and shipped payloads
 - `packages/installer` — lock, stage, journal, commit, verify, cleanup, rollback, and installed-record handling for target directories
 - `packages/cli` — command-line entrypoints (`agent-plugin validate|inspect|install|create|add skill|adapter-check`)
-- `packages/workflows` — workflow contracts and the frozen adapters that fulfil them with onboarded plugins ([ADR-001](adr/ADR-001-workflow-adapter-interface.md))
+- `packages/workflows` — the workflow adapter interface, readiness check, workflow contracts and the frozen adapters that fulfil them with onboarded plugins ([ADR-001](adr/ADR-001-workflow-adapter-interface.md))
 - `packages/testing` — shared fixtures helpers for package tests
 
 ## Portable inspection model
