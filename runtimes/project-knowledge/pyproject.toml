@@ -7,7 +7,7 @@ name = "upf-project-knowledge"
 version = "0.1.0"
 description = "Standalone project knowledge MCP runtime for Unified Plugin Framework"
 requires-python = ">=3.12"
-license = "MIT"
+license = "Apache-2.0 AND MIT"
 authors = [{ name = "Unified Plugin Framework contributors" }]
 dependencies = ["mcp>=2.0,<3", "pydantic>=2.7,<3"]
 

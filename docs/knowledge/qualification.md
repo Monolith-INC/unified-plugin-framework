@@ -7,10 +7,11 @@ Local qualification ran on Linux with Python 3.12.13, `mcp` 2.3.0,
 
 Commands and results:
 
-- `/tmp/upf-knowledge-validation/bin/python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge` — passed, 20 tests.
-- `PYTHONPATH=runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge /tmp/upf-knowledge-validation/bin/python -m unittest discover -s runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge/tests -p 'test_*.py'` — passed, 60 inherited tests.
-- `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, and `pnpm payloads:verify` — passed.
-- `pnpm test` — one unchanged release-evidence test failed because its AGE-13 evidence documents are absent from the base commit; the other tests passed.
+- `python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge` — passed, 21 tests.
+- `PYTHONPATH=runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge python -m unittest discover -s runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge/tests -p 'test_*.py'` — passed, 60 inherited tests.
+- `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test`, and `pnpm payloads:verify` — passed.
+
+Last run 2026-11-15 on the AGE-90 branch, rebased onto `main` after AGE-88.
 
 The Python wheel was built from a temporary checkout copy, installed, and
 launched outside the source tree by both protocol suites. The consumer fixture
