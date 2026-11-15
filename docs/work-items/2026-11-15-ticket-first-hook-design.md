@@ -18,3 +18,8 @@ The hook does not try to catch every way around it, such as unusual command spel
 ## Tests
 
 `bash .claude/hooks/tests/require-ticket-branch.test.sh`, also run in CI.
+
+## Rule 3: no direct commits or pushes to main
+
+- Commits on `main`: blocked by the same hook, because `main` is not a ticket branch.
+- Pushes to `main`: GitHub branch protection on `main`, enabled 2026-11-15. It requires a pull request (no required approvals), applies to administrators, and forbids force pushes and deleting `main`. No CI check is required yet, because CI has not run on this fork.
