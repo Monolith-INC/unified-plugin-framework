@@ -6,6 +6,7 @@ This matrix documents AGE-27 coverage for the portable toolkit. All cases run in
 | --- | --- | --- | --- |
 | Manifest identity | `fixtures/valid/hello-world` | missing name/version, invalid name, unknown field, unsupported schema | `packages/core/test/inspection.test.mjs`, `packages/cli/test/m1-integration.test.mjs`, `packages/cli/test/security.test.mjs` |
 | Extensions | opaque object preserved | non-object extensions (fixture or unit) | `inspection.test.mjs`, `security.test.mjs` |
+| Onboarded plugins | `fixtures/valid/onboarded-plugins` | missing field, unknown adapter, duplicate name, malformed section (`fixtures/invalid/onboarded-plugins-invalid`) | `onboarded.test.mjs` |
 | Skill discovery | immediate-child only | missing `SKILL.md`, nested skills ignored, hostile directory names | `inspection.test.mjs`, `security.test.mjs` |
 | MCP parsing | stdio / http / sse / placeholders as data | missing command, malformed JSON | `inspection.test.mjs`, `security.test.mjs` |
 | Diagnostics | stable codes + partial results | severity/code/path snapshot assertions | `security.test.mjs` |

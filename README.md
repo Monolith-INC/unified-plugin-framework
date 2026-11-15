@@ -172,7 +172,28 @@ Closed portable fields:
 - `version` (required)
 - `description` (optional string)
 - `schemaVersion` (optional; supported: `1.0.0`)
-- `extensions` (optional opaque object; preserved, not interpreted)
+- `extensions` (optional object; preserved. Other namespaces are not interpreted.)
+
+### Onboarded plugins
+
+The framework declares the outside plugins its workflows depend on under one namespace in `extensions`:
+
+```json
+"extensions": {
+  "io.github.monolith-inc.upf": {
+    "onboardedPlugins": [
+      {
+        "name": "monolithic-code-review-toolkit",
+        "version": "^1.0.0",
+        "source": "github:Monolith-INC/monolithic-code-review-toolkit",
+        "adapter": "code-review"
+      }
+    ]
+  }
+}
+```
+
+Each entry needs a non-empty `name`, `version` range, `source` and `adapter`, and the adapter must be a known workflow adapter (currently `code-review`). `validate` reports missing fields, unknown adapters and duplicate names; `inspect` lists the valid entries under `onboardedPlugins`. See the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
 
 ### Skills
 

@@ -1,0 +1,17 @@
+{
+  "name": "onboarded-plugins",
+  "version": "1.0.0",
+  "description": "Declares one onboarded plugin for the code review workflow adapter.",
+  "extensions": {
+    "io.github.monolith-inc.upf": {
+      "onboardedPlugins": [
+        {
+          "name": "monolithic-code-review-toolkit",
+          "version": "^1.0.0",
+          "source": "github:Monolith-INC/monolithic-code-review-toolkit",
+          "adapter": "code-review"
+        }
+      ]
+    }
+  }
+}
