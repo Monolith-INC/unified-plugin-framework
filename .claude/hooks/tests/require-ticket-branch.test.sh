@@ -38,6 +38,11 @@ check blocked "pull request title without the ticket key" "$(cmd "gh pr create -
 check allowed "pull request with the ticket key in the title" "$(cmd "gh pr create --title 'AGE-1: add work' --body x")"
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
 check blocked "push after a new commit since review" "$(cmd "git push")"
+check allowed "merge with standing approval (default)" "$(cmd "gh pr merge 5 --squash")"
+git -C "$repo" config workflow.mergeApproval withdrawn
+check blocked "merge after approval was withdrawn" "$(cmd "gh pr merge 5 --squash")"
+git -C "$repo" config workflow.mergeApproval standing
+check allowed "merge after approval was restored" "$(cmd "gh pr merge 5 --squash")"
 git -C "$repo" switch -q -c feature/AGE-2-stacked feature/AGE-1-work
 check blocked "ticket branch cut from another branch" "$(edit "$repo/a.txt")"
 

@@ -4,6 +4,7 @@
 #   2. the branch was cut from main
 #   5. push or open a pull request only after HEAD passed review
 #   6. the pull request title carries the ticket key
+#   7. merge only while the owner's approval stands (git config workflow.mergeApproval)
 # Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
 # by GitHub branch protection on main.
 
@@ -20,6 +21,14 @@ case $(jq -r '.tool_name' <<<"$input") in
     start='(^|[;&|(][[:space:]]*|'$'\n''[[:space:]]*)'
     commits=$([[ $command =~ ${start}git[[:space:]]+commit ]] && echo y)
     publishes=$([[ $command =~ ${start}(git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create) ]] && echo y)
+    # Rule 7: merging needs the owner's approval, standing unless withdrawn in chat.
+    if [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge ]]; then
+      if [ "$(git -C "$project" config --get workflow.mergeApproval)" = withdrawn ]; then
+        echo "Blocked: the owner withdrew merge approval. Ask for explicit approval; when it is given, run: git config workflow.mergeApproval standing" >&2
+        exit 2
+      fi
+      exit 0
+    fi
     [[ -n $commits || -n $publishes ]] || exit 0 ;;
   *) exit 0 ;;
 esac
