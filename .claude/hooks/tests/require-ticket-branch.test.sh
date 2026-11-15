@@ -37,6 +37,8 @@ for c in "git commit -m x" "git commit;" "git commit&&git push" "(git commit)" "
          "git -c core.editor=true commit" "git --no-pager commit -m x" "ls; git commit --amend"; do
   check blocked "commit form: $c" "$(run "$project" "$c")"
 done
+check blocked "commit through an absolute git path" "$(run "$project" "/usr/bin/git commit -m x")"
+check blocked "commit with --git-dir and --work-tree" "$(run "$project" "git --git-dir .git --work-tree . commit -m x")"
 check allowed "non-commit Bash on main" "$(run "$project" "git status")"
 check allowed "git log mentioning commit on main" "$(run "$project" "git log --grep commit")"
 check allowed "git commit-tree is not git commit" "$(run "$project" "git commit-tree HEAD^{tree}")"
@@ -49,6 +51,12 @@ git init -q -b main "$other"
 check allowed "Edit in another repository on main" "$(edit Edit "$other/a.txt")"
 check allowed "git commit in another repository" "$(run "$other" "git commit -m x")"
 check blocked "cd into the project then commit, from outside" "$(run "$scratch" "cd $project && git commit -m x")"
+check blocked "relative cd into the project then commit" "$(run "$scratch" "cd repo && git commit -m x")"
+check blocked "git -C relative path into the project" "$(run "$scratch" "git -C ./repo commit -m x")"
+check blocked "Write inside .git on main" "$(edit Write "$project/.git/hooks/pre-commit")"
+mkdir -p "$project/broken" && printf 'gitdir: /nonexistent\n' > "$project/broken/.git"
+check blocked "unreadable path inside the project fails closed" "$(edit Edit "$project/broken/x.txt")" "could not read"
+rm -rf "$project/broken"
 
 # Ticket branches and the pattern.
 git -C "$project" switch -q -c feature/ABC-12-some-work
@@ -85,6 +93,23 @@ check allowed "conflict edit during a rebase of a ticket branch" "$(edit Edit "$
 gitc -C "$project" rebase --abort
 git -C "$project" switch -q --detach HEAD
 check blocked "plain detached HEAD" "$(edit Edit "$project/a.txt")"
+git -C "$project" switch -q feature/AGE-63-x
+
+# A commit aimed at a non-ticket worktree is judged there, not by the cwd.
+git -C "$project" worktree add -q -b topic/plain "$scratch/plainwt" main
+check blocked "git -C into a non-ticket worktree from a ticket cwd" "$(run "$project" "git -C $scratch/plainwt commit -m x")"
+check blocked "cd into a non-ticket worktree from a ticket cwd" "$(run "$project" "cd ../plainwt && git commit -m x")"
+
+# Settings problems fail closed with a clear reason.
+cp "$project/.harness/settings.json" "$scratch/settings.bak"
+printf '{"tracker":{"values":{"team":"AGE"}},}' > "$project/.harness/settings.json"
+check blocked "malformed settings" "$(edit Edit "$project/a.txt")" "cannot parse"
+printf '{"tracker":{"values":{"team":"AGE"}},"branch_template":"{type}/{key}-{slug}"}' > "$project/.harness/settings.json"
+check blocked "unknown template placeholder" "$(edit Edit "$project/a.txt")" "placeholder"
+printf '{"tracker":{"values":{"team":"AGE"}},"branch_template":"feat.{key}-{slug}"}' > "$project/.harness/settings.json"
+git -C "$project" switch -q -c featX-AGE-66-dot
+check blocked "template literal dot is not a wildcard" "$(edit Edit "$project/a.txt")"
+cp "$scratch/settings.bak" "$project/.harness/settings.json"
 git -C "$project" switch -q feature/AGE-63-x
 
 # Missing tools fail closed.

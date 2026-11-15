@@ -59,3 +59,13 @@ jobs:
             **/*.log
           if-no-files-found: ignore
           retention-days: 14
+
+  hooks:
+    name: ubuntu-latest / hook tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Test ticket-first hook
+        run: bash .claude/hooks/tests/require-ticket-branch.test.sh
