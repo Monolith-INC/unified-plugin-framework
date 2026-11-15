@@ -54,7 +54,7 @@ bash install-harness.sh --version 0.7.0-rc.13 --scope local --host codex --proje
 
 ## Upstream baseline and licensing
 
-Forked from `Monolith-INC/agent-plugins-toolkit` at commit [`b75aaa5c627599f1fdb25caff154e9a22d2e2640`](https://github.com/Monolith-INC/agent-plugins-toolkit/commit/b75aaa5c627599f1fdb25caff154e9a22d2e2640) on 2026-11-14. Original history and package names are preserved. Use the `upstream` remote to review future changes before merging them through a pull request. Fork details and the clone procedure are in [docs/upstream/baseline.md](docs/upstream/baseline.md).
+Forked from `Monolith-INC/agent-plugins-toolkit` on 2026-11-14. Original history and package names are preserved. Use the `upstream` remote to review future changes before merging them through a pull request. The pinned baseline commit, fork details and the clone procedure are in [docs/upstream/baseline.md](docs/upstream/baseline.md).
 
 Copyright 2026 Monolith-INC. Licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). The inherited baseline had no license file; the owner's ownership statement, the license decision and their dates are recorded in [docs/upstream/ownership.md](docs/upstream/ownership.md). Package publication is not decided, and inherited package names are unchanged.
 
