@@ -25,7 +25,7 @@ context: []
 
 **Ownership statement:** On 2026-11-14, the user selected “I own the inherited source.” Cite this conversation as the source of that statement. Ownership was asserted by the user, not independently verified; no license or package publication policy was selected by that answer.
 
-**License selection:** The user subsequently delegated selection of a usual plugin license. Selected Apache License 2.0 (`Apache-2.0`), also used by OpenAI's community-plugins repository and Anthropic's claude-plugins-official repository, checked on 2026-11-14. Record the standard license for the user-owned project while preserving any third-party notices and separate terms. This draft records the selection; it does not claim a license file has already been applied. Package publication is outside this work.
+**License selection:** The user subsequently delegated selection of a usual plugin license. Selected Apache License 2.0 (`Apache-2.0`), also used by OpenAI's community-plugins repository and Anthropic's claude-plugins-official repository, checked on 2026-11-14. Record the standard license for the user-owned project while preserving any third-party notices and separate terms. This draft records the selection; it does not claim a license file has already been applied. (Superseded: the license was applied on 2026-11-15; see Implementation notes.) Package publication is outside this work.
 
 Sources: https://github.com/openai/community-plugins ; https://github.com/anthropics/claude-plugins-official/blob/main/LICENSE ; authoritative license text: https://www.apache.org/licenses/LICENSE-2.0.txt .
 
@@ -55,10 +55,10 @@ Use the Unified Plugin Framework Linear project and harness tools for tracker wo
 
 ## Provisional tasks and acceptance
 
-- [ ] `docs/upstream/ownership.md`: create one ownership record with a compact decision table (observation or decision, evidence or human answer, date, unresolved limits). Include the confirmed destination, permission scope, publication policy versus enforced controls, actual chronology, dated repository evidence, and links to remaining foundation and release decisions. Identify the older pre-fork planning statement as historical.
-- [ ] `README.md`: link to that record and align its foundation status with the approved facts.
-- [ ] `LICENSE`: add the unmodified standard Apache License 2.0 text; document the selected project license in README and preserve existing third-party notices and terms. Do not change inherited package manifests in this slice.
-- [ ] `docs/upstream/ownership.md`: verify current owner, visibility and source before closure; check every acceptance condition and list unresolved conditions explicitly.
+- [x] `docs/upstream/ownership.md`: create one ownership record with a compact decision table (observation or decision, evidence or human answer, date, unresolved limits). Include the confirmed destination, permission scope, publication policy versus enforced controls, actual chronology, dated repository evidence, and links to remaining foundation and release decisions. Identify the older pre-fork planning statement as historical.
+- [x] `README.md`: link to that record and align its foundation status with the approved facts.
+- [x] `LICENSE`: add the unmodified standard Apache License 2.0 text; document the selected project license in README and preserve existing third-party notices and terms. Do not change inherited package manifests in this slice.
+- [x] `docs/upstream/ownership.md`: verify current owner, visibility and source before closure; check every acceptance condition and list unresolved conditions explicitly.
 - [ ] Harness-managed AGE-61 record: during refinement, explicitly resolve how to handle its original pre-fork decision requirement now that the fork exists. Preserve the original requirement and chronology; do not declare the historical condition satisfied without evidence. Attach final verification through the supported workflow.
 
 Acceptance:
@@ -78,7 +78,7 @@ Compare the final ownership record with current GitHub metadata, the pinned base
 
 ## Implementation notes
 
-Implemented on 2026-11-15 on branch `feature/AGE-61-ownership-and-license`. The owner named Monolith-INC as the copyright holder. Delivered: `LICENSE` (unmodified Apache-2.0), `NOTICE`, `docs/upstream/ownership.md` and the README licensing paragraph. The statements above that no license is applied describe the state before execution. The discovery and review files in this folder are historical planning records; `docs/upstream/ownership.md` is the current record.
+Approved for execution by the owner on 2026-11-15 ("go with A") and implemented that day on branch `feature/AGE-61-ownership-and-license`. The owner stated that Monolith-INC holds the copyright and accepted publishing the license now. The last task, how AGE-61 treats the original pre-fork requirement, stays open for the owner at closure. Delivered: `LICENSE` (unmodified Apache-2.0), `NOTICE`, `docs/upstream/ownership.md` and the README licensing paragraph. The statements above that no license is applied describe the state before execution. The discovery and review files in this folder are historical planning records; `docs/upstream/ownership.md` is the current record.
 
 ## Plan change log
 

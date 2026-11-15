@@ -10,10 +10,11 @@ This record states who owns this fork, where its source comes from, and under wh
 | Destination | Decision | Keep the existing public fork as the project's home | Owner, in conversation | 2026-11-14 |
 | Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `README.md` | 2026-11-14 |
 | Inherited license | Observed | The baseline has no license file; GitHub detected no license; no package manifest declares one | Baseline tree, GitHub metadata, `package.json` files | 2026-11-15 |
-| Ownership of inherited source | Decision (owner's statement) | The owner stated they own the inherited source. This is the owner's assertion and has not been independently verified. | Owner, in conversation | 2026-11-14 |
-| Copyright holder (Licensor) | Decision | Monolith-INC | Owner, in conversation | 2026-11-15 |
+| Ownership of inherited source | Owner's statement (unverified) | The owner stated they own the inherited source. This is the owner's assertion and has not been independently verified. | Owner, in conversation | 2026-11-14 |
+| Copyright holder (Licensor) | Owner's statement (unverified) | Monolith-INC holds the copyright to the inherited source and to this fork | Owner, in conversation | 2026-11-15 |
 | Project license | Decision | Apache License 2.0 (`Apache-2.0`), selected under the owner's delegated choice | Owner delegation; [license text](https://www.apache.org/licenses/LICENSE-2.0.txt) | 2026-11-14 |
-| Reason for the choice | Observed | First-party plugin repositories use Apache-2.0, for example [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/blob/main/LICENSE) | Checked on GitHub | 2026-11-14 |
+| Reason for the choice | Observed | Plugin repositories use Apache-2.0, for example [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/blob/main/LICENSE) and [openai/community-plugins](https://github.com/openai/community-plugins) | Checked on GitHub | 2026-11-14 |
+| Applying the license now | Decision | Publish Apache-2.0 now, with ownership resting on the owner's own statement. The owner accepted that the grant cannot be withdrawn. | Owner, in conversation | 2026-11-15 |
 | License files | Applied | `LICENSE` holds the unmodified Apache-2.0 text; `NOTICE` names Monolith-INC as copyright holder and credits the upstream toolkit | This repository | 2026-11-15 |
 | Package publication | Not decided | No package is published. Inherited package names (`@agent-plugins/*`) are unchanged. Publishing needs its own decision on names, registry and authority. | This record | 2026-11-15 |
 
