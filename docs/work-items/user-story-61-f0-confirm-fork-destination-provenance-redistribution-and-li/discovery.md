@@ -1,5 +1,7 @@
 # AGE-61 discovery
 
+> Historical record from 2026-11-14. Superseded by `docs/upstream/ownership.md` (current record) and the approach's Implementation notes.
+
 Observed on 2026-11-14. Investigation only; no approval or completion is recorded here.
 
 ## Scope and sources

@@ -3,7 +3,7 @@ title: 'Record fork ownership and publication policy'
 type: approach
 ticket: AGE-61
 created: '2026-11-14'
-status: implemented
+status: implemented-pending-closure
 route: full
 route_source: pinned
 review: thorough
@@ -25,7 +25,7 @@ context: []
 
 **Ownership statement:** On 2026-11-14, the user selected “I own the inherited source.” Cite this conversation as the source of that statement. Ownership was asserted by the user, not independently verified; no license or package publication policy was selected by that answer.
 
-**License selection:** The user subsequently delegated selection of a usual plugin license. Selected Apache License 2.0 (`Apache-2.0`), also used by OpenAI's community-plugins repository and Anthropic's claude-plugins-official repository, checked on 2026-11-14. Record the standard license for the user-owned project while preserving any third-party notices and separate terms. This draft records the selection; it does not claim a license file has already been applied. (Superseded: the license was applied on 2026-11-15; see Implementation notes.) Package publication is outside this work.
+**License selection:** The user subsequently delegated selection of a usual plugin license. Selected Apache License 2.0 (`Apache-2.0`), also used by OpenAI's community-plugins repository and Anthropic's claude-plugins-official repository, checked on 2026-11-14. Record the standard license for the user-owned project while preserving any third-party notices and separate terms. This draft records the selection; it does not claim a license file has already been applied. Package publication is outside this work.
 
 Sources: https://github.com/openai/community-plugins ; https://github.com/anthropics/claude-plugins-official/blob/main/LICENSE ; authoritative license text: https://www.apache.org/licenses/LICENSE-2.0.txt .
 
@@ -94,3 +94,4 @@ Approved for execution by the owner on 2026-11-15 ("go with A") and implemented 
 ## Review triage log
 
 Standard planning depth, all five method outcomes, the existing repository destination and the user's ownership statement were captured through the harness. Apache-2.0 was selected under the user's delegated choice; no package publication is requested. No implementation approval has been recorded.
+- 2026-11-15: execution approved by the owner and implemented; see Implementation notes. Closure waits on the pre-fork requirement task.
