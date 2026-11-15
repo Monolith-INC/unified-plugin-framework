@@ -3,6 +3,7 @@
 #   1. work only on a ticket branch: feature/<KEY>-<n>-<slug>
 #   2. the branch was cut from main
 #   5. push or open a pull request only after HEAD passed review
+#   6. the pull request title carries the ticket key
 # Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
 # by GitHub branch protection on main.
 
@@ -41,6 +42,15 @@ if [ -n "${publishes:-}" ]; then
   head=$(git -C "$project" rev-parse HEAD)
   if [ "$(git -C "$project" config --get "branch.$branch.reviewed")" != "$head" ]; then
     echo "Blocked: HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head" >&2
+    exit 2
+  fi
+fi
+
+# Rule 6: the pull request title carries the ticket key (it becomes the squash commit title).
+if [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create ]]; then
+  key=$(sed -E 's#^feature/([A-Z][A-Z0-9]*-[0-9]+)-.*#\1#' <<<"$branch")
+  if [[ $command != *"--title"* || $command != *"$key"* ]]; then
+    echo "Blocked: open the pull request with the ticket key in the title: gh pr create --title \"$key: <summary>\"" >&2
     exit 2
   fi
 fi

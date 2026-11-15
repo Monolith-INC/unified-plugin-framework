@@ -33,3 +33,8 @@ Enforced by the same GitHub branch protection: `main` only changes through a mer
 The hook blocks `git push` and `gh pr create` unless the current commit passed review. After the confirming review, record it with `git config branch.<branch>.reviewed <commit>`. Any later commit needs a new review. Commands are recognised only at the start of a command (or after `;`, `&`, `|`, `(`), so text that mentions them is not blocked.
 
 The review loop ends when a round finds no correctness or security problems in the change. After three rounds, the remaining findings go to the owner to decide.
+
+## Rule 6: push, then squash-merge with the ticket key in the title
+
+- Repository settings (GitHub, 2026-11-15): squash merge only; merge commits and rebase merges are off. The squash commit takes the pull request title and body.
+- The hook blocks `gh pr create` unless it has `--title` containing the branch's ticket key, for example `AGE-63: <summary>`.

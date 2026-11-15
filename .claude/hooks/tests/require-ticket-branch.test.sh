@@ -33,7 +33,9 @@ check blocked "push before review" "$(cmd "git push -u origin feature/AGE-1-work
 check blocked "pull request before review" "$(cmd "gh pr create --fill")"
 git -C "$repo" config branch.feature/AGE-1-work.reviewed "$(git -C "$repo" rev-parse HEAD)"
 check allowed "push after review of HEAD" "$(cmd "git push -u origin feature/AGE-1-work")"
-check allowed "pull request after review of HEAD" "$(cmd "gh pr create --fill")"
+check blocked "pull request without a title" "$(cmd "gh pr create --fill")"
+check blocked "pull request title without the ticket key" "$(cmd "gh pr create --title 'add work' --body x")"
+check allowed "pull request with the ticket key in the title" "$(cmd "gh pr create --title 'AGE-1: add work' --body x")"
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
 check blocked "push after a new commit since review" "$(cmd "git push")"
 git -C "$repo" switch -q -c feature/AGE-2-stacked feature/AGE-1-work
