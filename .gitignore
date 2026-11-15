@@ -7,3 +7,10 @@ dist/
 .harness/
 _bmad/
 _bmad-output/
+
+# Codex: share the workflow hook adapter, keep the rest local (AGE-88)
+!/.codex/
+/.codex/*
+!/.codex/hooks.json
+!/.codex/hooks/
+__pycache__/

@@ -46,3 +46,22 @@ The hooks judge the checkout the action targets: the directory of the edited fil
 ## Tests
 
 `bash .claude/hooks/tests/require-ticket-branch.test.sh`, also run by the `hooks` CI job.
+
+## Codex registration
+
+`.codex/hooks.json` registers the same pre-tool checks and post-command reminder
+for Codex. `.codex/hooks/workflow.py` translates each `apply_patch` file header
+(including move destinations) into an edit check and delegates to the existing
+Claude scripts without copying their rules. Relative file paths use the tool's
+working directory, falling back to the session directory. Commands resolve the
+adapter from the Git root, including when Codex starts in a subdirectory.
+
+Requires Python 3, Bash, Git and jq. Run
+`python3 -B -m unittest discover -s .codex/hooks/tests -v` for adapter coverage.
+The original limitations above also apply to Codex; this migration does not
+extend command parsing or verify tracker state. The after-merge response is a
+conditional reminder, not proof that a merge succeeded.
+
+Codex requires review and trust of new project hooks through `/hooks` before
+running them. Script tests and registration alone do not prove that the current
+desktop session has loaded and trusted these hooks.
