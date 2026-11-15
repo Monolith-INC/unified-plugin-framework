@@ -6,28 +6,31 @@
 [![pnpm](https://img.shields.io/badge/pnpm-10.14-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![Upstream](https://img.shields.io/badge/upstream-Agent_Plugins_Toolkit-blue)](https://github.com/Monolith-INC/agent-plugins-toolkit)
 
-A reference implementation of an independent Unified Plugin Contract: declare plugin dependencies, discover exported capabilities, compose adapters and overlays, and coordinate safe installation and updates.
+A project companion for agent-assisted development. It offers workflows such as code review, Discovery and project tracking, each built on outside plugins the framework onboards as dependencies.
 
-This repository is a linked fork of [Agent Plugins Toolkit](https://github.com/Monolith-INC/agent-plugins-toolkit). The inherited toolkit works today; dependency composition, capability matching, overlays, and coordinated updates are planned work.
+This repository is a linked fork of [Agent Plugins Toolkit](https://github.com/Monolith-INC/agent-plugins-toolkit). The inherited toolkit works today; the workflows are being built on top of it.
 
-> **Core principle:** one shared planner describes the changes; separately approved operations apply them.
+> **Core principle:** each workflow keeps a stable contract with its users; the plugin behind it can change.
 
-## Why this exists
+## How it works
 
-Plugins need a shared way to describe what they depend on and what they offer. The framework will make those relationships explicit so tools can check compatibility before changing an installation, preserve dependency source files, and recover when an operation fails.
+- **Workflows** are what users and their agents work with: code review, Discovery and planning, project tracking, continuity across sessions.
+- **Each workflow has a workflow adapter.** The adapter is the workflow's contract, the skills and tools it exposes, and it maps that contract onto the plugin that currently does the work.
+- **Onboarded plugins** are ordinary dependencies, such as the Monolithic Code Review Toolkit, Superpowers or BMad Method. They are declared with a version, pinned, and upgraded only when the adapter's tests still pass. Replacing a plugin means adjusting its adapter's mapping; the contract stays the same.
+- **Project knowledge** is shared by every workflow through one knowledge store per project.
+
+The full design is in the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
 
 ## Project and roadmap
 
 Planning and delivery are tracked in [Unified Plugin Framework on Linear](https://linear.app/agentical-monolithics/project/unified-plugin-framework-fc59ba6d3fd4/overview).
 
-| Stage | Planned outcome |
+| Stage | Outcome |
 | --- | --- |
-| Fork foundation | Record the upstream baseline, establish ownership and verify inherited behavior |
-| Composition foundation | Independent contract, dependency resolution, capability matching and read-only planning |
-| Managed composition | Approved graph installation, capability broker and source-preserving wrappers |
-| Lifecycle and portability | Compatible updates, recovery and verified host support |
-
-See the [implementation plan](https://linear.app/agentical-monolithics/document/implementation-plan-v02-fork-first-75791b38aa14) and [architecture and research](https://linear.app/agentical-monolithics/document/unified-plugin-contract-architecture-and-research-c56dbc4f9dd4).
+| Fork foundation | Done: upstream baseline recorded, ownership established, inherited behavior verified |
+| First workflow: code review | Shared project knowledge, onboarded plugins declared and pinned, and code review working through its adapter |
+| Discovery | Discovery and planning through an adapter over Superpowers and BMad Method |
+| Further workflows | Project tracking, continuity, and the remaining workflows, one adapter at a time |
 
 ## Development setup
 
