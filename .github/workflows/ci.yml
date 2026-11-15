@@ -69,3 +69,6 @@ jobs:
 
       - name: Test ticket-first hook
         run: bash .claude/hooks/tests/require-ticket-branch.test.sh
+
+      - name: Test Codex hook adapter
+        run: python3 -B -m unittest discover -s .codex/hooks/tests -v
