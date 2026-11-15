@@ -8,7 +8,7 @@ This record states who owns this fork, where its source comes from, and under wh
 | --- | --- | --- | --- | --- |
 | Destination | Observed | `Monolith-INC/unified-plugin-framework`, public, a GitHub fork of `Monolith-INC/agent-plugins-toolkit`, created 2026-11-14 11:47 UTC | GitHub repository metadata | 2026-11-15 |
 | Destination | Decision | Keep the existing public fork as the project's home | Owner, in conversation | 2026-11-14 |
-| Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `README.md` | 2026-11-14 |
+| Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `docs/upstream/baseline.md` | 2026-11-15 |
 | Inherited license | Observed | The baseline has no license file; GitHub detected no license; no package manifest declares one | Baseline tree, GitHub metadata, `package.json` files | 2026-11-15 |
 | Ownership of inherited source | Owner's statement (unverified) | The owner stated they own the inherited source. This is the owner's assertion and has not been independently verified. | Owner, in conversation | 2026-11-14 |
 | Copyright holder (Licensor) | Owner's statement (unverified) | Monolith-INC holds the copyright to the inherited source and to this fork | Owner, in conversation | 2026-11-15 |
@@ -27,7 +27,7 @@ The original plan required this decision before the fork was created. The fork w
 This record does not pass the fork-foundation gate. Still open:
 
 - Package publication: names, registry and authority are undecided. Package manifests declare no `license` field yet; add it when publication is decided.
-- Fork baseline confirmation (AGE-62) and the upstream sync procedure with the inherited test baseline (AGE-86).
+- The upstream sync procedure and the inherited test baseline (AGE-86). The fork baseline is recorded in `docs/upstream/baseline.md` (AGE-62).
 - The original pre-fork approval requirement: on 2026-11-15 the owner accepted it as met after the fact, as recorded in the chronology above.
 
 ## Scope
