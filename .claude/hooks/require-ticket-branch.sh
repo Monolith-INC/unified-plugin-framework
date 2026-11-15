@@ -5,6 +5,7 @@
 #   5. push or open a pull request only after HEAD passed review
 #   6. the pull request title carries the ticket key
 #   7. merge only while the owner's approval stands (git config workflow.mergeApproval)
+#   9. plan, spec and design markdown files live in docs/work-items/
 # Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
 # by GitHub branch protection on main.
 
@@ -14,7 +15,13 @@ project=${CLAUDE_PROJECT_DIR:-.}
 case $(jq -r '.tool_name' <<<"$input") in
   Edit|Write|MultiEdit|NotebookEdit)
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
-    [[ $path == "$project"/* ]] || exit 0 ;;
+    [[ $path == "$project"/* ]] || exit 0
+    # Rule 9: plans and specs live in docs/work-items/.
+    name=$(basename "$path" | tr '[:upper:]' '[:lower:]')
+    if [[ $name == *.md && $name =~ (plan|spec|design) && $path != "$project"/docs/work-items/* ]]; then
+      echo "Blocked: plans and specs go in docs/work-items/. Write it there instead of $path" >&2
+      exit 2
+    fi ;;
   Bash)
     command=$(jq -r '.tool_input.command' <<<"$input")
     # Only commands that start a line or follow ; & | ( count, not quoted text.

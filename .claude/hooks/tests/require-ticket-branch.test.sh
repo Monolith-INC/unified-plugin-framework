@@ -27,6 +27,10 @@ check allowed "edit outside the project" "$(edit /tmp/elsewhere.txt)"
 git -C "$repo" switch -q -c feature/AGE-1-work main
 check allowed "edit on a ticket branch cut from main" "$(edit "$repo/a.txt")"
 check allowed "git commit on a ticket branch" "$(cmd "git commit -m x")"
+check blocked "plan outside docs/work-items" "$(edit "$repo/Implementation_Plans/AGE-1-plan.md")"
+check blocked "spec outside docs/work-items" "$(edit "$repo/docs/superpowers/specs/2026-11-15-x-design.md")"
+check allowed "plan in docs/work-items" "$(edit "$repo/docs/work-items/2026-11-15-x-plan.md")"
+check allowed "other markdown anywhere" "$(edit "$repo/README.md")"
 
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
 check blocked "push before review" "$(cmd "git push -u origin feature/AGE-1-work")"

@@ -46,3 +46,7 @@ Approval is standing by default. When the owner withdraws it in chat, the agent 
 ## Rule 8: move the ticket to Done
 
 A Claude Code PostToolUse hook, `.claude/hooks/after-merge.sh`, runs after `gh pr merge` and tells the agent to move the branch's ticket to Done in the tracker. Moving it stays a tracker action.
+
+## Rule 9: plans and specs go in docs/work-items/
+
+The hook blocks writing a Markdown file whose name contains `plan`, `spec` or `design` anywhere in the project except under `docs/work-items/`.
