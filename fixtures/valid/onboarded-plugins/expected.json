@@ -1,0 +1,9 @@
+{
+  "id": "onboarded-plugins",
+  "kind": "valid",
+  "description": "An onboarded plugin declared for a known workflow adapter validates cleanly.",
+  "validateExitCode": 0,
+  "diagnosticCodes": [],
+  "requireManifest": true,
+  "skillPaths": []
+}

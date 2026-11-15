@@ -1,0 +1,12 @@
+{
+  "id": "onboarded-plugins-invalid",
+  "kind": "invalid",
+  "description": "A missing version range, an unknown adapter and a duplicate declaration each produce a diagnostic; the valid entry still loads.",
+  "validateExitCode": 1,
+  "diagnosticCodes": [
+    "upf.onboardedPlugin.field.required",
+    "upf.onboardedPlugin.adapter.unknown",
+    "upf.onboardedPlugin.duplicate"
+  ],
+  "requireManifest": true
+}

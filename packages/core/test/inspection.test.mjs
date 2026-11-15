@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { diagnosticCodes, inspectManifest, inspectPlugin, loadPluginRoot } from "../dist/index.js";
+import { UPF_EXTENSION, diagnosticCodes, inspectManifest, inspectPlugin, loadPluginRoot } from "../dist/index.js";
 
 test("inspectManifest reports structured manifest diagnostics", () => {
   const inspection = inspectManifest({
@@ -224,6 +224,26 @@ test("all stable diagnostic codes are reachable through inspection", () => {
       name: "typed-schema",
       version: "1.0.0",
       schemaVersion: 1,
+    }),
+    inspectManifest({
+      name: "malformed-onboarded-section",
+      version: "1.0.0",
+      extensions: { [UPF_EXTENSION]: [] },
+    }),
+    inspectManifest({
+      name: "invalid-onboarded-plugins",
+      version: "1.0.0",
+      extensions: {
+        [UPF_EXTENSION]: {
+          onboardedPlugins: [
+            null,
+            { name: "no-version", source: "github:example/no-version", adapter: "code-review" },
+            { name: "unknown-adapter", version: "^1.0.0", source: "github:example/a", adapter: "unknown" },
+            { name: "twice", version: "^1.0.0", source: "github:example/b", adapter: "code-review" },
+            { name: "twice", version: "^1.0.0", source: "github:example/b", adapter: "code-review" },
+          ],
+        },
+      },
     }),
   ];
 

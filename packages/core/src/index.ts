@@ -12,6 +12,16 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
+import { onboardedDiagnosticCodes, readOnboardedPlugins, type OnboardedPlugin } from "./onboarded.js";
+
+export {
+  UPF_EXTENSION,
+  WORKFLOW_ADAPTERS,
+  readOnboardedPlugins,
+  type OnboardedPlugin,
+  type OnboardedPluginsRead,
+} from "./onboarded.js";
+
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
 export const diagnosticCodes = {
@@ -49,6 +59,7 @@ export const diagnosticCodes = {
   authoringPluginRootInvalid: "authoring.plugin_root.invalid",
   authoringSkillExists: "authoring.skill.exists",
   authoringWriteFailed: "authoring.write_failed",
+  ...onboardedDiagnosticCodes,
 } as const;
 
 export type DiagnosticCode = (typeof diagnosticCodes)[keyof typeof diagnosticCodes] | (string & {});
@@ -231,6 +242,7 @@ export interface PluginInspection {
   readonly manifest?: PluginManifest;
   readonly skills?: readonly PluginSkill[];
   readonly mcpServers?: readonly PluginMcpServer[];
+  readonly onboardedPlugins?: readonly OnboardedPlugin[];
   readonly diagnostics: readonly Diagnostic[];
 }
 
@@ -257,9 +269,11 @@ export function inspectManifest(value: unknown): PluginInspection {
   }
 
   const manifest = readManifest(value, "portable");
+  const onboarded = readOnboardedPlugins(manifest.value?.extensions);
   return {
     ...(manifest.value === undefined ? {} : { manifest: manifest.value }),
-    diagnostics: manifest.diagnostics,
+    ...optionalOnboardedPlugins(onboarded.plugins),
+    diagnostics: [...manifest.diagnostics, ...onboarded.diagnostics],
   };
 }
 
@@ -271,13 +285,26 @@ export function inspectPlugin(value: unknown): PluginInspection {
   const manifest = readManifest(value, "declaration");
   const skills = readSkills(value["skills"]);
   const mcpServers = readMcpServers(value["mcpServers"]);
+  const onboarded = readOnboardedPlugins(manifest.value?.extensions);
 
   return {
     ...(manifest.value === undefined ? {} : { manifest: manifest.value }),
     ...optionalSkills(skills.value),
     ...optionalMcpServers(mcpServers.value),
-    diagnostics: [...manifest.diagnostics, ...skills.diagnostics, ...mcpServers.diagnostics],
+    ...optionalOnboardedPlugins(onboarded.plugins),
+    diagnostics: [
+      ...manifest.diagnostics,
+      ...skills.diagnostics,
+      ...mcpServers.diagnostics,
+      ...onboarded.diagnostics,
+    ],
   };
+}
+
+function optionalOnboardedPlugins(
+  value: readonly OnboardedPlugin[],
+): { readonly onboardedPlugins?: readonly OnboardedPlugin[] } {
+  return value.length === 0 ? {} : { onboardedPlugins: value };
 }
 
 function readManifest(
