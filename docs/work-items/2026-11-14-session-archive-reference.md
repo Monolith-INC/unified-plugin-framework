@@ -1,5 +1,7 @@
 # Session archive plan
 
+> Reference material for Plan D (session archival); not an approved plan for this repository. It was written for the Agent Continuity plugin: file paths and "pull request #2" refer to that project, not this one. Where it differs from `unified-plugin-framework-draft-plan.md`, the draft plan wins; in particular `Knowledge/Session_Decisions.md` indexes decisions and does not copy their text.
+
 Nov 14, 2026 · @Théo Carranza
 
 ## Goal

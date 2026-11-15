@@ -121,7 +121,7 @@ No session records are to be deleted as part of preparing this draft.
 
 ### Additional source: Session archive plan
 
-The user supplied `Implementation_Plans/Session archive plan.md`. Its proposed defaults are incorporated here for discussion, not treated as approved implementation instructions:
+The user supplied the session archive plan, now kept as `2026-11-14-session-archive-reference.md`. Its proposed defaults are incorporated here for discussion, not treated as approved implementation instructions:
 
 - **Retention count agreed:** keep the newest 10 session records readily readable. The source additionally proposes retaining ongoing and unreadable records regardless of count.
 - Preserve decisions and other valuable knowledge before marking a record as distilled and eligible for archiving.
