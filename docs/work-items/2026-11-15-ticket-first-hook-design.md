@@ -23,3 +23,7 @@ The hook does not try to catch every way around it, such as unusual command spel
 
 - Commits on `main`: blocked by the same hook, because `main` is not a ticket branch.
 - Pushes to `main`: GitHub branch protection on `main`, enabled 2026-11-15. It requires a pull request (no required approvals), applies to administrators, and forbids force pushes and deleting `main`. No CI check is required yet, because CI has not run on this fork.
+
+## Rule 4: merge only through a pull request
+
+Enforced by the same GitHub branch protection: `main` only changes through a merged pull request. A local merge into `main` cannot be pushed.
