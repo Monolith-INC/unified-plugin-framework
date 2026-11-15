@@ -16,3 +16,12 @@ release in those ranges.
 
 The original discovery procedure is retained in the vendor tree at
 `plugins/monolithic-code-review-toolkit/skills/discover-project-knowledge/SKILL.md`.
+
+Each target project uses one shared knowledge root. The owned project setting
+uses `.project-knowledge.json` with `schemaVersion: 1` and `knowledgeRoot`.
+An explicit root applies only to that invocation and does not rewrite settings.
+When no project setting exists, the runtime can read the legacy
+`.monolithic-code-review/sources.json` value at `knowledge.root`. It never
+migrates that setting automatically. If the project setting and legacy setting
+name different roots, selection returns a configuration error so callers can
+resolve the choice explicitly.
