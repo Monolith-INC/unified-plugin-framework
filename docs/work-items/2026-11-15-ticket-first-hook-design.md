@@ -42,3 +42,7 @@ The review loop ends when a round finds no correctness or security problems in t
 ## Rule 7: merge under the owner's standing approval
 
 Approval is standing by default. When the owner withdraws it in chat, the agent sets `git config workflow.mergeApproval withdrawn`, and the hook blocks `gh pr merge`. When the owner approves again, the agent sets it back to `standing`. The change is also noted on the tracker ticket.
+
+## Rule 8: move the ticket to Done
+
+A Claude Code PostToolUse hook, `.claude/hooks/after-merge.sh`, runs after `gh pr merge` and tells the agent to move the branch's ticket to Done in the tracker. Moving it stays a tracker action.

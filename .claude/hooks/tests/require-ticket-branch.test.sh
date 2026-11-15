@@ -49,4 +49,12 @@ check blocked "ticket branch cut from another branch" "$(edit "$repo/a.txt")"
 git -C "$repo" switch -q -c topic/x main
 check blocked "branch without a ticket" "$(edit "$repo/a.txt")"
 
+# Rule 8: reminder after a merge.
+after=$(dirname "$hook")/after-merge.sh
+git -C "$repo" switch -q feature/AGE-1-work
+out=$(cmd "gh pr merge 5 --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 2 ] && [[ $out == *"move ticket AGE-1 to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
+out=$(cmd "git status" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for other commands"; else echo "FAIL no reminder for other commands"; fail=1; fi
+
 exit $fail
