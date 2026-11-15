@@ -54,10 +54,12 @@ for Codex. `.codex/hooks/workflow.py` translates each `apply_patch` file header
 (including move destinations) into an edit check and delegates to the existing
 Claude scripts without copying their rules. Relative file paths use the tool's
 working directory, falling back to the session directory. Commands resolve the
-adapter from the Git root, including when Codex starts in a subdirectory.
+adapter from the Git root, including when Codex starts in a subdirectory; outside
+a checkout that has the adapter, they allow the action, like the Claude hooks.
 
-Requires Python 3, Bash, Git and jq. Run
-`python3 -B -m unittest discover -s .codex/hooks/tests -v` for adapter coverage.
+Requires Python 3.10 or later, Bash, Git and jq; an older Python blocks with a
+message. `python3 -B -m unittest discover -s .codex/hooks/tests -v` covers the
+adapter and also runs in the `hooks` CI job.
 The original limitations above also apply to Codex; this migration does not
 extend command parsing or verify tracker state. The after-merge response is a
 conditional reminder, not proof that a merge succeeded.

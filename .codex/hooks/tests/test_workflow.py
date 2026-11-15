@@ -104,6 +104,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("to Done", result.stderr)
 
+    def test_registered_command_outside_repository_allows(self):
+        config = json.loads((ROOT / ".codex/hooks.json").read_text())
+        pre = config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        event = {"tool_name": "Bash", "cwd": self.temporary.name, "tool_input": {"command": "git commit -m x"}}
+        with tempfile.TemporaryDirectory() as outside:
+            result = subprocess.run(pre, shell=True, cwd=outside, input=json.dumps(event), text=True, capture_output=True)
+        self.assertEqual(0, result.returncode)
+
 
 if __name__ == "__main__":
     unittest.main()

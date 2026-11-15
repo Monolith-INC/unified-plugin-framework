@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/workflow.py\" pre",
+            "command": "f=\"$(git rev-parse --show-toplevel 2>/dev/null)/.codex/hooks/workflow.py\"; [ -f \"$f\" ] || exit 0; python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || { echo 'Blocked: the Codex workflow hook needs Python 3.10 or later.' >&2; exit 2; }; exec python3 -B \"$f\" pre",
             "timeout": 30
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/workflow.py\" post",
+            "command": "f=\"$(git rev-parse --show-toplevel 2>/dev/null)/.codex/hooks/workflow.py\"; [ -f \"$f\" ] || exit 0; python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' || { echo 'Blocked: the Codex workflow hook needs Python 3.10 or later.' >&2; exit 2; }; exec python3 -B \"$f\" post",
             "timeout": 30
           }
         ]

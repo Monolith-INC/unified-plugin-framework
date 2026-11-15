@@ -26,15 +26,13 @@ def normalized_events(event: dict) -> tuple[dict, ...]:
         case "apply_patch":
             patch = event["tool_input"]["command"]
             paths = patch_paths(patch)
-            match (patch.startswith("*** Begin Patch\n"), patch.rstrip().endswith("*** End Patch"), bool(paths)):
-                case (True, True, True):
-                    return tuple(map(lambda path: {
-                        "tool_name": "Edit",
-                        "cwd": cwd,
-                        "tool_input": {"file_path": absolute_path(cwd, path)},
-                    }, paths))
-                case _:
-                    raise ValueError("cannot identify file paths in the Codex patch")
+            if not (patch.startswith("*** Begin Patch\n") and patch.rstrip().endswith("*** End Patch") and paths):
+                raise ValueError("cannot identify file paths in the Codex patch")
+            return tuple(map(lambda path: {
+                "tool_name": "Edit",
+                "cwd": cwd,
+                "tool_input": {"file_path": absolute_path(cwd, path)},
+            }, paths))
         case "Edit" | "Write" | "MultiEdit" | "NotebookEdit":
             field = "notebook_path" if event["tool_name"] == "NotebookEdit" else "file_path"
             return ({**event, "cwd": cwd, "tool_input": {
@@ -56,10 +54,10 @@ def invoke(project: Path, hook: str, event: dict) -> subprocess.CompletedProcess
 def run(project: Path, phase: str, event: dict) -> tuple[int, str, str]:
     match phase:
         case "pre":
-            results = tuple(map(
+            results = map(
                 lambda normalized: invoke(project, "require-ticket-branch.sh", normalized),
                 normalized_events(event),
-            ))
+            )
             failure = next(filter(lambda result: result.returncode != 0, results), None)
             match failure:
                 case None:

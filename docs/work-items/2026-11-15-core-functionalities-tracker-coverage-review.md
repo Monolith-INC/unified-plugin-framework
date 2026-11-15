@@ -140,9 +140,9 @@ These are recommendations, not approved tracker edits or a final task breakdown.
    needs. Do not assume the complete resolver/broker/update roadmap must precede
    every independently useful subsystem.
 6. **Reconcile existing code before scheduling duplicate implementation.** A local
-   knowledge implementation branch was identified earlier in this chat; its current
-   implementation and qualification state were not re-audited in this tracker
-   comparison. Check that work before creating execution tasks, while still recording
+   knowledge implementation branch was identified during planning but is not named
+   in this repository; its current implementation and qualification state were not
+   re-audited in this tracker comparison. Check that work before creating execution tasks, while still recording
    its scope and remaining gaps in the tracker.
 7. **Keep unresolved decisions explicit.** Publication approval policy, Discovery
    modes, default paths, intent/checkout detection, retained evidence, and archive
@@ -153,7 +153,7 @@ These are recommendations, not approved tracker edits or a final task breakdown.
    static skill walkthroughs, or generic host support with end-to-end functionality.
 9. **Update project narrative alongside the backlog.** Reconcile the fork status
    and distinguish supporting architecture from product delivery so progress is
-   understandable to a reader unfamiliar with this chat.
+   understandable to a reader unfamiliar with the planning discussions.
 
 ## Outcome and limits
 
