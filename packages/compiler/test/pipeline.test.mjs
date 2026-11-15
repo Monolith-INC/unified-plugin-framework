@@ -221,3 +221,24 @@ test("verification regenerates in isolation and detects missing, extra, changed,
   chmodSync(payload, 0o755);
   assert.equal(compiler.verifyShippedPayload({ source, vendor: "codex", shipped }).ok, false);
 });
+
+test("on Windows, bundle reads take file modes from the manifest and still check content", () => {
+  const source = mkdtempSync(join(tmpdir(), "agent-win32-source-"));
+  const shipped = join(mkdtempSync(join(tmpdir(), "agent-win32-output-")), "codex");
+  writeCanonicalPlugin(source);
+  assert.equal(createVendorCompiler(registry()).compilePlugin({ source, vendor: "codex", output: shipped }).ok, true);
+
+  // What a Windows checkout reports for every regular file.
+  const payload = join(shipped, "payload", ".fixture-codex", "plugin.json");
+  chmodSync(payload, 0o666);
+  const posix = readVendorBundle(shipped, "linux");
+  assert.equal(posix.ok, false);
+  assert.ok(posix.diagnostics.some((entry) => entry.code === compilerDiagnosticCodes.fileModeInvalid));
+
+  const windows = readVendorBundle(shipped, "win32");
+  assert.equal(windows.ok, true);
+  assert.ok(windows.value.files.every((file) => file.mode === 0o644 || file.mode === 0o755));
+
+  writeFileSync(payload, "modified\n");
+  assert.equal(readVendorBundle(shipped, "win32").ok, false);
+});

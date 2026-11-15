@@ -796,7 +796,10 @@ export function normalizeCanonicalPlugin(source: string): Result<CanonicalPlugin
   });
 }
 
-export function readVendorBundle(bundleRoot: string): Result<VendorBundle> {
+export function readVendorBundle(
+  bundleRoot: string,
+  platform: NodeJS.Platform = process.platform,
+): Result<VendorBundle> {
   const root = resolve(bundleRoot);
   try {
     const rootStat = lstatSync(root);
@@ -834,7 +837,10 @@ export function readVendorBundle(bundleRoot: string): Result<VendorBundle> {
     const manifestJson = JSON.parse(readFileSync(manifestPath, "utf8")) as unknown;
     const manifest = parseVendorBundleManifest(manifestJson);
     if (!manifest.ok) return manifest;
-    const files = readPayloadTree(join(root, BUNDLE_PAYLOAD_DIRECTORY));
+    const files = readPayloadTree(
+      join(root, BUNDLE_PAYLOAD_DIRECTORY),
+      payloadModeReader(platform, manifest.value.files),
+    );
     if (!files.ok) return files;
     const bundle = { manifest: manifest.value, files: files.value };
     const diagnostics = validateVendorBundle(bundle);
@@ -1379,7 +1385,21 @@ function replaceStagedOutput(
   }
 }
 
-function readPayloadTree(payloadRoot: string): Result<readonly PayloadFile[]> {
+type PayloadModeReader = (path: string, statMode: number) => number;
+
+// Windows has no POSIX permission bits: stat reports 0o666 (0o444 when read-only),
+// so a Windows checkout cannot carry the executable bit. There, a file's mode comes
+// from the bundle manifest; bytes and digests are still read and checked.
+function payloadModeReader(
+  platform: NodeJS.Platform,
+  recorded: readonly PayloadFileDescriptor[],
+): PayloadModeReader {
+  if (platform !== "win32") return (_path, statMode) => statMode & 0o777;
+  const recordedModes = new Map<string, number>(recorded.map((file) => [file.path, file.mode]));
+  return (path) => recordedModes.get(path) ?? PORTABLE_FILE_MODES.regular;
+}
+
+function readPayloadTree(payloadRoot: string, modeOf: PayloadModeReader): Result<readonly PayloadFile[]> {
   try {
     const stat = lstatSync(payloadRoot);
     if (!stat.isDirectory() || stat.isSymbolicLink()) {
@@ -1391,7 +1411,7 @@ function readPayloadTree(payloadRoot: string): Result<readonly PayloadFile[]> {
         ),
       );
     }
-    return readPayloadDirectory(payloadRoot, []);
+    return readPayloadDirectory(payloadRoot, [], modeOf);
   } catch {
     return failure(
       diagnostic(
@@ -1406,6 +1426,7 @@ function readPayloadTree(payloadRoot: string): Result<readonly PayloadFile[]> {
 function readPayloadDirectory(
   directory: string,
   segments: readonly string[],
+  modeOf: PayloadModeReader,
 ): Result<readonly PayloadFile[]> {
   const results = readdirSync(directory).sort(compareStrings).map((entry) => {
     const absolute = join(directory, entry);
@@ -1421,7 +1442,7 @@ function readPayloadDirectory(
         ),
       );
     }
-    if (stat.isDirectory()) return readPayloadDirectory(absolute, relativeSegments);
+    if (stat.isDirectory()) return readPayloadDirectory(absolute, relativeSegments, modeOf);
     if (!stat.isFile()) {
       return failure(
         diagnostic(
@@ -1434,7 +1455,7 @@ function readPayloadDirectory(
     const file = createPayloadFile({
       path,
       content: readFileSync(absolute),
-      mode: stat.mode & 0o777,
+      mode: modeOf(path, stat.mode),
     });
     return file.ok ? success([file.value]) : file;
   });
