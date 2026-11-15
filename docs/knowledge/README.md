@@ -31,3 +31,17 @@ When no project setting exists, the runtime can read the legacy
 migrates that setting automatically. If the project setting and legacy setting
 name different roots, selection returns a configuration error so callers can
 resolve the choice explicitly.
+
+## Standalone setup and discovery skills
+
+The portable `project-knowledge` plugin provides `setup-project-knowledge` and
+`discover-project-knowledge` without requiring the review plugin. Setup records
+`.project-knowledge.json` and asks before choosing paths; discovery uses the
+accepted `knowledgeRoot` and the inherited catalog, find, fetch, links, put,
+patch, and add tools when available. Neither skill registers tools or creates a
+complete vault. The owned discovery skill is adapted from the pinned upstream
+procedure; the byte-preserved original remains under the vendor tree.
+
+`runtimes/project-knowledge/tests/fixtures/skill-cases.md` contains manual
+walkthrough cases. The accompanying evaluation report records expected outcomes
+from reading the skill text; it does not claim model conversations were run.
