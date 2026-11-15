@@ -17,7 +17,7 @@ git clone https://github.com/Monolith-INC/unified-plugin-framework.git
 cd unified-plugin-framework
 git remote add upstream https://github.com/Monolith-INC/agent-plugins-toolkit.git
 git remote set-url --push upstream no_push://disabled   # never push to the original toolkit
-git config remote.upstream.tagOpt --no-tags                # keep upstream tags out of the fork
+git config remote.upstream.tagOpt --no-tags                # local fetches from upstream skip its tags
 git fetch upstream
 git merge-base --is-ancestor b75aaa5c627599f1fdb25caff154e9a22d2e2640 origin/main \
   && echo "baseline present in the fork" || echo "baseline missing from origin/main" >&2

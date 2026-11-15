@@ -8,7 +8,7 @@ This record states who owns this fork, where its source comes from, and under wh
 | --- | --- | --- | --- | --- |
 | Destination | Observed | `Monolith-INC/unified-plugin-framework`, public, a GitHub fork of `Monolith-INC/agent-plugins-toolkit`, created 2026-11-14 11:47 UTC | GitHub repository metadata | 2026-11-15 |
 | Destination | Decision | Keep the existing public fork as the project's home | Owner, in conversation | 2026-11-14 |
-| Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `docs/upstream/baseline.md` | 2026-11-14 |
+| Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `docs/upstream/baseline.md` | 2026-11-15 |
 | Inherited license | Observed | The baseline has no license file; GitHub detected no license; no package manifest declares one | Baseline tree, GitHub metadata, `package.json` files | 2026-11-15 |
 | Ownership of inherited source | Owner's statement (unverified) | The owner stated they own the inherited source. This is the owner's assertion and has not been independently verified. | Owner, in conversation | 2026-11-14 |
 | Copyright holder (Licensor) | Owner's statement (unverified) | Monolith-INC holds the copyright to the inherited source and to this fork | Owner, in conversation | 2026-11-15 |
