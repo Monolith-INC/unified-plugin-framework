@@ -36,7 +36,7 @@ const readiness = (adapter: WorkflowAdapter<string>, served: readonly PluginSkil
   ].join("\n");
 
 const generated = (adapter: WorkflowAdapter<string>, operation: string): string =>
-  `<!-- Generated from packages/workflows/templates/${adapter.workflow}/${operation}.md and the ${adapter.workflow} adapter by \`pnpm payloads:build\`. Edit those, not this file. -->`;
+  `<!-- Assembled at release time from the ${operation} template in plugins/unified-plugin-framework and the ${adapter.workflow} adapter. Edit those, not this copy. -->`;
 
 const sections = (adapter: WorkflowAdapter<string>, operation: string, served: readonly PluginSkillRef[]): ReadonlyMap<string, string> =>
   new Map([

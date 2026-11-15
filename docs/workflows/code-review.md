@@ -12,7 +12,7 @@ What users and agents rely on. It changes only by a deliberate contract version 
 | `review-story` | `skills/review-story` | A user story is finished: pre-flight before the pull request, post-flight once it is open |
 | `review-feature` | `skills/review-feature` | A whole feature is complete |
 
-Skills are in `plugins/unified-plugin-framework`. The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`. Each skill is generated from its template in `packages/workflows/templates/code-review/`, which never names a plugin, and the adapter below; run `pnpm payloads:build` after changing either.
+The skills in `plugins/unified-plugin-framework` are templates: they hold the contract and name no plugin. The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`. When the plugin is packaged, the assembler fills each template from the adapter below; the assembled skills ship in the host bundles.
 
 ## Current adapter
 
@@ -51,4 +51,4 @@ It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the fa
 
 ## Replacing the review plugin
 
-Write a new `CodeReviewAdapter` that maps each operation to the new plugin's skills and records where that plugin keeps its knowledge store, if anywhere, with the skill that sets it. Declare the plugin in the framework manifest, run `pnpm payloads:build` to regenerate the skills, and run `adapter-check` against it. The templates, the contract and the skill names users invoke stay the same.
+Write a new `CodeReviewAdapter` that maps each operation to the new plugin's skills and records where that plugin keeps its knowledge store, if anywhere, with the skill that sets it. Declare the plugin in the framework manifest, run `pnpm payloads:build` to rebuild the host bundles, and run `adapter-check` against it. The templates, the contract and the skill names users invoke stay the same.

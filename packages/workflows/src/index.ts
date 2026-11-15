@@ -21,6 +21,10 @@ export {
 
 export { renderSkill, type Rendered } from "./render.js";
 
+import { assemblePluginSource as assembleSource, assembleSkills as assembleWith, type Assembled } from "./assemble.js";
+
+export type { Assembled } from "./assemble.js";
+
 export {
   CODE_REVIEW_CONTRACT_VERSION,
   CODE_REVIEW_OPERATIONS,
@@ -38,3 +42,15 @@ const WORKFLOW_LOOKUP: ReadonlyMap<string, WorkflowAdapter<string>> = new Map(Ob
 
 /** The adapter for a workflow name from untrusted input, or `undefined`. */
 export const findWorkflow = (name: string): WorkflowAdapter<string> | undefined => WORKFLOW_LOOKUP.get(name);
+
+const ACTIVE_ADAPTERS: readonly WorkflowAdapter<string>[] = Object.freeze(Object.values(WORKFLOWS));
+
+/** Renders template skills from the active adapters (or the given ones); other skills pass through. Pure. */
+export const assembleSkills = (
+  skills: ReadonlyMap<string, string>,
+  adapters: readonly WorkflowAdapter<string>[] = ACTIVE_ADAPTERS,
+): Assembled => assembleWith(skills, adapters);
+
+/** Copies a plugin source into a fresh staging directory with its template skills assembled. Release-time only. */
+export const assemblePluginSource = (sourceRoot: string, stagingRoot: string): Assembled =>
+  assembleSource(sourceRoot, stagingRoot, ACTIVE_ADAPTERS);
