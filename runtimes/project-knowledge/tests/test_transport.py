@@ -1,53 +1,20 @@
 """End-to-end protocol coverage against the built and installed wheel."""
 
 import asyncio
-import os
 from pathlib import Path
 import re
-import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-
-RUNTIME = Path(__file__).parents[1]
-VALIDATION_VENV = Path(os.environ.get("UPF_KNOWLEDGE_VENV", "/tmp/upf-knowledge-validation"))
+from tests.installed_runtime import installed_runtime
 
 
 class InstalledTransportTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        if not (VALIDATION_VENV / "bin" / "python").exists():
-            raise RuntimeError(f"Expected prepared validation environment at {VALIDATION_VENV}")
-        cls.wheel_dir = tempfile.TemporaryDirectory(prefix="upf-knowledge-wheel-")
-        cls.source_dir = tempfile.TemporaryDirectory(prefix="upf-knowledge-source-")
-        build_source = Path(cls.source_dir.name) / "runtime"
-        shutil.copytree(
-            RUNTIME,
-            build_source,
-            ignore=shutil.ignore_patterns("build", "dist", "*.egg-info", "__pycache__", "*.pyc"),
-        )
-        subprocess.run(
-            [str(VALIDATION_VENV / "bin" / "python"), "-m", "pip", "wheel", "--no-deps",
-             "--no-build-isolation", "--wheel-dir", cls.wheel_dir.name, str(build_source)],
-            check=True, capture_output=True, text=True,
-        )
-        wheel = next(Path(cls.wheel_dir.name).glob("upf_project_knowledge-*.whl"))
-        subprocess.run(
-            [str(VALIDATION_VENV / "bin" / "python"), "-m", "pip", "install", "--no-deps",
-             "--force-reinstall", str(wheel)],
-            check=True, capture_output=True, text=True,
-        )
-        cls.executable = VALIDATION_VENV / "bin" / "upf-project-knowledge"
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.wheel_dir.cleanup()
-        cls.source_dir.cleanup()
+        _, cls.executable, _ = installed_runtime()
 
     def test_server_protocol_contract(self):
         async def exercise(project: Path):

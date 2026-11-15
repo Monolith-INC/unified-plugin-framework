@@ -7,8 +7,33 @@ files are kept unchanged under `runtimes/project-knowledge/vendor/review-knowled
 `provenance.json` records their SHA-256 digests. The bundled MIT license is in the
 same vendor directory.
 
-Install the runtime with Python 3.12 or newer and run the
-`upf-project-knowledge` command. The upstream runtime currently uses `fcntl` for
+Install the runtime with Python 3.12 or newer:
+
+```sh
+python3.12 -m pip install ./runtimes/project-knowledge
+```
+
+Register the server explicitly with the host application's MCP configuration,
+using the absolute path to the target project:
+
+```json
+{
+  "mcpServers": {
+    "project-knowledge": {
+      "command": "upf-project-knowledge",
+      "args": ["--project", "/absolute/path/to/project"]
+    }
+  }
+}
+```
+
+The equivalent server command is
+`upf-project-knowledge --project <absolute-project-path>`. Installation and
+registration are separate steps. The Python runtime and the skill plugin in
+`plugins/project-knowledge/` are separate deliverables in this slice; installing
+the runtime does not install the skill plugin or register a host server.
+
+The upstream runtime currently uses `fcntl` for
 file locking, so this first release supports Linux and macOS. Windows is not
 supported. The runtime depends on `mcp>=2.0,<3` and `pydantic>=2.7,<3`; these
 inherited version ranges do not guarantee compatibility with every future
@@ -45,3 +70,12 @@ procedure; the byte-preserved original remains under the vendor tree.
 `runtimes/project-knowledge/tests/fixtures/skill-cases.md` contains manual
 walkthrough cases. The accompanying evaluation report records expected outcomes
 from reading the skill text; it does not claim model conversations were run.
+
+## Qualification status
+
+The Task 5 qualification results, exact local commands, and dependency versions
+are recorded in `.superpowers/sdd/2026-11-14-knowledge-foundation-implementation-plan/task-5-report.md`. CI runs the full Python suite on Ubuntu and
+macOS with Python 3.12, and runs platform and configuration checks on Windows.
+The Windows job does not run the Unix-only server protocol tests. Skill cases
+are static walkthroughs, not live evaluations with an assistant or either
+external plugin.

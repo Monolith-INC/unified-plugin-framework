@@ -4,6 +4,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from tests.installed_runtime import installed_runtime
+
 
 ROOT = Path(__file__).parents[1]
 VENDOR = ROOT / "vendor" / "review-knowledge"
@@ -29,9 +31,8 @@ class VendorTests(unittest.TestCase):
         self.assertIn(b"MIT License", (VENDOR / "LICENSE").read_bytes())
 
     def test_wheel_contains_runtime(self):
-        wheels = sorted(Path("/tmp/upf-knowledge-wheels").glob("upf_project_knowledge-*.whl"))
-        self.assertTrue(wheels, "build the wheel into /tmp/upf-knowledge-wheels first")
-        with zipfile.ZipFile(wheels[-1]) as wheel:
+        _, _, wheel_path = installed_runtime()
+        with zipfile.ZipFile(wheel_path) as wheel:
             names = set(wheel.namelist())
         self.assertIn("upf_knowledge/__init__.py", names)
         self.assertIn("upf_knowledge/_vendor/knowledge_store.py", names)

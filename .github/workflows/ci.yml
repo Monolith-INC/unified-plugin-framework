@@ -11,6 +11,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  project-knowledge:
+    name: Project knowledge / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python runtime and build dependencies
+        run: python -m pip install 'setuptools>=77' wheel 'mcp>=2.0,<3' 'pydantic>=2.7,<3'
+
+      - name: Run owned and installed-wheel tests
+        run: python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge
+
+      - name: Run inherited upstream tests
+        env:
+          PYTHONPATH: runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge
+        run: python -m unittest discover -s runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge/tests -p 'test_*.py'
+
+  project-knowledge-platform-check:
+    name: Project knowledge platform/config checks / Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python runtime and build dependencies
+        run: python -m pip install 'setuptools>=77' wheel 'mcp>=2.0,<3' 'pydantic>=2.7,<3'
+
+      - name: Run platform and configuration checks
+        run: |
+          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_config.py'
+          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_launcher.py'
+          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_vendor.py'
+
   quality:
     name: ${{ matrix.os }} / Node ${{ matrix.node }}
     runs-on: ${{ matrix.os }}
