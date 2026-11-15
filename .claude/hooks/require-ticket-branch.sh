@@ -2,7 +2,8 @@
 # Claude Code PreToolUse hook for the project rules:
 #   1. work only on a ticket branch: feature/<KEY>-<n>-<slug>
 #   2. the branch was cut from main
-# Checked before file edits and `git commit`. Anything this misses is stopped
+#   5. push or open a pull request only after HEAD passed review
+# Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
 # by GitHub branch protection on main.
 
 input=$(cat)
@@ -13,7 +14,12 @@ case $(jq -r '.tool_name' <<<"$input") in
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
     [[ $path == "$project"/* ]] || exit 0 ;;
   Bash)
-    [[ $(jq -r '.tool_input.command' <<<"$input") == *"git commit"* ]] || exit 0 ;;
+    command=$(jq -r '.tool_input.command' <<<"$input")
+    # Only commands that start a line or follow ; & | ( count, not quoted text.
+    start='(^|[;&|(][[:space:]]*|'$'\n''[[:space:]]*)'
+    commits=$([[ $command =~ ${start}git[[:space:]]+commit ]] && echo y)
+    publishes=$([[ $command =~ ${start}(git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create) ]] && echo y)
+    [[ -n $commits || -n $publishes ]] || exit 0 ;;
   *) exit 0 ;;
 esac
 
@@ -28,5 +34,14 @@ main=$(git -C "$project" rev-parse -q --verify origin/main || git -C "$project" 
 if [ -n "$base" ] && [ -n "$main" ] && ! git -C "$project" merge-base --is-ancestor "$base" "$main"; then
   echo "Blocked: branch '$branch' was not cut from main. Create the ticket branch from main and move the work there." >&2
   exit 2
+fi
+
+# Rule 5: push or open a pull request only after the confirming review of HEAD.
+if [ -n "${publishes:-}" ]; then
+  head=$(git -C "$project" rev-parse HEAD)
+  if [ "$(git -C "$project" config --get "branch.$branch.reviewed")" != "$head" ]; then
+    echo "Blocked: HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head" >&2
+    exit 2
+  fi
 fi
 exit 0

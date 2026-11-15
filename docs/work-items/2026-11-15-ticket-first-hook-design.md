@@ -27,3 +27,9 @@ The hook does not try to catch every way around it, such as unusual command spel
 ## Rule 4: merge only through a pull request
 
 Enforced by the same GitHub branch protection: `main` only changes through a merged pull request. A local merge into `main` cannot be pushed.
+
+## Rule 5: review, fix, review again
+
+The hook blocks `git push` and `gh pr create` unless the current commit passed review. After the confirming review, record it with `git config branch.<branch>.reviewed <commit>`. Any later commit needs a new review. Commands are recognised only at the start of a command (or after `;`, `&`, `|`, `(`), so text that mentions them is not blocked.
+
+The review loop ends when a round finds no correctness or security problems in the change. After three rounds, the remaining findings go to the owner to decide.
