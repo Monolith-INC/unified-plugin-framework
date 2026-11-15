@@ -15,6 +15,7 @@ This matrix documents AGE-27 coverage for the portable toolkit. All cases run in
 | CLI | validate/inspect exit codes | invalid fixtures → stderr diagnostics JSON | `m1-integration.test.mjs`, `security.test.mjs` |
 | Vendor payload compiler | canonical source to finalized bundle | missing, extra, changed, and mode-drifted payload output | `packages/compiler/test/pipeline.test.mjs` |
 | Adapters | Claude, Cursor, and Codex shared conformance | schema identity mismatch and invalid vendor paths | `packages/*/test/*.test.mjs`, `packages/testing/test/adapter-conformance.test.mjs` |
+| Workflow adapters | code review contract fulfilled; ready when declared, installed and bound | missing or extra operation (compile time), undeclared plugin, missing skill, differing knowledge stores | `packages/workflows/test/*`, `packages/core/test/workflow-adapter.test.mjs`, `packages/cli/test/adapter-check.test.mjs` |
 | Transactional installer | install, unchanged reinstall, upgrade, stale owned-file cleanup | collision, lock, symlink, permission, poisoned bundle, mutation faults, exact rollback | `packages/installer/test/installer.test.mjs`, `packages/cli/test/release-evidence.test.mjs` |
 | Release documentation | install commands, paths, digests, package contents, provenance placement | unsupported installation models in docs | `packages/cli/test/release-evidence.test.mjs` |
 

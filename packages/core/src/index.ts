@@ -22,6 +22,16 @@ export {
   type OnboardedPluginsRead,
 } from "./onboarded.js";
 
+export {
+  adapterPlugins,
+  checkAdapterReadiness,
+  type PluginSkillRef,
+  type Readiness,
+  type ReadinessFacts,
+  type ReadinessStep,
+  type WorkflowAdapter,
+} from "./workflow-adapter.js";
+
 export type DiagnosticSeverity = "error" | "warning" | "info";
 
 export const diagnosticCodes = {

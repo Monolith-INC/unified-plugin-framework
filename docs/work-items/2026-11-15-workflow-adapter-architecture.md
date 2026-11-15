@@ -16,8 +16,8 @@ Onboarded plugins are ordinary dependencies of the framework, handled the way a 
 | Part | What it is | Example |
 | --- | --- | --- |
 | Workflow | A user-facing activity the framework offers | Code review |
-| Workflow adapter | The workflow's stable contract with users and agents, plus its internal mapping onto the plugin that currently does the work | The code review adapter, exposing `review-against-requirements` v1 |
-| Onboarded plugin | An outside plugin the framework depends on | Monolithic Code Review Toolkit 1.x |
+| Workflow adapter | The workflow's stable contract with users and agents, plus its internal mapping onto the plugin that currently does the work | The code review adapter, exposing `review-task`, `review-story` and `review-feature` (contract v1) |
+| Onboarded plugin | An outside plugin the framework depends on | Monolithic Code Review Toolkit 0.6.x |
 | Manifest | Declares the onboarded plugins, their versions, and which adapter each one serves | `plugin.json`, in a namespaced `extensions` entry |
 | Lock | Records exactly what was installed, so a setup can be rebuilt | Plugin version, content checksum, adapter version |
 
@@ -40,6 +40,8 @@ The contract is written in terms of what the workflow does, not which plugin doe
 ## Workflow adapters
 
 ### What an adapter does
+
+In code, every adapter follows [ADR-001](../adr/ADR-001-workflow-adapter-interface.md): the contract is a TypeScript type of the workflow's operations, and the mapping is a frozen object implementing `WorkflowAdapter<Operation>`, so the compiler rejects an adapter that leaves an operation unfulfilled.
 
 - Exposes the workflow's contract: the skills and tools users and agents rely on, each with a stable name and version.
 - Maps each part of that contract onto something the current plugin publishes.
