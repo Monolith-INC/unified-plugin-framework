@@ -56,7 +56,7 @@ bash install-harness.sh --version 0.7.0-rc.13 --scope local --host codex --proje
 
 Forked from `Monolith-INC/agent-plugins-toolkit` at commit [`b75aaa5c627599f1fdb25caff154e9a22d2e2640`](https://github.com/Monolith-INC/agent-plugins-toolkit/commit/b75aaa5c627599f1fdb25caff154e9a22d2e2640) on 2026-11-14. Original history and package names are preserved. Use the `upstream` remote to review future changes before merging them through a pull request.
 
-The inherited baseline has no root license file. This fork adds no license grant; licensing and package publication remain decisions for the foundation stage.
+Licensed under the [Apache License 2.0](LICENSE). The inherited baseline had no license file; the owner's ownership statement, the license decision and their dates are recorded in [docs/upstream/ownership.md](docs/upstream/ownership.md). Package publication is not decided, and inherited package names are unchanged.
 
 ## Inherited toolkit
 
