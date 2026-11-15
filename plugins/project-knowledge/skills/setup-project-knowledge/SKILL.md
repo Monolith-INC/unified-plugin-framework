@@ -9,11 +9,11 @@ Set up one shared knowledge store for the target project. Do not assume the revi
 
 ## Choose the root
 
-Read `.project-knowledge.json` if present, and inspect the legacy `.monolithic-code-review/sources.json` only to identify an existing root. If the settings identify different roots, stop and ask which root to use; never merge them automatically. Prefer an existing configured root. Otherwise propose `.project-knowledge/knowledge` under the project. If a selected configured root is absent or unreadable, report that condition and ask how to proceed; do not silently choose another root.
+Read `.project-knowledge.json` if present, and inspect the legacy `.monolithic-code-review/sources.json` only to identify an existing root. If the owned and legacy settings name different roots, explain that ordinary runtime use will continue to reject the conflict. The supported persistent resolution in this setup is to select the legacy root and save it as `knowledgeRoot`; do not silently change legacy settings. If the user wants another root, explain that they must direct legacy-setting reconciliation outside this setup, then recheck both settings before declaring configuration complete. Never merge roots automatically. Prefer an existing configured root. Otherwise propose `.project-knowledge/knowledge` under the project. If a selected configured root is absent or unreadable, report that condition and ask how to proceed; do not silently choose another root.
 
 ## Choose document locations
 
-Ask whether documents should share the knowledge root (recommended and the default) or use separate locations. For shared documents, prefer an existing configured docs or vault location when present; otherwise propose `docs/` for `docsRoot` and `Codex/` for `vaultRoot`. For separate documents, likewise reuse existing locations when present, otherwise propose those same paths. Explain each proposed path and ask the user to accept or adjust it. These path defaults are proposals, not observed project facts.
+Ask whether developer documentation and vault artifacts should share one set of original documents or live separately. Keep `knowledgeRoot` independent: it stores the optimized knowledge representation, not those originals. Reuse an existing `documentMode` as the proposed default; otherwise propose `shared`. In shared mode, set both `docsRoot` and `vaultRoot` to the same existing matching root, or to `docs/` if none exists. In separate mode, reuse existing locations where present; otherwise propose `docs/` and `Codex/` respectively. Explain the path relationship and ask the user to accept or adjust it. These defaults are proposals, not observed project facts.
 
 ## Save accepted settings
 

@@ -29,3 +29,11 @@ class SkillPackagingTests(unittest.TestCase):
         self.assertIn("knowledge_catalog", skill)
         self.assertIn("knowledge_find", skill)
         self.assertIn("knowledge_fetch", skill)
+
+    def test_setup_explains_document_relationship_and_conflict_resolution(self):
+        skill = (PLUGIN / "skills" / "setup-project-knowledge" / "SKILL.md").read_text()
+        self.assertIn("existing `documentMode`", skill)
+        self.assertIn("share one set of original documents", skill)
+        self.assertIn("knowledgeRoot` independent", skill)
+        self.assertIn("select the legacy root", skill)
+        self.assertIn("recheck both settings", skill)

@@ -73,9 +73,6 @@ from reading the skill text; it does not claim model conversations were run.
 
 ## Qualification status
 
-The Task 5 qualification results, exact local commands, and dependency versions
-are recorded in `.superpowers/sdd/2026-11-14-knowledge-foundation-implementation-plan/task-5-report.md`. CI runs the full Python suite on Ubuntu and
-macOS with Python 3.12, and runs platform and configuration checks on Windows.
-The Windows job does not run the Unix-only server protocol tests. Skill cases
-are static walkthroughs, not live evaluations with an assistant or either
-external plugin.
+See [qualification results](qualification.md) for the exact commands, dependency
+versions, test outcomes, platform boundary, and remaining packaging and
+multi-process catalog limits.
