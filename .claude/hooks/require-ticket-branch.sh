@@ -6,6 +6,7 @@
 #   6. the pull request title carries the ticket key
 #   7. merge only while the owner's approval stands (git config workflow.mergeApproval)
 #   9. plan, spec and design markdown files live in docs/work-items/
+#  10. implementation changes pass the pnpm checks before push or pull request
 # Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
 # by GitHub branch protection on main.
 
@@ -59,6 +60,14 @@ if [ -n "${publishes:-}" ]; then
   if [ "$(git -C "$project" config --get "branch.$branch.reviewed")" != "$head" ]; then
     echo "Blocked: HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head" >&2
     exit 2
+  fi
+  # Rule 10: implementation changes need the pnpm checks to pass on HEAD.
+  if [ -n "$main" ] && git -C "$project" diff --name-only "$main...HEAD" \
+      | grep -qE '^(packages/|plugins/|fixtures/|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$)'; then
+    if [ "$(git -C "$project" config --get "branch.$branch.checked")" != "$head" ]; then
+      echo "Blocked: this branch changes implementation and HEAD $head has not passed the checks. Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify, then record it: git config branch.$branch.checked $head" >&2
+      exit 2
+    fi
   fi
 fi
 

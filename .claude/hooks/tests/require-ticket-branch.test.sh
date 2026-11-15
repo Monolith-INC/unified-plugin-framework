@@ -42,6 +42,16 @@ check blocked "pull request title without the ticket key" "$(cmd "gh pr create -
 check allowed "pull request with the ticket key in the title" "$(cmd "gh pr create --title 'AGE-1: add work' --body x")"
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
 check blocked "push after a new commit since review" "$(cmd "git push")"
+git -C "$repo" switch -q -c feature/AGE-3-impl main
+mkdir -p "$repo/packages/core" && echo x > "$repo/packages/core/a.ts"
+git -C "$repo" add packages && git -C "$repo" -c user.email=t@t -c user.name=t commit -q -m impl
+git -C "$repo" config branch.feature/AGE-3-impl.reviewed "$(git -C "$repo" rev-parse HEAD)"
+check blocked "implementation push before checks" "$(cmd "git push -u origin feature/AGE-3-impl")"
+git -C "$repo" config branch.feature/AGE-3-impl.checked "$(git -C "$repo" rev-parse HEAD)"
+check allowed "implementation push after checks" "$(cmd "git push -u origin feature/AGE-3-impl")"
+git -C "$repo" switch -q feature/AGE-1-work
+git -C "$repo" config branch.feature/AGE-1-work.reviewed "$(git -C "$repo" rev-parse HEAD)"
+check allowed "non-implementation push needs no checks" "$(cmd "git push")"
 check allowed "merge with standing approval (default)" "$(cmd "gh pr merge 5 --squash")"
 git -C "$repo" config workflow.mergeApproval withdrawn
 check blocked "merge after approval was withdrawn" "$(cmd "gh pr merge 5 --squash")"

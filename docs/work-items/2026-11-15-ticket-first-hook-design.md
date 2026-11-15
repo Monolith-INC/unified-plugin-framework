@@ -50,3 +50,7 @@ A Claude Code PostToolUse hook, `.claude/hooks/after-merge.sh`, runs after `gh p
 ## Rule 9: plans and specs go in docs/work-items/
 
 The hook blocks writing a Markdown file whose name contains `plan`, `spec` or `design` anywhere in the project except under `docs/work-items/`.
+
+## Rule 10: run the pnpm checks when implementation changes
+
+When the branch changes `packages/`, `plugins/`, `fixtures/`, `package.json`, `pnpm-*.yaml` or `tsconfig*.json`, the hook blocks `git push` and `gh pr create` until the checks are recorded for the current commit. After `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test` and `pnpm payloads:verify` pass, record it with `git config branch.<branch>.checked <commit>`.
