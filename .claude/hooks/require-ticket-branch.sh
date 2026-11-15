@@ -38,11 +38,12 @@ case $tool in
   Edit|Write|MultiEdit|NotebookEdit)
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
     repo=$(checkout_of "$(dirname "$path")") || exit 0
-    # Rule 9: a new markdown file with a plan/spec/design word in its path lives in
+    # Rule 9: a new markdown file with a plan/spec/design word in its name lives in
     # docs/work-items/. Existing files can still be edited (moving them is cleanup work).
     rel=${path#"$repo"/}; [[ $rel == /* ]] && rel=${path#"$project"/}   # repo path may be symlink-resolved
     rel=$(tr '[:upper:]' '[:lower:]' <<<"$rel")
-    if [ ! -e "$path" ] && [[ $rel == *.md && $rel != docs/work-items/* && $rel =~ (^|[-_./[:space:]])(plans?|specs?|designs?)([-_./[:space:]]|$) ]]; then
+    name=$(basename "$rel")
+    if [ ! -e "$path" ] && [[ $name == *.md && $rel != docs/work-items/* && $name =~ (^|[-_.[:space:]])(plans?|specs?|designs?)([-_.[:space:]]|$) ]]; then
       block "plans and specs go in docs/work-items/. Write it there instead of $path"
     fi ;;
   Bash)
@@ -92,7 +93,7 @@ if [ -n "${publishes:-}" ]; then
     || block "HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head"
   # Rule 10: implementation changes need the pnpm checks to pass on HEAD.
   if [ -n "$main" ] && git -C "$repo" diff --name-only "$main...HEAD" \
-      | grep -qE '^(packages/|plugins/|fixtures/|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$)'; then
+      | grep -qE '^(packages/|plugins/|fixtures/|scripts/|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$|[^/]+\.config\.[cm]?[jt]s$)'; then
     [ "$(git -C "$repo" config --get "branch.$branch.checked")" = "$head" ] \
       || block "this branch changes implementation and HEAD $head has not passed the checks. Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify, then record it: git config branch.$branch.checked $head"
   fi

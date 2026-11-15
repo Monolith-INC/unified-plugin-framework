@@ -82,7 +82,7 @@ check blocked "git -c k=v commit on main" "$(cmd "git -c a=b commit -m x")"
 git -C "$repo" switch -q feature/AGE-1-work
 check allowed "--title=value form" "$(cmd "gh pr create --title='AGE-1: x'")"
 check blocked "plan word separated by a space" "$(edit "$repo/Implementation_Plans/Session archive plan.md")"
-check blocked "file inside a plans directory" "$(edit "$repo/Implementation_Plans/AGE-1.md")"
+check allowed "markdown inside a design-named folder" "$(edit "$repo/packages/design-system/README.md")"
 mkdir -p "$repo/Implementation_Plans" && echo x > "$repo/Implementation_Plans/AGE-5-old.md"
 check allowed "existing plan file outside docs/work-items can be edited" "$(edit "$repo/Implementation_Plans/AGE-5-old.md")"
 check allowed "git commit-graph is not git commit" "$(git -C "$repo" switch -q main; cmd "git commit-graph verify")"

@@ -31,16 +31,16 @@ The hooks judge the checkout the action targets: the directory of the edited fil
 | 6 | GitHub allows squash merge only, using the pull request title. `gh pr create` is blocked unless `--title`/`-t` starts with the branch's ticket key. |
 | 7 | `gh pr merge` is blocked while `git config workflow.mergeApproval` is `withdrawn`. The agent sets it when the owner withdraws approval in chat, and back to `standing` when the owner approves again. |
 | 8 | After `gh pr merge` (not `--auto`), the after-merge hook tells the agent to move the merged pull request's ticket to Done. |
-| 9 | Creating a Markdown file whose path has the word plan, spec or design (as a whole part of a name) is blocked outside `docs/work-items/`. Existing files can still be edited; moving them is cleanup work. |
-| 10 | When the branch changes `packages/`, `plugins/`, `fixtures/`, `package.json`, `pnpm-*.yaml` or `tsconfig*.json`, `git push` and `gh pr create` are blocked until `git config branch.<branch>.checked` equals `HEAD`. |
+| 9 | Creating a Markdown file whose file name has the word plan, spec or design (as a whole part of the name) is blocked outside `docs/work-items/`. Existing files can still be edited; moving them is cleanup work. |
+| 10 | When the branch changes `packages/`, `plugins/`, `fixtures/`, `scripts/`, `package.json`, `pnpm-*.yaml`, `tsconfig*.json` or a root `*.config.{js,ts,mjs,cjs,mts,cts}`, `git push` and `gh pr create` are blocked until `git config branch.<branch>.checked` equals `HEAD`. |
 
 ## Limits
 
 - Kept simple on purpose. Unusual command spellings, file writes through shell commands, and other tools are not checked; GitHub protection on `main` is the backstop.
 - The review and check records (rules 5 and 10) are set by the agent; they make the step explicit but cannot prove it happened.
-- Stacked branches (cut from another feature branch) are blocked by rule 2.
+- Rule 2 judges branches created locally. A stacked branch (cut from another feature branch) is blocked when created, but no longer judged once it exists on `origin`.
 - `gh pr create --fill` is blocked; pass an explicit `--title`.
-- Command-text limits kept for later consideration: a `cd` earlier in the command or a quoted `-C` path is not followed; pushing a branch other than the current one is judged against the current branch; `-t` inside `--body` text can be read as the title.
+- Command-text limits kept for later consideration (tracked in the backlog): a `cd` earlier in the command or a quoted `-C` path is not followed; pushing a branch other than the current one is judged against the current branch; `-t` inside `--body` text can be read as the title.
 - No CI check is required on `main` yet, because CI has not run on this fork.
 
 ## Tests
