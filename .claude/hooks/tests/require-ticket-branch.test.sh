@@ -112,6 +112,28 @@ check blocked "template literal dot is not a wildcard" "$(edit Edit "$project/a.
 cp "$scratch/settings.bak" "$project/.harness/settings.json"
 git -C "$project" switch -q feature/AGE-63-x
 
+# Rule 2: the branch is cut from main.
+git -C "$project" switch -q -c feature/AGE-70-from-main main
+check allowed "ticket branch cut from main" "$(edit Edit "$project/a.txt")"
+gitc -C "$project" commit -q --allow-empty -m work
+check allowed "ticket branch cut from main, with commits" "$(edit Edit "$project/a.txt")"
+git -C "$project" switch -q -c feature/AGE-71-stacked feature/AGE-63-x
+check blocked "ticket branch cut from another feature branch" "$(edit Edit "$project/a.txt")" "not cut from main"
+check blocked "commit on a stacked branch" "$(run "$project" "git commit -m x")" "not cut from main"
+git -C "$project" checkout -q --orphan unrelated && gitc -C "$project" commit -q --allow-empty -m upstream-root
+git -C "$project" switch -q -c feature/AGE-72-from-upstream unrelated
+check blocked "ticket branch cut from unrelated history" "$(edit Edit "$project/a.txt")" "not cut from main"
+# Without a reflog, the first-parent fallback still rejects unrelated history.
+git -C "$project" -c core.logAllRefUpdates=false branch feature/AGE-73-no-reflog unrelated
+rm -f "$(git -C "$project" rev-parse --git-path logs/refs/heads/feature/AGE-73-no-reflog)"
+git -C "$project" switch -q feature/AGE-73-no-reflog
+check blocked "no reflog, unrelated history" "$(edit Edit "$project/a.txt")" "not cut from main"
+# origin/main is preferred over local main when present.
+git -C "$project" update-ref refs/remotes/origin/main main
+git -C "$project" switch -q feature/AGE-70-from-main
+check allowed "cut from main, origin/main present" "$(edit Edit "$project/a.txt")"
+git -C "$project" switch -q feature/AGE-63-x
+
 # Missing tools fail closed.
 PATH_OVERRIDE=/nonexistent check blocked "missing jq fails closed" "$(edit Edit "$project/a.txt")" "needs jq"
 mkdir -p "$scratch/bin"; ln -s "$(command -v jq)" "$scratch/bin/jq"

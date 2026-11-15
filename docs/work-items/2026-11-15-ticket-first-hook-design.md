@@ -18,12 +18,18 @@ Claude Code PreToolUse hook `.claude/hooks/require-ticket-branch.sh`, registered
 - Edits inside a `.git` directory of the project are judged against the project checkout.
 - Blocks with exit 2 and a message naming the branch to create. Fails closed without `jq` or `git`, when git cannot read a path inside the project, when `.harness/settings.json` cannot be parsed or has an unknown placeholder, and when the hook script is missing or crashes (wrapper in `.claude/settings.json`).
 
+## Rule 2: branch cut from main
+
+Same hook, same trigger points. After the ticket-branch check, the branch's creation point (oldest reflog entry) must be a commit on `origin/main`, or on `main` when there is no `origin`. A branch cut from another feature branch or from unrelated history (for example `upstream/main`) is blocked. Without a reflog, it falls back to checking that the parent of the first commit the branch adds on its first-parent line is on `main`.
+
 ## Limits
 
 - File writes made through Bash (`sed -i`, redirection) are not checked.
 - Text that merely mentions `git commit` (quoted strings, heredocs) is also blocked on a non-ticket branch.
 - Claude Code only; git hooks were deliberately excluded for now.
 - The ticket is not looked up in the tracker, so existence, state and order are not verified.
+- Rule 2 checks the base, not freshness: a branch cut from an old `main` commit passes.
+- Without a reflog (expired or fetched branch), a branch stacked on another feature branch whose commits are not on `main` passes the fallback.
 
 ## Tests
 

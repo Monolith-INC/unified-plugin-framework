@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Claude Code PreToolUse hook: rule 1, "ticket first".
+# Claude Code PreToolUse hook: rule 1, "ticket first", and rule 2, "branch cut
+# from main".
 # In this project's repository (any of its worktrees), a file may only be
 # changed, and `git commit` may only run, while the checkout is on a ticket
 # branch. The branch pattern comes from .harness/settings.json: branch_template
@@ -87,8 +88,30 @@ require_ticket() {
       [ -f "$f" ] && branch=$(sed 's#^refs/heads/##' "$f") && break
     done
   fi
-  [[ $branch =~ ^${pattern}$ ]] && return 0
-  block "cannot $action on branch '${branch:-detached HEAD}' in $root. Take a tracker ticket and create its branch first: git switch -c $example main"
+  [[ $branch =~ ^${pattern}$ ]] \
+    || block "cannot $action on branch '${branch:-detached HEAD}' in $root. Take a tracker ticket and create its branch first: git switch -c $example main"
+  require_cut_from_main "$root" "$branch" "$action"
+}
+
+# Rule 2: the branch was cut from main. Its creation point (the oldest reflog
+# entry) must be a commit on origin/main, or on main when there is no origin.
+# Without a reflog, fall back to: the parent of the first commit the branch
+# adds on its first-parent line must be on main.
+require_cut_from_main() {
+  local root=$1 branch=$2 action=$3 main created first parent
+  main=$(git -C "$root" rev-parse -q --verify refs/remotes/origin/main 2>/dev/null) \
+    || main=$(git -C "$root" rev-parse -q --verify refs/heads/main 2>/dev/null) \
+    || return 0   # no main to compare with
+  created=$(git -C "$root" reflog show --format=%H "refs/heads/$branch" -- 2>/dev/null | tail -n 1)
+  if [ -n "$created" ]; then
+    git -C "$root" merge-base --is-ancestor "$created" "$main" 2>/dev/null && return 0
+  else
+    first=$(git -C "$root" rev-list --first-parent --reverse "$main..refs/heads/$branch" 2>/dev/null | head -n 1)
+    [ -z "$first" ] && return 0
+    parent=$(git -C "$root" rev-parse -q --verify "$first^" 2>/dev/null)
+    [ -n "$parent" ] && git -C "$root" merge-base --is-ancestor "$parent" "$main" 2>/dev/null && return 0
+  fi
+  block "cannot $action on branch '$branch' in $root: it was not cut from main. Create the ticket branch from main: git switch -c <new-branch> origin/main (or main), then bring the work over."
 }
 
 case $tool in
