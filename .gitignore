@@ -7,6 +7,7 @@ dist/
 .harness/
 _bmad/
 _bmad-output/
+.superpowers/
 
 # Codex: share the workflow hook adapter, keep the rest local (AGE-88)
 !/.codex/

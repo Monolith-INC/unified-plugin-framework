@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/Monolith-INC/monolithic-code-review-toolkit",
+  "commit": "3af148b44421521bb453be0abea05750e45f6f8a",
+  "files": {
+    "LICENSE": "7551356a811fa527bdf9308881998218256055f27bf48272539446d468ae759c",
+    "adapters/knowledge/README.md": "b5ba485a310954e3d525d51f83a6ff228e4ba1b546fa1d9b83c83918b70e1384",
+    "adapters/knowledge/knowledge_store.py": "21c62a3e7478e51468f309afc1bcbbc9c3e2e1bdc32c8b7df06c97a0248e5360",
+    "adapters/knowledge/mcrt_knowledge_mcp.py": "f4466038beb1e3e8bbba35a705c036692a9ecbe399d2231ed3e96a214ba78b11",
+    "adapters/knowledge/pyproject.toml": "d336c7b96355d54098e042b3dfcc8dd86a837b8661e31bbd70559a6313808ad6",
+    "adapters/knowledge/tests/test_knowledge_mcp.py": "beb885df9e19871d7f88767b6b3422065bd81d70deb997d0fc371521a7e2a3fe",
+    "adapters/knowledge/tests/test_knowledge_store.py": "f986ac028bebd34bc2cbafb0555b1ccbcbbea79f95b4877a2849f790c3307912",
+    "plugins/monolithic-code-review-toolkit/skills/discover-project-knowledge/SKILL.md": "78b6875671dfa752ba73f79a2e988444bdc306d8735921f3289ec4a9701d76c4"
+  }
+}
