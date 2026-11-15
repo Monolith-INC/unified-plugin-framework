@@ -75,10 +75,30 @@ check blocked "ticket branch cut from another branch" "$(edit "$repo/a.txt")"
 git -C "$repo" switch -q -c topic/x main
 check blocked "branch without a ticket" "$(edit "$repo/a.txt")"
 
-# Rule 8: reminder after a merge.
-after=$(dirname "$hook")/after-merge.sh
+# Review round 2 cases.
+git -C "$repo" switch -q main
+check blocked "git -C . commit on main" "$(cmd "git -C . commit -m x")"
+check blocked "git -c k=v commit on main" "$(cmd "git -c a=b commit -m x")"
 git -C "$repo" switch -q feature/AGE-1-work
-out=$(cmd "gh pr merge 5 --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+check allowed "--title=value form" "$(cmd "gh pr create --title='AGE-1: x'")"
+check blocked "plan word separated by a space" "$(edit "$repo/Implementation_Plans/Session archive plan.md")"
+check blocked "file inside a plans directory" "$(edit "$repo/Implementation_Plans/AGE-1.md")"
+git -C "$repo" switch -q --detach HEAD
+check allowed "detached HEAD (rebase in progress) is not judged" "$(edit "$repo/a.txt")"
+git -C "$repo" switch -q main
+git -C "$repo" worktree add -q -b feature/AGE-4-wt "$repo-wt" main
+check allowed "edit in a ticket worktree while the main checkout is on main" "$(edit "$repo-wt/a.txt")"
+check blocked "edit in the main checkout on main" "$(edit "$repo/a.txt")"
+git -C "$repo" worktree remove -f "$repo-wt"
+git -C "$repo" switch -q feature/AGE-1-work
+
+# Rule 8: reminder after a merge (gh is stubbed).
+after=$(dirname "$hook")/after-merge.sh
+stub=$(mktemp -d); trap 'rm -rf "$repo" "$stub"' EXIT
+printf '#!/bin/sh\necho "$GH_STATE AGE-1: add work"\n' > "$stub/gh"; chmod +x "$stub/gh"
+out=$(cmd "gh pr merge --squash 5" | GH_STATE=OPEN PATH=$stub:$PATH CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 2 ] && [[ $out == *"could not confirm"* ]]; then echo "PASS no Done reminder when the merge did not happen"; else echo "FAIL unmerged ($rc: $out)"; fail=1; fi
+out=$(cmd "gh pr merge 5 --squash" | GH_STATE=MERGED PATH=$stub:$PATH CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
 if [ $rc -eq 2 ] && [[ $out == *"move ticket AGE-1 to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
 out=$(cmd "git status" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
 if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for other commands"; else echo "FAIL no reminder for other commands"; fail=1; fi
