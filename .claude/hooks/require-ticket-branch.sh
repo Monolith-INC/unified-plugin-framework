@@ -32,22 +32,25 @@ checkout_of() {
 # Commands count only at the start of a line or after ; & | ( — not inside text.
 start='(^|[;&|(][[:space:]]*|'$'\n''[[:space:]]*)'
 git_opts='([[:space:]]+-[cC][[:space:]]+[^[:space:]]+)*'
+end='([[:space:];&|)]|$)'   # whole command words only (not commit-graph, commit-tree)
 
 case $tool in
   Edit|Write|MultiEdit|NotebookEdit)
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
     repo=$(checkout_of "$(dirname "$path")") || exit 0
-    # Rule 9: a markdown file with a plan/spec/design word in its path lives in docs/work-items/.
-    rel=$(tr '[:upper:]' '[:lower:]' <<<"${path#"$repo"/}")
-    if [[ $rel == *.md && $rel != docs/work-items/* && $rel =~ (^|[-_./[:space:]])(plans?|specs?|designs?)([-_./[:space:]]|$) ]]; then
+    # Rule 9: a new markdown file with a plan/spec/design word in its path lives in
+    # docs/work-items/. Existing files can still be edited (moving them is cleanup work).
+    rel=${path#"$repo"/}; [[ $rel == /* ]] && rel=${path#"$project"/}   # repo path may be symlink-resolved
+    rel=$(tr '[:upper:]' '[:lower:]' <<<"$rel")
+    if [ ! -e "$path" ] && [[ $rel == *.md && $rel != docs/work-items/* && $rel =~ (^|[-_./[:space:]])(plans?|specs?|designs?)([-_./[:space:]]|$) ]]; then
       block "plans and specs go in docs/work-items/. Write it there instead of $path"
     fi ;;
   Bash)
     command=$(jq -r '.tool_input.command // ""' <<<"$input")
-    [[ $command =~ ${start}git${git_opts}[[:space:]]+commit ]] && commits=y
-    [[ $command =~ ${start}(git${git_opts}[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create) ]] && publishes=y
-    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create ]] && creates=y
-    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge ]] && merges=y
+    [[ $command =~ ${start}git${git_opts}[[:space:]]+commit${end} ]] && commits=y
+    [[ $command =~ ${start}(git${git_opts}[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create)${end} ]] && publishes=y
+    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create${end} ]] && creates=y
+    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge${end} ]] && merges=y
     # Rule 7: merging needs the owner's approval, standing unless withdrawn in chat.
     if [ -n "${merges:-}" ] && [ "$(git -C "$project" config --get workflow.mergeApproval)" = withdrawn ]; then
       block "the owner withdrew merge approval. Ask for explicit approval; when it is given, run: git config workflow.mergeApproval standing"
@@ -63,7 +66,11 @@ case $tool in
 esac
 
 branch=$(git -C "$repo" branch --show-current)
-[ -n "$branch" ] || exit 0   # detached HEAD: rebase, bisect or cherry-pick in progress
+if [ -z "$branch" ]; then
+  # Detached HEAD (rebase, bisect, cherry-pick): edits and commits are allowed, publishing is not.
+  [ -z "${publishes:-}" ] || block "push and open pull requests from the ticket branch, not a detached HEAD."
+  exit 0
+fi
 [[ $branch =~ ^feature/([A-Z][A-Z0-9]*-[0-9]+)-.+ ]] \
   || block "branch '$branch' is not a ticket branch. Create one from main: git switch -c feature/<KEY>-<n>-<slug> main"
 key=${BASH_REMATCH[1]}

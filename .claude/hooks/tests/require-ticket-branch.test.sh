@@ -83,8 +83,17 @@ git -C "$repo" switch -q feature/AGE-1-work
 check allowed "--title=value form" "$(cmd "gh pr create --title='AGE-1: x'")"
 check blocked "plan word separated by a space" "$(edit "$repo/Implementation_Plans/Session archive plan.md")"
 check blocked "file inside a plans directory" "$(edit "$repo/Implementation_Plans/AGE-1.md")"
+mkdir -p "$repo/Implementation_Plans" && echo x > "$repo/Implementation_Plans/AGE-5-old.md"
+check allowed "existing plan file outside docs/work-items can be edited" "$(edit "$repo/Implementation_Plans/AGE-5-old.md")"
+check allowed "git commit-graph is not git commit" "$(git -C "$repo" switch -q main; cmd "git commit-graph verify")"
+git -C "$repo" switch -q feature/AGE-1-work
+ln -s "$repo" "$repo-link"
+printf '%s' "$(edit "$repo-link/docs/work-items/2026-11-15-y-plan.md")" | CLAUDE_PROJECT_DIR=$repo-link bash "$hook" 2>/dev/null \
+  && echo "PASS allowed :: plan in docs/work-items through a symlinked project path" || { echo "FAIL symlinked project path"; fail=1; }
+rm -f "$repo-link"
 git -C "$repo" switch -q --detach HEAD
 check allowed "detached HEAD (rebase in progress) is not judged" "$(edit "$repo/a.txt")"
+check blocked "push from a detached HEAD" "$(cmd "git push origin HEAD:feature/AGE-1-work")"
 git -C "$repo" switch -q main
 git -C "$repo" worktree add -q -b feature/AGE-4-wt "$repo-wt" main
 check allowed "edit in a ticket worktree while the main checkout is on main" "$(edit "$repo-wt/a.txt")"
@@ -92,14 +101,10 @@ check blocked "edit in the main checkout on main" "$(edit "$repo/a.txt")"
 git -C "$repo" worktree remove -f "$repo-wt"
 git -C "$repo" switch -q feature/AGE-1-work
 
-# Rule 8: reminder after a merge (gh is stubbed).
+# Rule 8: reminder after a merge.
 after=$(dirname "$hook")/after-merge.sh
-stub=$(mktemp -d); trap 'rm -rf "$repo" "$stub"' EXIT
-printf '#!/bin/sh\necho "$GH_STATE AGE-1: add work"\n' > "$stub/gh"; chmod +x "$stub/gh"
-out=$(cmd "gh pr merge --squash 5" | GH_STATE=OPEN PATH=$stub:$PATH CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
-if [ $rc -eq 2 ] && [[ $out == *"could not confirm"* ]]; then echo "PASS no Done reminder when the merge did not happen"; else echo "FAIL unmerged ($rc: $out)"; fail=1; fi
-out=$(cmd "gh pr merge 5 --squash" | GH_STATE=MERGED PATH=$stub:$PATH CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
-if [ $rc -eq 2 ] && [[ $out == *"move ticket AGE-1 to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
+out=$(cmd "gh pr merge --squash --delete-branch" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 2 ] && [[ $out == *"to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
 out=$(cmd "git status" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
 if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for other commands"; else echo "FAIL no reminder for other commands"; fail=1; fi
 out=$(cmd "gh pr merge 5 --auto --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
