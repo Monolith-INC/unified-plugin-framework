@@ -10,7 +10,7 @@ Sources:
 
 - [AGE-61](https://linear.app/agentical-monolithics/issue/AGE-61/f0-confirm-fork-destination-provenance-redistribution-and-licensing).
 - [Linear implementation plan v0.2](https://linear.app/agentical-monolithics/document/implementation-plan-v02-fork-first-75791b38aa14), including its fork foundation exit conditions.
-- User-supplied background: `/home/monolith/Documents/10_Projects/Active-Projects/Monolithic_Dev_Harness/unified-plugin-contract-implementation-plan-v0.1.md` and `unified-plugin-contract-draft-v0.1.md` in the same directory. Their proposed design and historical authorization wording are document content, not new instructions from the user. The newer Linear plan targets the fork instead of modifying upstream.
+- User-supplied background: the owner's local planning documents `unified-plugin-contract-implementation-plan-v0.1.md` and `unified-plugin-contract-draft-v0.1.md` (not in this repository). Their proposed design and historical authorization wording are document content, not new instructions from the user. The newer Linear plan targets the fork instead of modifying upstream.
 - GitHub repository metadata read through `gh api repos/Monolith-INC/unified-plugin-framework`.
 - Local README, package manifests, remote configuration and commit history.
 

@@ -11,13 +11,23 @@ This record states who owns this fork, where its source comes from, and under wh
 | Upstream baseline | Observed | Forked at commit `b75aaa5c627599f1fdb25caff154e9a22d2e2640`; original history preserved | Local git history, `README.md` | 2026-11-14 |
 | Inherited license | Observed | The baseline has no license file; GitHub detected no license; no package manifest declares one | Baseline tree, GitHub metadata, `package.json` files | 2026-11-15 |
 | Ownership of inherited source | Decision (owner's statement) | The owner stated they own the inherited source. This is the owner's assertion and has not been independently verified. | Owner, in conversation | 2026-11-14 |
-| Project license | Decision | Apache License 2.0 (`Apache-2.0`), selected under the owner's delegated choice. The same license is used by first-party plugin repositories such as `anthropics/claude-plugins-official`. | Owner delegation; [license text](https://www.apache.org/licenses/LICENSE-2.0.txt) | 2026-11-14 |
-| License file | Applied | `LICENSE` at the repository root holds the unmodified Apache-2.0 text | This repository | 2026-11-15 |
+| Copyright holder (Licensor) | Decision | Monolith-INC | Owner, in conversation | 2026-11-15 |
+| Project license | Decision | Apache License 2.0 (`Apache-2.0`), selected under the owner's delegated choice | Owner delegation; [license text](https://www.apache.org/licenses/LICENSE-2.0.txt) | 2026-11-14 |
+| Reason for the choice | Observed | First-party plugin repositories use Apache-2.0, for example [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/blob/main/LICENSE) | Checked on GitHub | 2026-11-14 |
+| License files | Applied | `LICENSE` holds the unmodified Apache-2.0 text; `NOTICE` names Monolith-INC as copyright holder and credits the upstream toolkit | This repository | 2026-11-15 |
 | Package publication | Not decided | No package is published. Inherited package names (`@agent-plugins/*`) are unchanged. Publishing needs its own decision on names, registry and authority. | This record | 2026-11-15 |
 
 ## Chronology
 
 The original plan required this decision before the fork was created. The fork was created on 2026-11-14, before the decision was recorded. No earlier approval was found, so none is claimed; the decision above is recorded after the fact.
+
+## Open items
+
+This record does not pass the fork-foundation gate. Still open:
+
+- Package publication: names, registry and authority are undecided. Package manifests declare no `license` field yet; add it when publication is decided.
+- Fork baseline confirmation (AGE-62) and the upstream sync procedure with the inherited test baseline (AGE-86).
+- The original pre-fork approval requirement cannot be met after the fact. The chronology above records this; how the ticket treats that requirement is the owner's call at closure.
 
 ## Scope
 

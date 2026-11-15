@@ -3,7 +3,7 @@ title: 'Record fork ownership and publication policy'
 type: approach
 ticket: AGE-61
 created: '2026-11-14'
-status: draft
+status: implemented
 route: full
 route_source: pinned
 review: thorough
@@ -77,6 +77,8 @@ No unanswered choice remains for this slice: the existing destination and user o
 Compare the final ownership record with current GitHub metadata, the pinned baseline tree and the supplied permission evidence. Record observation dates and check every acceptance condition before closure. The ownership document alone grants no package publication or later milestone approval; AGE-62 and AGE-63 retain their separate foundation responsibilities. Check README links and changed-file scope. No application behavior changes are planned, so implementation tests would not establish ownership or publication permission. If execution expands into package configuration or source changes, reassess scope and run the repository's required checks.
 
 ## Implementation notes
+
+Implemented on 2026-11-15 on branch `feature/AGE-61-ownership-and-license`. The owner named Monolith-INC as the copyright holder. Delivered: `LICENSE` (unmodified Apache-2.0), `NOTICE`, `docs/upstream/ownership.md` and the README licensing paragraph. The statements above that no license is applied describe the state before execution. The discovery and review files in this folder are historical planning records; `docs/upstream/ownership.md` is the current record.
 
 ## Plan change log
 
