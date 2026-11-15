@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -99,7 +99,8 @@ test("create --help and add skill --help print usage", () => {
 });
 
 test("create defaults destination under cwd using unscoped name", () => {
-  const cwd = mkdtempSync(join(tmpdir(), "agent-plugins-cli-cwd-"));
+  // process.cwd() reports the resolved path, and macOS temp directories sit behind /var -> /private/var.
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), "agent-plugins-cli-cwd-")));
   const previous = process.cwd();
   process.chdir(cwd);
   try {
