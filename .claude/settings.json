@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "s=\"$CLAUDE_PROJECT_DIR/.claude/hooks/require-ticket-branch.sh\"; [ -f \"$s\" ] || { echo \"Blocked: the ticket-first hook script is missing ($s).\" >&2; exit 2; }; bash \"$s\"; rc=$?; [ $rc -eq 0 ] || [ $rc -eq 2 ] || { echo \"Blocked: the ticket-first hook failed (exit $rc).\" >&2; exit 2; }; exit $rc"
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-ticket-branch.sh\""
           }
         ]
       }
