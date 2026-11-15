@@ -7,76 +7,76 @@
 #   7. merge only while the owner's approval stands (git config workflow.mergeApproval)
 #   9. plan, spec and design markdown files live in docs/work-items/
 #  10. implementation changes pass the pnpm checks before push or pull request
-# Checked before file edits, `git commit`, `git push` and `gh pr create`. Anything this misses is stopped
-# by GitHub branch protection on main.
+# Checked before file edits, `git commit`, `git push`, `gh pr create` and
+# `gh pr merge`. Anything this misses is stopped by GitHub branch protection.
 
+block() { echo "Blocked: $1" >&2; exit 2; }
+
+command -v jq >/dev/null || block "the workflow hook needs jq."
 input=$(cat)
-project=${CLAUDE_PROJECT_DIR:-.}
+project=${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}
+[ -n "$project" ] || exit 0
+tool=$(jq -r '.tool_name // ""' <<<"$input") || block "the workflow hook could not read the tool call."
 
-case $(jq -r '.tool_name' <<<"$input") in
+# Commands count only at the start of a line or after ; & | ( — not inside text.
+start='(^|[;&|(][[:space:]]*|'$'\n''[[:space:]]*)'
+
+case $tool in
   Edit|Write|MultiEdit|NotebookEdit)
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
     [[ $path == "$project"/* ]] || exit 0
-    # Rule 9: plans and specs live in docs/work-items/.
+    # Rule 9: a markdown file whose name has a plan/spec/design word lives in docs/work-items/.
     name=$(basename "$path" | tr '[:upper:]' '[:lower:]')
-    if [[ $name == *.md && $name =~ (plan|spec|design) && $path != "$project"/docs/work-items/* ]]; then
-      echo "Blocked: plans and specs go in docs/work-items/. Write it there instead of $path" >&2
-      exit 2
+    if [[ $name == *.md && $name =~ (^|[-_.])(plans?|specs?|designs?)([-_.]|$) && $path != "$project"/docs/work-items/* ]]; then
+      block "plans and specs go in docs/work-items/. Write it there instead of $path"
     fi ;;
   Bash)
-    command=$(jq -r '.tool_input.command' <<<"$input")
-    # Only commands that start a line or follow ; & | ( count, not quoted text.
-    start='(^|[;&|(][[:space:]]*|'$'\n''[[:space:]]*)'
-    commits=$([[ $command =~ ${start}git[[:space:]]+commit ]] && echo y)
-    publishes=$([[ $command =~ ${start}(git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create) ]] && echo y)
+    command=$(jq -r '.tool_input.command // ""' <<<"$input")
+    [[ $command =~ ${start}git[[:space:]]+commit ]] && commits=y
+    [[ $command =~ ${start}(git[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create) ]] && publishes=y
+    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create ]] && creates=y
+    [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge ]] && merges=y
     # Rule 7: merging needs the owner's approval, standing unless withdrawn in chat.
-    if [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge ]]; then
-      if [ "$(git -C "$project" config --get workflow.mergeApproval)" = withdrawn ]; then
-        echo "Blocked: the owner withdrew merge approval. Ask for explicit approval; when it is given, run: git config workflow.mergeApproval standing" >&2
-        exit 2
-      fi
-      exit 0
+    if [ -n "${merges:-}" ] && [ "$(git -C "$project" config --get workflow.mergeApproval)" = withdrawn ]; then
+      block "the owner withdrew merge approval. Ask for explicit approval; when it is given, run: git config workflow.mergeApproval standing"
     fi
-    [[ -n $commits || -n $publishes ]] || exit 0 ;;
+    [[ -n ${commits:-} || -n ${publishes:-} ]] || exit 0 ;;
   *) exit 0 ;;
 esac
 
 branch=$(git -C "$project" branch --show-current)
-if [[ ! $branch =~ ^feature/[A-Z][A-Z0-9]*-[0-9]+-.+ ]]; then
-  echo "Blocked: branch '$branch' is not a ticket branch. Create one from main: git switch -c feature/<KEY>-<n>-<slug> main" >&2
-  exit 2
-fi
+[[ $branch =~ ^feature/([A-Z][A-Z0-9]*-[0-9]+)-.+ ]] \
+  || block "branch '$branch' is not a ticket branch. Create one from main: git switch -c feature/<KEY>-<n>-<slug> main"
+key=${BASH_REMATCH[1]}
 
-base=$(git -C "$project" reflog show --format=%H "refs/heads/$branch" | tail -n 1)
+# Rule 2: where the branch was created locally, that point must be on main.
+# Branches already on origin, renamed, or with an expired reflog are not judged.
 main=$(git -C "$project" rev-parse -q --verify origin/main || git -C "$project" rev-parse -q --verify main)
-if [ -n "$base" ] && [ -n "$main" ] && ! git -C "$project" merge-base --is-ancestor "$base" "$main"; then
-  echo "Blocked: branch '$branch' was not cut from main. Create the ticket branch from main and move the work there." >&2
-  exit 2
+created=$(git -C "$project" reflog show --format='%H %gs' "refs/heads/$branch" | tail -n 1)
+if [[ $created == *" branch: Created from "* ]] && [ -n "$main" ] \
+   && ! git -C "$project" rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null \
+   && ! git -C "$project" merge-base --is-ancestor "${created%% *}" "$main"; then
+  block "branch '$branch' was not cut from main. Create the ticket branch from main and move the work there."
 fi
 
-# Rule 5: push or open a pull request only after the confirming review of HEAD.
 if [ -n "${publishes:-}" ]; then
   head=$(git -C "$project" rev-parse HEAD)
-  if [ "$(git -C "$project" config --get "branch.$branch.reviewed")" != "$head" ]; then
-    echo "Blocked: HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head" >&2
-    exit 2
-  fi
+  # Rule 5: push or open a pull request only after the confirming review of HEAD.
+  [ "$(git -C "$project" config --get "branch.$branch.reviewed")" = "$head" ] \
+    || block "HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head"
   # Rule 10: implementation changes need the pnpm checks to pass on HEAD.
   if [ -n "$main" ] && git -C "$project" diff --name-only "$main...HEAD" \
       | grep -qE '^(packages/|plugins/|fixtures/|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$)'; then
-    if [ "$(git -C "$project" config --get "branch.$branch.checked")" != "$head" ]; then
-      echo "Blocked: this branch changes implementation and HEAD $head has not passed the checks. Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify, then record it: git config branch.$branch.checked $head" >&2
-      exit 2
-    fi
+    [ "$(git -C "$project" config --get "branch.$branch.checked")" = "$head" ] \
+      || block "this branch changes implementation and HEAD $head has not passed the checks. Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify, then record it: git config branch.$branch.checked $head"
   fi
 fi
 
-# Rule 6: the pull request title carries the ticket key (it becomes the squash commit title).
-if [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create ]]; then
-  key=$(sed -E 's#^feature/([A-Z][A-Z0-9]*-[0-9]+)-.*#\1#' <<<"$branch")
-  if [[ $command != *"--title"* || $command != *"$key"* ]]; then
-    echo "Blocked: open the pull request with the ticket key in the title: gh pr create --title \"$key: <summary>\"" >&2
-    exit 2
-  fi
+# Rule 6: the pull request title starts with the ticket key (it becomes the squash commit title).
+if [ -n "${creates:-}" ]; then
+  title_re="(--title|-t)[[:space:]]+(\"([^\"]*)\"|'([^']*)'|([^[:space:]]+))"
+  [[ $command =~ $title_re ]] && title=${BASH_REMATCH[3]}${BASH_REMATCH[4]}${BASH_REMATCH[5]}
+  [[ ${title:-} =~ ^${key}([^0-9]|$) ]] \
+    || block "open the pull request with the ticket key at the start of the title: gh pr create --title \"$key: <summary>\""
 fi
 exit 0

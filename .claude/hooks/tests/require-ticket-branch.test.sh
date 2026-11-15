@@ -31,6 +31,9 @@ check blocked "plan outside docs/work-items" "$(edit "$repo/Implementation_Plans
 check blocked "spec outside docs/work-items" "$(edit "$repo/docs/superpowers/specs/2026-11-15-x-design.md")"
 check allowed "plan in docs/work-items" "$(edit "$repo/docs/work-items/2026-11-15-x-plan.md")"
 check allowed "other markdown anywhere" "$(edit "$repo/README.md")"
+check allowed "a name that only contains 'plan' inside a word" "$(edit "$repo/docs/explanation.md")"
+check blocked "commit on main hidden behind gh pr merge" "$(git -C "$repo" switch -q main; cmd "git commit -m x && gh pr merge 1")"
+git -C "$repo" switch -q feature/AGE-1-work
 
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m work
 check blocked "push before review" "$(cmd "git push -u origin feature/AGE-1-work")"
@@ -40,6 +43,9 @@ check allowed "push after review of HEAD" "$(cmd "git push -u origin feature/AGE
 check blocked "pull request without a title" "$(cmd "gh pr create --fill")"
 check blocked "pull request title without the ticket key" "$(cmd "gh pr create --title 'add work' --body x")"
 check allowed "pull request with the ticket key in the title" "$(cmd "gh pr create --title 'AGE-1: add work' --body x")"
+check allowed "short -t title flag" "$(cmd "gh pr create -t 'AGE-1: add work' --body x")"
+check blocked "key only in --head, not in the title" "$(cmd "gh pr create --title misc --head feature/AGE-1-work")"
+check blocked "a different ticket number in the title" "$(cmd "gh pr create --title 'AGE-12: x'")"
 git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m more
 check blocked "push after a new commit since review" "$(cmd "git push")"
 git -C "$repo" switch -q -c feature/AGE-3-impl main
@@ -52,6 +58,12 @@ check allowed "implementation push after checks" "$(cmd "git push -u origin feat
 git -C "$repo" switch -q feature/AGE-1-work
 git -C "$repo" config branch.feature/AGE-1-work.reviewed "$(git -C "$repo" rev-parse HEAD)"
 check allowed "non-implementation push needs no checks" "$(cmd "git push")"
+# A ticket branch checked out from the remote (fresh clone) is not judged by its reflog.
+git -C "$repo" switch -q -c scratch-tip feature/AGE-1-work && git -C "$repo" -c user.email=t@t -c user.name=t commit -q --allow-empty -m remote-work
+git -C "$repo" update-ref refs/remotes/origin/feature/AGE-9-remote HEAD && git -C "$repo" switch -q main && git -C "$repo" branch -q -D scratch-tip
+git -C "$repo" switch -q -c feature/AGE-9-remote refs/remotes/origin/feature/AGE-9-remote
+check allowed "ticket branch checked out from the remote" "$(edit "$repo/a.txt")"
+git -C "$repo" switch -q feature/AGE-1-work
 check allowed "merge with standing approval (default)" "$(cmd "gh pr merge 5 --squash")"
 git -C "$repo" config workflow.mergeApproval withdrawn
 check blocked "merge after approval was withdrawn" "$(cmd "gh pr merge 5 --squash")"
@@ -70,5 +82,7 @@ out=$(cmd "gh pr merge 5 --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1
 if [ $rc -eq 2 ] && [[ $out == *"move ticket AGE-1 to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
 out=$(cmd "git status" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
 if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for other commands"; else echo "FAIL no reminder for other commands"; fail=1; fi
+out=$(cmd "gh pr merge 5 --auto --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for --auto"; else echo "FAIL no reminder for --auto"; fail=1; fi
 
 exit $fail
