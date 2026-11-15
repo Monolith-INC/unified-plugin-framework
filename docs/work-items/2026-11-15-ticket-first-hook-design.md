@@ -1,56 +1,47 @@
-# Ticket-branch hook
+# Workflow rules enforcement
 
 Status: approved 2026-11-15
 
-## Rules enforced
+## Rules
 
-1. Work only on a ticket branch: `feature/<KEY>-<n>-<slug>`.
-2. The branch was cut from `main`.
+1. Take a tracker ticket before working.
+2. Cut a branch from `main`, named `feature/<KEY>-<n>-<slug>`.
+3. Never commit or push directly to `main`.
+4. Merge only through a pull request.
+5. Run code review, fix, then review again to confirm.
+6. Push, then squash-merge with the ticket key in the title.
+7. The agent merges under the owner's standing approval, which the owner can withdraw in chat.
+8. Move the ticket to Done.
+9. Plans and specs go in `docs/work-items/`.
+10. Run the `pnpm` checks when implementation changes.
 
-## How
+## How each rule is enforced
 
-A Claude Code hook, `.claude/hooks/require-ticket-branch.sh`, runs before file edits and before any command containing `git commit`. It checks the branch of the project checkout. It stops the action if the branch name is not a ticket branch, or if the branch was created from a commit that is not on `main` (read from the branch's reflog).
+Two Claude Code hooks do the local checks. `.claude/hooks/require-ticket-branch.sh` runs before an action; `.claude/hooks/after-merge.sh` runs after a command. GitHub settings enforce the rest and stop anything the hooks miss.
 
-## Kept simple on purpose
+The hooks judge the checkout the action targets: the directory of the edited file, or the command's working directory (or `git -C <dir>`). They only act inside this project's repository and its worktrees. Commands are recognised at the start of a line or after `;`, `&`, `|` or `(`, so text that only mentions them is not blocked. A detached HEAD, as during a rebase, is not judged.
 
-The hook does not try to catch every way around it, such as unusual command spellings, other worktrees or other tools. GitHub branch protection on `main` stops anything it misses from reaching `main`.
+| Rule | Enforcement |
+| --- | --- |
+| 1 | File edits and `git commit` are blocked unless the branch is `feature/<KEY>-<n>-<slug>`. |
+| 2 | Blocked when the branch's local creation point (from the reflog) is not on `origin/main`, or `main` without a remote. Branches already on `origin` are not judged. |
+| 3 | Commits on `main`: rule 1. Pushes to `main`: GitHub branch protection (pull request required, administrators included, no force push or deletion). |
+| 4 | GitHub branch protection. |
+| 5 | `git push` and `gh pr create` are blocked until `git config branch.<branch>.reviewed` equals `HEAD`. The agent records it after the confirming review. The loop ends when a round finds no correctness or security problems; after three rounds the rest goes to the owner. |
+| 6 | GitHub allows squash merge only, using the pull request title. `gh pr create` is blocked unless `--title`/`-t` starts with the branch's ticket key. |
+| 7 | `gh pr merge` is blocked while `git config workflow.mergeApproval` is `withdrawn`. The agent sets it when the owner withdraws approval in chat, and back to `standing` when the owner approves again. |
+| 8 | After `gh pr merge`, the after-merge hook confirms the pull request merged and tells the agent to move its ticket to Done. |
+| 9 | Writing a Markdown file whose path has the word plan, spec or design (as a whole part of a name) is blocked outside `docs/work-items/`. |
+| 10 | When the branch changes `packages/`, `plugins/`, `fixtures/`, `package.json`, `pnpm-*.yaml` or `tsconfig*.json`, `git push` and `gh pr create` are blocked until `git config branch.<branch>.checked` equals `HEAD`. |
+
+## Limits
+
+- Kept simple on purpose. Unusual command spellings, file writes through shell commands, and other tools are not checked; GitHub protection on `main` is the backstop.
+- The review and check records (rules 5 and 10) are set by the agent; they make the step explicit but cannot prove it happened.
+- Stacked branches (cut from another feature branch) are blocked by rule 2.
+- `gh pr create --fill` is blocked; pass an explicit `--title`.
+- No CI check is required on `main` yet, because CI has not run on this fork.
 
 ## Tests
 
-`bash .claude/hooks/tests/require-ticket-branch.test.sh`, also run in CI.
-
-## Rule 3: no direct commits or pushes to main
-
-- Commits on `main`: blocked by the same hook, because `main` is not a ticket branch.
-- Pushes to `main`: GitHub branch protection on `main`, enabled 2026-11-15. It requires a pull request (no required approvals), applies to administrators, and forbids force pushes and deleting `main`. No CI check is required yet, because CI has not run on this fork.
-
-## Rule 4: merge only through a pull request
-
-Enforced by the same GitHub branch protection: `main` only changes through a merged pull request. A local merge into `main` cannot be pushed.
-
-## Rule 5: review, fix, review again
-
-The hook blocks `git push` and `gh pr create` unless the current commit passed review. After the confirming review, record it with `git config branch.<branch>.reviewed <commit>`. Any later commit needs a new review. Commands are recognised only at the start of a command (or after `;`, `&`, `|`, `(`), so text that mentions them is not blocked.
-
-The review loop ends when a round finds no correctness or security problems in the change. After three rounds, the remaining findings go to the owner to decide.
-
-## Rule 6: push, then squash-merge with the ticket key in the title
-
-- Repository settings (GitHub, 2026-11-15): squash merge only; merge commits and rebase merges are off. The squash commit takes the pull request title and body.
-- The hook blocks `gh pr create` unless it has `--title` containing the branch's ticket key, for example `AGE-63: <summary>`.
-
-## Rule 7: merge under the owner's standing approval
-
-Approval is standing by default. When the owner withdraws it in chat, the agent sets `git config workflow.mergeApproval withdrawn`, and the hook blocks `gh pr merge`. When the owner approves again, the agent sets it back to `standing`. The change is also noted on the tracker ticket.
-
-## Rule 8: move the ticket to Done
-
-A Claude Code PostToolUse hook, `.claude/hooks/after-merge.sh`, runs after `gh pr merge` and tells the agent to move the branch's ticket to Done in the tracker. Moving it stays a tracker action.
-
-## Rule 9: plans and specs go in docs/work-items/
-
-The hook blocks writing a Markdown file whose name contains `plan`, `spec` or `design` anywhere in the project except under `docs/work-items/`.
-
-## Rule 10: run the pnpm checks when implementation changes
-
-When the branch changes `packages/`, `plugins/`, `fixtures/`, `package.json`, `pnpm-*.yaml` or `tsconfig*.json`, the hook blocks `git push` and `gh pr create` until the checks are recorded for the current commit. After `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test` and `pnpm payloads:verify` pass, record it with `git config branch.<branch>.checked <commit>`.
+`bash .claude/hooks/tests/require-ticket-branch.test.sh`, also run by the `hooks` CI job.
