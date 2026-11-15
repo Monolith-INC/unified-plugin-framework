@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "upf-project-knowledge"
+version = "0.1.0"
+description = "Standalone project knowledge MCP runtime for Unified Plugin Framework"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Unified Plugin Framework contributors" }]
+dependencies = ["mcp>=2.0,<3", "pydantic>=2.7,<3"]
+
+[project.scripts]
+upf-project-knowledge = "upf_knowledge._vendor.mcrt_knowledge_mcp:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["upf_knowledge"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+upf_knowledge = ["_vendor/*"]
