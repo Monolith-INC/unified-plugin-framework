@@ -12,7 +12,7 @@ authors = [{ name = "Unified Plugin Framework contributors" }]
 dependencies = ["mcp>=2.0,<3", "pydantic>=2.7,<3"]
 
 [project.scripts]
-upf-project-knowledge = "upf_knowledge._vendor.mcrt_knowledge_mcp:main"
+upf-project-knowledge = "upf_knowledge.launcher:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

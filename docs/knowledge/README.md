@@ -14,6 +14,12 @@ supported. The runtime depends on `mcp>=2.0,<3` and `pydantic>=2.7,<3`; these
 inherited version ranges do not guarantee compatibility with every future
 release in those ranges.
 
+Run the command with `--project PATH` to choose the target project, or pass
+`--root PATH` for a one-run override. Relative roots are resolved from the
+project directory. Add `--check` to validate the selected root without starting
+the server; success prints its absolute path as JSON. The launcher requires an
+existing readable directory and never creates a replacement store.
+
 The original discovery procedure is retained in the vendor tree at
 `plugins/monolithic-code-review-toolkit/skills/discover-project-knowledge/SKILL.md`.
 
