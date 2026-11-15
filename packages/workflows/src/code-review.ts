@@ -11,7 +11,8 @@ export type CodeReviewAdapter = WorkflowAdapter<CodeReviewOperation>;
 
 const TOOLKIT = "monolithic-code-review-toolkit";
 
-const toolkit = (skill: string): PluginSkillRef => Object.freeze({ plugin: TOOLKIT, skill });
+const toolkit = (skill: string, use?: string): PluginSkillRef =>
+  Object.freeze(use === undefined ? { plugin: TOOLKIT, skill } : { plugin: TOOLKIT, skill, use });
 
 /** Code review fulfilled by the Monolithic Code Review Toolkit. */
 export const reviewToolkitAdapter: CodeReviewAdapter = Object.freeze({
@@ -19,10 +20,13 @@ export const reviewToolkitAdapter: CodeReviewAdapter = Object.freeze({
   contractVersion: CODE_REVIEW_CONTRACT_VERSION,
   fulfil: Object.freeze({
     "review-task": Object.freeze([toolkit("review-task")] as const),
-    "review-story": Object.freeze([toolkit("review-story-preflight"), toolkit("review-story-postflight")] as const),
+    "review-story": Object.freeze([
+      toolkit("review-story-preflight", "Before the pull request exists: reviews the story branch and reports findings only."),
+      toolkit("review-story-postflight", "Once the pull request is open: reviews the remote diff and posts review comments; confirm before posting."),
+    ] as const),
     "review-feature": Object.freeze([toolkit("review-feature")] as const),
   }),
   knowledgeStores: Object.freeze([
-    Object.freeze({ plugin: TOOLKIT, file: ".monolithic-code-review/sources.json", key: ["knowledge", "root"] as const }),
+    Object.freeze({ plugin: TOOLKIT, file: ".monolithic-code-review/sources.json", key: ["knowledge", "root"] as const, setup: "review-setup" }),
   ]),
 });

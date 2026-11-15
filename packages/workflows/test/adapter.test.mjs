@@ -5,7 +5,7 @@ import { adapterPlugins, checkAdapterReadiness, firstFailure } from "../dist/ind
 
 const ref = (plugin, skill) => ({ plugin, skill });
 
-const reviewKitStore = { plugin: "review-kit", file: ".review-kit/config.json", key: ["knowledge", "root"] };
+const reviewKitStore = { plugin: "review-kit", file: ".review-kit/config.json", key: ["knowledge", "root"], setup: "setup" };
 
 const adapter = Object.freeze({
   workflow: "code-review",
@@ -55,7 +55,7 @@ test("a missing mapped skill fails at the bound step, naming the skill and its o
 test("an unconfigured project knowledge store fails at the bound step", () => {
   const result = checkAdapterReadiness({ ...facts, projectStore: undefined });
   assert.equal(result.step, "bound");
-  assert.match(result.reason, /setup-project-knowledge/);
+  assert.equal(result.recovery.skill.skill, "setup-project-knowledge");
 });
 
 test("a plugin whose own store is unset fails at the bound step, naming its file and key", () => {
@@ -75,6 +75,24 @@ test("a plugin whose store differs from the project's fails at the bound step", 
 test("an adapter whose plugins keep no store of their own needs only the project store", () => {
   const result = checkAdapterReadiness({ ...facts, adapter: { ...adapter, knowledgeStores: [] }, pluginStores: new Map() });
   assert.deepEqual(result, { status: "ready" });
+});
+
+test("each failure carries a recovery action", () => {
+  const recoveryFor = (overrides) => checkAdapterReadiness({ ...facts, ...overrides }).recovery;
+  assert.deepEqual(recoveryFor({ projectStore: undefined }), {
+    action: "run-skill",
+    skill: { plugin: "project-knowledge", skill: "setup-project-knowledge" },
+    goal: "Create the project knowledge store with the recommended defaults.",
+  });
+  assert.deepEqual(recoveryFor({ pluginStores: new Map([["review-kit", undefined]]) }), {
+    action: "run-skill",
+    skill: { plugin: "review-kit", skill: "setup" },
+    goal: "Set knowledge.root in .review-kit/config.json to /repo/knowledge.",
+  });
+  assert.equal(recoveryFor({ pluginSkills: new Map() }).action, "ask-user");
+  assert.match(recoveryFor({ pluginSkills: new Map() }).message, /review-kit.*\^1\.0\.0.*github:example\/review-kit/);
+  assert.equal(recoveryFor({ onboarded: [] }).action, "ask-user");
+  assert.equal(recoveryFor({ pluginSkills: new Map([["review-kit", ["task"]]]) }).action, "ask-user");
 });
 
 test("the first failing step wins", () => {

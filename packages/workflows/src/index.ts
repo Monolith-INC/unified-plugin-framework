@@ -7,15 +7,19 @@ export {
   adapterPlugins,
   checkAdapterReadiness,
   firstFailure,
+  PROJECT_KNOWLEDGE_SETUP,
   type Monoid,
   type NonEmpty,
   type PluginKnowledgeStore,
   type PluginSkillRef,
   type Readiness,
   type ReadinessFacts,
+  type Recovery,
   type ReadinessStep,
   type WorkflowAdapter,
 } from "./adapter.js";
+
+export { renderSkill, type Rendered } from "./render.js";
 
 export {
   CODE_REVIEW_CONTRACT_VERSION,

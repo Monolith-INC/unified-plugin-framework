@@ -2,20 +2,22 @@
 name: review-feature
 description: Use when a whole feature is complete, to review the full feature diff against the feature's goal, definition of done and the project's recorded decisions. Part of the code review workflow (contract v1).
 ---
+<!-- Generated from packages/workflows/templates/code-review/review-feature.md and the code-review adapter by `pnpm payloads:build`. Edit those, not this file. -->
 
 # Review Feature
 
 Review a complete feature against what it said it would do, its definition of done, and the project's recorded decisions. Report findings to the user; change no code.
 
-## Check readiness first
+## Check readiness and recover
 
-Check these steps in order. Stop at the first one that fails, tell the user which step failed and why, and do not review.
+Before reviewing, check each step in order. When a step fails, take its recovery action and continue with the review. Involve the user only where a step says so, in one short message.
 
-1. **Declared:** the framework's manifest declares `monolithic-code-review-toolkit` for the `code-review` adapter.
-2. **Installed and enabled:** the skill `monolithic-code-review-toolkit:review-feature` is available in this session. If it is not, report that the review toolkit is not installed or not enabled for this host.
-3. **Bound:** `.project-knowledge.json` names a `knowledgeRoot`, and `.monolithic-code-review/sources.json` sets `knowledge.root` to the same directory. The toolkit reads only its own setting, so both must be set. If the project store is missing, offer `setup-project-knowledge`; if the toolkit's is missing or different, offer the toolkit's `review-setup` and point it at the project store.
+1. **Available:** `monolithic-code-review-toolkit:review-feature` is available in this session. If not, ask the user to install and enable `monolithic-code-review-toolkit` for this host, then continue once it is.
+2. **Project knowledge store:** `.project-knowledge.json` names a `knowledgeRoot`. If not, run `project-knowledge:setup-project-knowledge` with its recommended defaults, then continue.
+3. **Shared store:** each plugin below must record the same directory as `knowledgeRoot`. If one does not, run its setup skill, give it the project knowledge store's directory as its knowledge store, then continue.
+   - `.monolithic-code-review/sources.json` sets `knowledge.root`; setup skill `monolithic-code-review-toolkit:review-setup`.
 
-From a checkout, `agent-plugin adapter-check` runs the same steps; see `docs/workflows/code-review.md`.
+From a checkout, `agent-plugin adapter-check code-review` runs the same checks and prints each recovery action.
 
 ## Run the review
 

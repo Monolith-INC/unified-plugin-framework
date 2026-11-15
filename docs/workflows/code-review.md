@@ -8,11 +8,11 @@ What users and agents rely on. It changes only by a deliberate contract version 
 
 | Operation | Framework skill | When |
 | --- | --- | --- |
-| `review-task` | `plugins/unified-plugin-framework/skills/review-task` | A small unit of work is complete, before committing or handing off |
-| `review-story` | `plugins/unified-plugin-framework/skills/review-story` | A user story is finished: pre-flight before the pull request, post-flight once it is open |
-| `review-feature` | `plugins/unified-plugin-framework/skills/review-feature` | A whole feature is complete |
+| `review-task` | `skills/review-task` | A small unit of work is complete, before committing or handing off |
+| `review-story` | `skills/review-story` | A user story is finished: pre-flight before the pull request, post-flight once it is open |
+| `review-feature` | `skills/review-feature` | A whole feature is complete |
 
-The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`.
+Skills are in `plugins/unified-plugin-framework`. The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`. Each skill is generated from its template in `packages/workflows/templates/code-review/`, which never names a plugin, and the adapter below; run `pnpm payloads:build` after changing either.
 
 ## Current adapter
 
@@ -24,15 +24,19 @@ The contract type is `CodeReviewOperation` in `packages/workflows/src/code-revie
 | `review-story` | `review-story-preflight`, `review-story-postflight` |
 | `review-feature` | `review-feature` |
 
-## Readiness
+## Readiness and recovery
 
-A review runs only when every step passes, checked in this order:
+Each step is checked in order. A failing step never just stops the review: it carries a recovery action, which the skill takes before continuing.
 
-1. **Declared:** the framework manifest declares each plugin the adapter uses, for `code-review`.
-2. **Installed:** the plugin is installed and has skills.
-3. **Bound:** the plugin provides every skill the adapter maps, and the project has one knowledge store. `.project-knowledge.json` sets `knowledgeRoot`, and the review toolkit's `.monolithic-code-review/sources.json` sets `knowledge.root` to the same directory. The toolkit reads only its own setting, so a missing or different one fails this step.
+| Step | Fails when | Recovery |
+| --- | --- | --- |
+| Declared | The framework manifest does not declare the plugin for `code-review` | Ask the user to reinstall the framework; this is a packaging problem |
+| Installed | The plugin is missing, or not enabled in the session | Ask the user, in one line, to install and enable it for this host; continue once it is |
+| Bound: skills | The installed version lacks a mapped skill | Ask the user to install a version that provides it |
+| Bound: project store | `.project-knowledge.json` has no `knowledgeRoot` | Run `setup-project-knowledge` with its defaults, then continue |
+| Bound: shared store | `.monolithic-code-review/sources.json` does not set `knowledge.root` to the project store (the toolkit reads only its own setting) | Run `monolithic-code-review-toolkit:review-setup`, point it at the project store, then continue |
 
-The framework skills also confirm the plugin's skills are available in the session, which covers a plugin that is installed but not enabled.
+Problems no recovery action can fix go to the repair agent ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
 
 From a checkout, check readiness with:
 
@@ -43,8 +47,8 @@ pnpm --filter @agent-plugins/cli exec agent-plugin adapter-check code-review \
   --project <project>
 ```
 
-It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the failing step and reason and exits `1`. Invalid arguments, an unknown workflow, or configuration it cannot read (a missing or broken manifest, a folder that is not a plugin, invalid JSON) print the problem and exit `2`. `--framework` is required; `--help` prints the usage.
+It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the failing step, the reason and the recovery action, and exits `1`. Invalid arguments, an unknown workflow, or configuration it cannot read (a missing or broken manifest, a folder that is not a plugin, invalid JSON) print the problem and exit `2`. `--framework` is required; `--help` prints the usage.
 
 ## Replacing the review plugin
 
-Write a new `CodeReviewAdapter` that maps each operation to the new plugin's skills and records where that plugin keeps its knowledge store, if anywhere. Declare the plugin in the framework manifest, update the plugin names in the three framework skills, and run `adapter-check` against it. Tests fail if the skills and the adapter disagree. The contract and the skill names users invoke stay the same.
+Write a new `CodeReviewAdapter` that maps each operation to the new plugin's skills and records where that plugin keeps its knowledge store, if anywhere, with the skill that sets it. Declare the plugin in the framework manifest, run `pnpm payloads:build` to regenerate the skills, and run `adapter-check` against it. The templates, the contract and the skill names users invoke stay the same.

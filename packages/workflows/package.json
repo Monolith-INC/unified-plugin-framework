@@ -9,11 +9,16 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "templates"
+  ],
   "scripts": {
     "build": "tsc -b tsconfig.json",
     "typecheck": "tsc -b tsconfig.json && tsc -p test/tsconfig.json",
-    "test": "tsc -b tsconfig.json && tsc -p test/tsconfig.json && node --test test/**/*.test.mjs"
+    "test": "tsc -b tsconfig.json && tsc -p test/tsconfig.json && node --test test/**/*.test.mjs",
+    "payload:build": "tsc -b tsconfig.json && node scripts/skills.mjs build",
+    "payload:verify": "tsc -b tsconfig.json && node scripts/skills.mjs verify"
   },
   "dependencies": {
     "@agent-plugins/core": "workspace:*"

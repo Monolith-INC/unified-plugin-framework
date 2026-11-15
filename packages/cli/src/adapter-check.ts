@@ -149,7 +149,15 @@ const report = (io: AdapterCheckIo, adapter: WorkflowAdapter<string>, readiness:
       io.out(JSON.stringify({ ok: true, workflow: adapter.workflow, contractVersion: adapter.contractVersion }));
       return 0;
     case "not-ready":
-      io.err(JSON.stringify({ ok: false, workflow: adapter.workflow, step: readiness.step, reason: readiness.reason }));
+      io.err(
+        JSON.stringify({
+          ok: false,
+          workflow: adapter.workflow,
+          step: readiness.step,
+          reason: readiness.reason,
+          recovery: readiness.recovery,
+        }),
+      );
       return 1;
   }
 };

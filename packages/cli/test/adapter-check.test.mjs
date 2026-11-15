@@ -90,7 +90,10 @@ test("adapter-check fails at bound when the toolkit records no store or a differ
     const result = check(["--plugin-root", toolkit, "--project", root]);
     assert.equal(result.exitCode, 1);
     assert.equal(JSON.parse(result.stderr).step, "bound");
-    assert.match(JSON.parse(result.stderr).reason, /\.monolithic-code-review\/sources\.json \(knowledge\.root\)/);
+    const report = JSON.parse(result.stderr);
+    assert.match(report.reason, /\.monolithic-code-review\/sources\.json \(knowledge\.root\)/);
+    assert.deepEqual(report.recovery.skill, { plugin: "monolithic-code-review-toolkit", skill: "review-setup" });
+    assert.match(report.recovery.goal, /Set knowledge\.root in \.monolithic-code-review\/sources\.json to /);
     return root;
   });
 });
