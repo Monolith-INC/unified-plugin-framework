@@ -28,7 +28,7 @@ This record does not pass the fork-foundation gate. Still open:
 
 - Package publication: names, registry and authority are undecided. Package manifests declare no `license` field yet; add it when publication is decided.
 - Fork baseline confirmation (AGE-62) and the upstream sync procedure with the inherited test baseline (AGE-86).
-- The original pre-fork approval requirement cannot be met after the fact. The chronology above records this; how the ticket treats that requirement is the owner's call at closure.
+- The original pre-fork approval requirement: on 2026-11-15 the owner accepted it as met after the fact, as recorded in the chronology above.
 
 ## Scope
 

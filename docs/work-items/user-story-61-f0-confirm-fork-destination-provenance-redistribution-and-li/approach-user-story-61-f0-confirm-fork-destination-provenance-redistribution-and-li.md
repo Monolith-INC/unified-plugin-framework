@@ -3,7 +3,7 @@ title: 'Record fork ownership and publication policy'
 type: approach
 ticket: AGE-61
 created: '2026-11-14'
-status: implemented-pending-closure
+status: implemented
 route: full
 route_source: pinned
 review: thorough
@@ -59,7 +59,7 @@ Use the Unified Plugin Framework Linear project and harness tools for tracker wo
 - [x] `README.md`: link to that record and align its foundation status with the approved facts.
 - [x] `LICENSE`: add the unmodified standard Apache License 2.0 text; document the selected project license in README and preserve existing third-party notices and terms. Do not change inherited package manifests in this slice.
 - [x] `docs/upstream/ownership.md`: verify current owner, visibility and source before closure; check every acceptance condition and list unresolved conditions explicitly.
-- [ ] Harness-managed AGE-61 record: during refinement, explicitly resolve how to handle its original pre-fork decision requirement now that the fork exists. Preserve the original requirement and chronology; do not declare the historical condition satisfied without evidence. Attach final verification through the supported workflow.
+- [x] Harness-managed AGE-61 record: during refinement, explicitly resolve how to handle its original pre-fork decision requirement now that the fork exists. Preserve the original requirement and chronology; do not declare the historical condition satisfied without evidence. Attach final verification through the supported workflow.
 
 Acceptance:
 
@@ -95,3 +95,4 @@ Approved for execution by the owner on 2026-11-15 ("go with A") and implemented 
 
 Standard planning depth, all five method outcomes, the existing repository destination and the user's ownership statement were captured through the harness. Apache-2.0 was selected under the user's delegated choice; no package publication is requested. No implementation approval has been recorded.
 - 2026-11-15: execution approved by the owner and implemented; see Implementation notes. Closure waits on the pre-fork requirement task.
+- 2026-11-15: the owner accepted the pre-fork requirement as met after the fact; AGE-61 can close.
