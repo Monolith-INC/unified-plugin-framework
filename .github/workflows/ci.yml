@@ -55,9 +55,9 @@ jobs:
 
       - name: Run platform and configuration checks
         run: |
-          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_config.py'
-          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_launcher.py'
-          python -m unittest discover -s runtimes/project-knowledge/tests -p 'test_vendor.py'
+          python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge -p 'test_config.py'
+          python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge -p 'test_launcher.py'
+          python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge -p 'test_vendor.py'
 
   quality:
     name: ${{ matrix.os }} / Node ${{ matrix.node }}
