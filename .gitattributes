@@ -1,0 +1,3 @@
+# Shipped payloads are compared byte for byte against their recorded digests,
+# so text must check out with LF on every platform, including Windows.
+* text=auto eol=lf
