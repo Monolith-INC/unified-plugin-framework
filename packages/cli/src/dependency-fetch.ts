@@ -35,7 +35,7 @@ const gitEnvironment = (): NodeJS.ProcessEnv => ({
 /** Production fetcher: a shallow git checkout of exactly the pinned ref, without its history. */
 export const GIT_FETCHER: SourceFetcher = {
   fetch: (source, into) => sequence(gitCommands(source), (args) => command("git", args, into, 300_000, gitEnvironment()), into)
-    .then((result) => result.ok ? rm(join(into, ".git"), { recursive: true, force: true }).then(() => result) : fetchFailure(source))
+    .then((result): Promise<Result<string>> | Result<string> => result.ok ? rm(join(into, ".git"), { recursive: true, force: true }).then(() => result) : fetchFailure(source))
     .catch(() => fetchFailure(source)),
 };
 
