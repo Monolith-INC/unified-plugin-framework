@@ -30,26 +30,43 @@ transactional installer
 
 ## Complete framework installation
 
-Use the complete distribution for a new project. This delivery format is added after v0.2.0; choose a published version that actually lists `unified-plugin-framework-<version>.tar.gz` and `install.mjs`. The v0.2.0 host-only assets do not contain these files.
+Use the complete distribution for a new project. The interactive entry point starts with v0.2.2; choose a release listing `install.sh`. Earlier releases retain their documented `install.mjs --input` mode.
 
-Prerequisites: Node.js 22+, Python 3.12+ (`--python` chooses the extraction executable), and GitHub CLI for remote release downloads. Full automated bootstrap currently targets Codex on Linux. macOS qualification is deferred; other host payloads do not establish full setup support. Python runtime dependencies may be fetched from the package index by the existing isolated runtime setup; the framework and its plugin dependencies are already included.
+### Interactive installation
 
-Prepare and accept `plan.json` using the [bootstrap guide](workflows/tooling-bootstrap.md), including selected workflows, project choices, knowledge locations and Python. Run the downloaded installer with that plan:
-
-```sh
-gh release download v<version> --repo Monolith-INC/unified-plugin-framework --pattern install.mjs --output install.mjs
-node install.mjs --version <version> --project <existing-project-directory> --input <accepted-plan.json>
-```
-
-The installer downloads one complete archive and its checksum file, validates the checksum and archive paths/links, installs an owned versioned directory at `.upf-tools/distributions/<version>`, and invokes the existing bootstrap. It preserves existing differing distributions and linked installation paths by refusing them. Setup reports missing credentials, knowledge content, provider configuration and host activation separately; an unfinished setup exits unsuccessfully and retains successful steps for resumption.
-
-For a local artifact or offline plugin installation:
+Run from the consuming project in a terminal:
 
 ```sh
-node install.mjs --version <version> --source ./unified-plugin-framework-<version>.tar.gz --checksums ./SHA256SUMS --project <project-directory> --input <accepted-plan.json>
+bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/releases/latest/download/install.sh)
 ```
 
-The archive includes the CLI and its production Node dependencies; canonical framework/knowledge sources and lock; all five unchanged pinned upstream repositories; their supporting files and licenses; and the owned knowledge runtime source. Bootstrap takes the selected plugin roots from this distribution and validates both its inventory and normal workflow pins. An installed release never fetches plugin repositories. The versioned distribution must remain available while its project CLI is in use.
+The launcher keeps your current project directory and downloads the release installer. The wizard confirms the project, offers the supported Codex host and workflows, reuses saved settings, and asks for missing tracker/language/document/knowledge choices with recommended defaults. It shows the proposed changes and asks before changing project files. No prerequisite JSON file is needed.
+
+Supported complete setup: Codex on Linux, Bash/curl, Node.js 22+ and Python 3.12+. Set `UPF_VERSION=<version>` to pin a release. The wizard can choose the Python executable. GitHub CLI is not a general installation prerequisite; a user's selected SCM tooling may still require it. Python packages are installed by the existing isolated runtime setup.
+
+For Linear, set the credential environment required by the existing adapter (normally `LINEAR_API_KEY`); never enter the token into setup answers. New team/project selections use names or URLs resolved by the connector. Unavailable authentication or ambiguous scope is reported explicitly. A local tracker can be verified by a read-only search even when empty; setup never creates test work items.
+
+The complete archive contains the CLI and production Node dependencies, canonical framework/knowledge sources and lock, all five unchanged pinned upstream repositories with supporting files/licenses, and the knowledge runtime source. Installed releases stage bundled plugins locally; missing or changed bundled content fails rather than downloading plugin repositories.
+
+After confirmation, a verified distribution is placed under `.upf-tools/distributions/<version>`. The accepted internal plan is saved at `.upf-tools/setup-plan.json` through the existing guarded file boundary. The shared bootstrap configures and verifies each capability. Missing knowledge content, provider bindings, credentials or host activation remain visible follow-up actions. An incomplete setup exits unsuccessfully and preserves completed steps for rerunning the installer.
+
+The installed CLI depends on that distribution remaining available. Different/edited existing distributions and unsafe linked target paths are preserved by refusal. Archive checksum and link/path validation remain active.
+
+### Automation and local files
+
+An explicit plan file bypasses all prompts. Use the existing [setup plan format](workflows/tooling-bootstrap.md):
+
+```sh
+node install.mjs --version <version> --project <existing-project> --input <accepted-plan.json>
+```
+
+For a local artifact:
+
+```sh
+node install.mjs --version <version> --source ./unified-plugin-framework-<version>.tar.gz --checksums ./SHA256SUMS --project <existing-project> --input <accepted-plan.json>
+```
+
+`--dest` is an alias for `--project`; `--python` selects the extraction executable. The `install.mjs` file is published next to the complete archive. Local files can also be supplied in interactive mode by omitting `--input`. Without a terminal, omission of `--input` fails with an explanation rather than guessing or accepting defaults silently.
 
 ### Building and checking the complete distribution
 

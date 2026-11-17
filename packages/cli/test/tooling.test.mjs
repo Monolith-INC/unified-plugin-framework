@@ -108,3 +108,11 @@ test('owned CLI can move to a new release while unmanaged or edited launchers ar
   assert.equal((await wireCli(project,first)).ok,false);
   assert.equal(await readFile(path,'utf8'),'unmanaged');
 });
+
+test('an empty local tracker is verified by read-only search without creating a work item',async()=>{
+ const project=await mkdtemp(join(tmpdir(),'upf-empty-local-'));
+ await writeFile(join(project,'.unified-plugin-framework.json'),JSON.stringify({schemaVersion:1,language:'en',artifactsPath:'docs',tracker:{adapter:'local',values:{}}}));
+ const observed=await nodeToolingIO(project,choices).inspect('tracker')();
+ assert.equal(observed.ok,true,JSON.stringify(observed));assert.equal(observed.value.status,'ready');
+ await assert.rejects(readFile(join(project,'.unified-plugin-framework/items.json')));
+});

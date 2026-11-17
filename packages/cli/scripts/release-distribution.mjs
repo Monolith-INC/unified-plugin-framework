@@ -36,7 +36,7 @@ const localizeSelfLink=async(root)=>{
  await symlink(relative(dirname(link),cli),link,'dir');
 };
 const copyContents=async(root,scratch,sources)=>{
- await Promise.all(['plugins','runtimes/project-knowledge','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
+ await Promise.all(['plugins','runtimes/project-knowledge','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
   cp(join(repository,path),join(root,path),{recursive:true,filter:path=>!['node_modules','.venv','__pycache__','build','dist'].some(part=>path.split(/[\\/]/).includes(part))})));
  const copied=await sequence(sources,source=>cp(join(scratch,'fetched',`${source.plugin}@${source.version}`),join(root,'dependencies',`${source.plugin}@${source.version}`),{recursive:true,verbatimSymlinks:true})
   .then(()=>ok(source.plugin)),'Dependencies included.');
@@ -60,10 +60,10 @@ const archive=async(root,name)=>{
  return archived.ok ? finish(name) : archived;
 };
 const finish=async(name)=>{
- await cp(join(repository,'scripts/install-release.mjs'),join(output,'install.mjs'));
- const entries=await Promise.all([name,'install.mjs'].map(async name=>`${sha256(await readFile(join(output,name)))}  ${name}`));
+ await Promise.all([['scripts/install-release.mjs','install.mjs'],['scripts/install.sh','install.sh']].map(([source,name])=>cp(join(repository,source),join(output,name))));
+ const entries=await Promise.all([name,'install.mjs','install.sh'].map(async name=>`${sha256(await readFile(join(output,name)))}  ${name}`));
  const checksums=await readFile(join(output,'SHA256SUMS'),'utf8').catch(()=> '');
- const retained=checksums.split(/\r?\n/).filter(line=>line.length>0 && ![name,'install.mjs'].some(asset=>line.endsWith(`  ${asset}`)));
+ const retained=checksums.split(/\r?\n/).filter(line=>line.length>0 && ![name,'install.mjs','install.sh'].some(asset=>line.endsWith(`  ${asset}`)));
  await writeFile(join(output,'SHA256SUMS'),`${[...retained,...entries].join('\n')}\n`);
  return ok({archive:join(output,name),plugins:5});
 };

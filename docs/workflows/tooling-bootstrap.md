@@ -4,7 +4,11 @@ One accepted setup plan coordinates the existing project service, transactional 
 
 Artifact tests exercise the distribution and Codex staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Other hosts retain their existing host-payload commands and receive an explicit unsupported-host recovery for full bootstrap. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
-## Prepare and accept one plan
+## Interactive installation
+
+The release's `install.sh` launcher starts a terminal wizard that collects these choices and creates the plan internally. It uses the same bootstrap described below, preserving saved project settings and reporting remaining setup actions. No user-written JSON is required for this interactive path. The launcher starts with v0.2.2; see the [installation guide](../vendor-payload-installation.md#complete-framework-installation) for release availability and automation.
+
+## Prepare and accept one plan (automation or agent-driven setup)
 
 Run `project describe` to reuse project choices. Collect only missing tracker/language/document choices through project-bootstrap. Download/install authorization applies to the concrete plan, including its selected host, the dependency sources it fetches and the isolated runtime.
 
@@ -58,6 +62,6 @@ The knowledge runtime is installed from a private source copy into an isolated e
 
 Dependency wrappers are published only after a private staging copy is complete, so interruption does not leave a half-installed final wrapper. Existing unmanaged directories remain conflicts to resolve explicitly. Marketplace additions preserve earlier workflow entries and unrelated metadata. Active discovered skill directories are compared with the pinned staged source, including references; a matching name or version marker alone never establishes readiness.
 
-Fresh Codex discovery verifies expected skill names separately from files on disk. It runs no model conversation. The current chat may need a reload before newly registered tools appear. The selected tracker adapter must read an existing scoped item; another client's login is insufficient evidence. Credentials stay in the supported adapter environment, never in the plan, project settings or chat.
+Fresh Codex discovery verifies expected skill names separately from files on disk. It runs no model conversation. The current chat may need a reload before newly registered tools appear. The selected tracker adapter must complete a scoped read (an existing item when trackerRef is supplied, otherwise a search that may return no items); another client's login is insufficient evidence. Credentials stay in the supported adapter environment, never in the plan, project settings or chat.
 
 Each successful step is retained. Re-entry observes working capabilities and configures only missing ones. Reports distinguish ready capabilities from user action, connection failures, unavailable executables and unsupported hosts. A connection failure preserves settings and never restarts the tracker interview.

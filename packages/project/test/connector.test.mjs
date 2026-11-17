@@ -90,3 +90,26 @@ test('parent references are scoped before either creating or moving an item', as
   assert.equal(create.error.code, 'outside-project');
   assert.equal(update.error.code, 'outside-project');
 });
+
+test('installer resolves named Linear scope and refuses a project outside the selected team',async(t)=>{
+ const {resolveLinearScopeWithConnector}=await import('../dist/node.js');
+ const teamId='11111111-1111-4111-8111-111111111111';const projectId='22222222-2222-4222-8222-222222222222';
+ const client=await connected(t,({name,arguments:args})=>{
+  assert.equal(typeof args.query,'string');
+  return name==='get_team' ? {id:teamId,name:'Team'} : {id:projectId,name:'Project',teams:[{id:teamId}]};
+ });
+ assert.deepEqual((await resolveLinearScopeWithConnector(client,{team:'Team',project:'Project'})()).value,{team:teamId,project:projectId});
+ const foreign=await connected(t,({name})=>name==='get_team' ? {id:teamId} : {id:projectId,teams:[]});
+ assert.equal((await resolveLinearScopeWithConnector(foreign,{team:'Team',project:'Other'})()).ok,false);
+});
+
+test('tracker readiness accepts an empty or unlabeled issue listing without normalizing business items',async(t)=>{
+ const {probeLinearWithConnector}=await import('../dist/node.js');
+ const client=await connected(t,({name,arguments:args})=>{
+  assert.equal(name,'list_issues');assert.equal(args.project,settings.values.project);assert.equal(args.team,settings.values.team);
+  return {issues:[{id:'unlabeled',title:'Existing issue',labels:[]}]};
+ });
+ assert.equal((await probeLinearWithConnector(client,settings)()).ok,true);
+ const broken=await connected(t,()=>({unexpected:'response'}));
+ assert.equal((await probeLinearWithConnector(broken,settings)()).ok,false);
+});

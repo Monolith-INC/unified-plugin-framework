@@ -3,16 +3,17 @@
 import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {existsSync, lstatSync, readFileSync, readdirSync, readlinkSync} from 'node:fs';
-import {mkdir, mkdtemp, readFile, rename, rm} from 'node:fs/promises';
+import {cp, mkdir, mkdtemp, readFile, rename, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
+import {pathToFileURL} from 'node:url';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const repo='Monolith-INC/unified-plugin-framework';
-const usage='node install.mjs --version <version> --project <project> --input <accepted-plan.json> [--source <archive> --checksums <SHA256SUMS>]';
+const usage='Interactive: node install.mjs [--project <project>] [--version <version>]\nAutomation: node install.mjs --input <accepted-plan.json> --project <project> [--version <version>]\nLocal archive: --source <archive> --checksums <SHA256SUMS>\nPython executable: --python <python3.12+>';
 const stop=message=>{throw new Error(message);}; // Boundary: report installation failures once without partial activation.
-const options=()=>parseArgs({options:{version:{type:'string'},project:{type:'string'},input:{type:'string'},source:{type:'string'},checksums:{type:'string'},python:{type:'string',default:'python3.12'}},strict:true}).values;
+const options=()=>parseArgs({options:{help:{type:'boolean'},version:{type:'string'},dest:{type:'string'},project:{type:'string'},input:{type:'string'},source:{type:'string'},checksums:{type:'string'},python:{type:'string'}},strict:true}).values;
 const inspectTree=root=>readdirSync(root).toSorted().flatMap(name=>{
  const path=join(root,name);const stat=lstatSync(path);
  return stat.isSymbolicLink() ? [[name,`link:${readlinkSync(path)}`]] : stat.isDirectory()
@@ -26,15 +27,28 @@ const checkedAncestors=(project,target)=>{
   return stat===undefined || stat.isDirectory() && !stat.isSymbolicLink();
  });
 };
-const download=(version,scratch)=>{
- execFileSync('gh',['release','download',`v${version}`,'--repo',repo,'--pattern',`unified-plugin-framework-${version}.tar.gz`,'--pattern','SHA256SUMS','--dir',scratch],{stdio:'inherit'});
- return {archive:join(scratch,`unified-plugin-framework-${version}.tar.gz`),checksums:join(scratch,'SHA256SUMS')};
+const get=async url=>{
+ const response=await fetch(url,{signal:AbortSignal.timeout(60_000),headers:{Accept:'application/octet-stream'}});
+ return response.ok ? Buffer.from(await response.arrayBuffer()) : stop(`Could not download ${url} (HTTP ${response.status}); nothing installed.`);
+};
+const latest=()=>get('https://api.github.com/repos/'+repo+'/releases/latest').then(bytes=>JSON.parse(bytes.toString('utf8')).tag_name);
+const download=async(version,scratch)=>{
+ const base=`https://github.com/${repo}/releases/download/v${version}`;
+ const archive=join(scratch,`unified-plugin-framework-${version}.tar.gz`);
+ const checksums=join(scratch,'SHA256SUMS');
+ await Promise.all([[archive,`${base}/unified-plugin-framework-${version}.tar.gz`],[checksums,`${base}/SHA256SUMS`]].map(async([path,url])=>writeFile(path,await get(url))));
+ return {archive,checksums};
 };
 const verify=async(files,version)=>{
  const entries=(await readFile(files.checksums,'utf8')).trim().split(/\r?\n/).filter(line=>line.endsWith(`  unified-plugin-framework-${version}.tar.gz`));
  const expected=entries.length===1 ? entries[0].split('  ')[0] : '';
  return /^[a-f0-9]{64}$/.test(expected) && digest(await readFile(files.archive))===expected
   ? files.archive : stop('Archive checksum mismatch or missing unique checksum; nothing installed.');
+};
+const pythonExecutable=preferred=>{
+ const candidates=preferred===undefined ? ['python3.12','python3','python3.13','python3.14'] : [preferred];
+ const selected=candidates.find(program=>spawnSync(program,['-c','import sys; raise SystemExit(0 if sys.version_info >= (3,12) else 1)'],{stdio:'ignore'}).status===0);
+ return selected ?? stop('Python 3.12+ is required. Install it or pass --python <executable>.');
 };
 // Python's data extraction filter validates member paths and link targets before writes.
 const extract=(python,archive,scratch,version)=>{
@@ -59,32 +73,68 @@ const publish=async(source,target)=>{
 };
 const main=async()=>{
  const args=options();
- return !args.version || !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(args.version) || !args.project || !args.input
-  ? stop(usage) : install(args);
+ return args.help ? process.stdout.write(`${usage}\n`)
+  : Number(process.versions.node.split('.')[0])<22 ? stop('Node.js 22+ is required.')
+  : args.input===undefined && (!process.stdin.isTTY || !process.stdout.isTTY) ? stop('Interactive installation needs a terminal. Run the one-command installer in a terminal or supply --input for automation.')
+    : prepare(args);
 };
-const install=async(args)=>{
- const project=resolve(args.project);const input=resolve(args.input);
- const target=join(project,'.upf-tools/distributions',args.version);
- JSON.parse(await readFile(input,'utf8'));
- return !existsSync(project) || !lstatSync(project).isDirectory() || lstatSync(project).isSymbolicLink() || !checkedAncestors(project,target)
-  ? stop('Choose an existing project directory with no linked installation paths.') : installAccepted(args,project,input,target);
+const prepare=async args=>{
+ const version=String(args.version ?? process.env.UPF_VERSION ?? await latest()).replace(/^v/,'');
+ return !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version) || args.project!==undefined && args.dest!==undefined
+  ? stop(usage) : install({...args,version,project:args.project ?? args.dest ?? process.cwd()});
 };
-const installAccepted=async(args,project,input,target)=>{
+const validTarget=(project,target)=>existsSync(project) && lstatSync(project).isDirectory() && !lstatSync(project).isSymbolicLink() && checkedAncestors(project,target);
+const install=async args=>{
  const scratch=await mkdtemp(join(tmpdir(),'upf-install-'));
- return stageArchive(args,project,input,target,scratch).finally(()=>rm(scratch,{recursive:true,force:true}));
+ return stageArchive(args,scratch).finally(()=>rm(scratch,{recursive:true,force:true}));
 };
-const stageArchive=async(args,project,input,target,scratch)=>{
- const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : download(args.version,scratch);
+const stageArchive=async(args,scratch)=>{
+ const project=resolve(args.project);
+ const target=join(project,'.upf-tools/distributions',args.version);
+ return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,target);
+};
+const prepareArchive=async(args,scratch,project,target)=>{
+ const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : await download(args.version,scratch);
  const archive=await verify(files,args.version);
- await mkdir(dirname(target),{recursive:true});
- const staging=await mkdtemp(join(dirname(target),'.install-'));
- return activateArchive(args,project,input,target,archive,staging).finally(()=>rm(staging,{recursive:true,force:true}));
-};
-const activateArchive=async(args,project,input,target,archive,staging)=>{
- const extracted=extract(args.python,archive,staging,args.version);
+ const python=pythonExecutable(args.python);
+ const extracted=extract(python,archive,scratch,args.version);
  const manifest=JSON.parse(await readFile(join(extracted,'distribution.json'),'utf8'));
  return manifest.format!=='upf-distribution/1' || manifest.version!==args.version ? stop('Distribution identity does not match the selected release.')
-  : bootstrap(await publish(extracted,target),project,input);
+  : chooseInstallation({...args,extractionPython:python},extracted,project,target);
+};
+const chooseInstallation=async(args,extracted,project,target)=>{
+ const wizard=await import(pathToFileURL(join(extracted,'packages/cli/scripts/installer-wizard.mjs')).href);
+ const selection=args.input!==undefined ? await explicitPlan(args,extracted,project) : await wizard.interactiveInstallation({project,version:args.version,python:args.python,detectedPython:args.extractionPython});
+ return !selection.ok ? reportFailure(selection) : activate(args,extracted,selection.value);
+};
+const reportFailure=result=>{
+ process.stdout.write(`${JSON.stringify(result)}\n`);
+ return stop(`${result.error.message} ${result.error.recovery}`);
+};
+const explicitPlan=async(args,root,project)=>{
+ const {parseBootstrap}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-input.js')).href);
+ const parsed=parseBootstrap(JSON.parse(await readFile(resolve(args.input),'utf8')));
+ return parsed.ok ? {ok:true,value:{project,plan:parsed.value}} : parsed;
+};
+const activate=async(args,extracted,selection)=>{
+ const {project,plan}=selection;
+ const target=join(project,'.upf-tools/distributions',args.version);
+ return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : activateSafe(args,extracted,project,target,plan);
+};
+const activateSafe=async(args,extracted,project,target,plan)=>{
+ await mkdir(dirname(target),{recursive:true});
+ const staging=await mkdtemp(join(dirname(target),'.install-'));
+ return cp(extracted,join(staging,'distribution'),{recursive:true,verbatimSymlinks:true})
+  .then(()=>publish(join(staging,'distribution'),target)).then(root=>savePlanAndBootstrap(root,project,plan))
+  .finally(()=>rm(staging,{recursive:true,force:true}));
+};
+const savePlanAndBootstrap=async(root,project,plan)=>{
+ const {directory,writeText,readText}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-files.js')).href);
+ const input=join(project,'.upf-tools/setup-plan.json');
+ const previous=await readText(input);
+ const created=previous.ok ? await directory(project,join(project,'.upf-tools')) : previous;
+ const saved=created.ok ? await writeText(project,input,JSON.stringify(plan,null,2),previous.value) : created;
+ return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input);
 };
 const bootstrap=(root,project,input)=>{
  const result=spawnSync(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply'],{encoding:'utf8',maxBuffer:16*1024*1024});
@@ -97,6 +147,6 @@ const bootstrapReport=(output,root,project)=>{
  return report.ok && report.value.tooling.status==='ready' ? {ok:true,distribution:root,project}
   : stop('Distribution installed; setup needs the actions reported above. Rerun the accepted plan after resolving them.');
 };
-await main().then(result=>process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error=>{
+await main().then(result=>result===undefined || typeof result==='boolean' ? undefined : process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error=>{
  process.stderr.write(`${error.message}\n`);process.exitCode=1;
 });

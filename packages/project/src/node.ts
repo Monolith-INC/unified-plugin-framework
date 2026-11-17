@@ -7,7 +7,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { applyLocal, parseLocal } from "./local.js";
 import { artifactPage, linearCall, linearReply, verifyLinearScope, type ToolCall } from "./linear.js";
 import { fail, flatMap, isWrite, object, ok, parseJson, publication, type Artifact, type Request, type Result, type Task, type TrackerReply } from "./model.js";
-import { SETTINGS_FILE, type TrackerSettings } from "./settings.js";
+import { SETTINGS_FILE, parseSettings, type TrackerSettings } from "./settings.js";
 import type { ProjectIO } from "./service.js";
 
 const codeOf = (error: unknown): unknown => object(error) ? error.code : undefined;
@@ -146,14 +146,62 @@ const parentScope = (client: Client, settings: TrackerSettings, request: Request
   }
 };
 
-const connectedCall = (settings: TrackerSettings, request: Request, token: string): Task<TrackerReply> => () => {
+/** Shared authentication, transport and resource boundary for operations and setup reads. */
+const withLinearConnector = <A>(settings: TrackerSettings, use: (client: Client) => Task<A>): Task<A> => () => {
+  const tokenEnv = settings.connection?.tokenEnv ?? "LINEAR_API_KEY";
+  const token = process.env[tokenEnv]; // fp-allow: no-ambient-effect -- credential boundary; never persisted or logged
+  return token === undefined || token === "" ? Promise.resolve(fail("authentication-needed", "The configured tracker credential is not available.",
+    `Set ${tokenEnv} in the connector environment and rerun setup; never put credentials in a plan or chat.`)) : connected(settings, token, use);
+};
+const connected = <A>(settings: TrackerSettings, token: string, use: (client: Client) => Task<A>): Promise<Result<A>> => {
   const client = new Client({ name: "unified-plugin-framework", version: "0.1.0" });
   const transport = new StreamableHTTPClientTransport(new URL(settings.connection?.url ?? "https://mcp.linear.app/mcp"),
     { requestInit: { headers: { Authorization: `Bearer ${token}` } } });
-  return client.connect(transport).then(() => requestWithConnector(client, settings, request)())
-    .catch(() => fail("connection-unavailable", "The tracker connection could not be opened.", "Restore the configured connection or credential, then resume the request; setup choices are already saved."))
+  return client.connect(transport).then(() => use(client)())
+    .catch(() => fail("connection-unavailable", "The tracker connection could not be opened.", "Restore the configured connection or credential, then resume; existing choices are preserved."))
     .finally(() => client.close().catch(() => undefined));
 };
+
+export interface LinearScopeNames { readonly team: string; readonly project: string }
+export interface LinearScope { readonly team: string; readonly project: string }
+const scopeId = (value: unknown): string | null => object(value) && typeof (value.uuid ?? value.id) === "string"
+  && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(String(value.uuid ?? value.id)) ? String(value.uuid ?? value.id) : null;
+const scopeOf = (team: unknown, project: unknown): Result<LinearScope> => {
+  const teamId = scopeId(team);
+  const projectId = scopeId(project);
+  const teams = object(project) && Array.isArray(project.teams) ? project.teams : [];
+  return teamId !== null && projectId !== null && teams.some((entry: unknown) => scopeId(entry) === teamId)
+    ? ok({ team: teamId, project: projectId }) : fail("invalid-scope", "The connector did not establish the selected project's membership in the selected team.",
+      "Choose an unambiguous team/project name or URL and repeat setup; no project settings were saved.");
+};
+/** Resolve user-facing names using the existing connector, without asking users to type UUIDs. */
+export const resolveLinearScopeWithConnector = (client: Client, names: LinearScopeNames): Task<LinearScope> => () =>
+  invoke(client, { name: "get_team", arguments: { query: names.team } }, { operation: "search_work_items", query: "" })()
+    .then((team) => !team.ok ? team : invoke(client, { name: "get_project", arguments: { query: names.project } }, { operation: "search_work_items", query: "" })()
+      .then((project) => flatMap(project, (value) => scopeOf(team.value, value))));
+/** Setup uses the same authentication and transport as Linear work-item operations. */
+export const resolveLinearScope = (names: LinearScopeNames, settings: TrackerSettings = { adapter: "linear", values: {} }): Task<LinearScope> =>
+  withLinearConnector(settings, (client) => resolveLinearScopeWithConnector(client, names));
+
+/** Readiness proves a scoped read, without requiring domain labels on unrelated existing issues. */
+export const probeLinearWithConnector = (client: Client, settings: TrackerSettings): Task<string> => () => {
+  const request = { operation: "search_work_items", query: "" } as const;
+  const planned = linearCall(settings, request);
+  return !planned.ok ? Promise.resolve(planned) : invoke(client, planned.value, request)().then((raw) =>
+    flatMap(raw, (value) => object(value) && Array.isArray(value.issues) ? ok("Selected tracker completed a scoped read without creating a test item.")
+      : fail("invalid-reply", "The tracker returned no readable listing.", "Restore the configured connector and retry verification.")));
+};
+/** Adapter verification has its own outcome; normal work-item reads retain their strict domain decoding. */
+export const probeProjectRead = (project: string): Task<string> => () => nodeProjectIO(project).readSettings()
+  .then((raw) => flatMap(raw, parseSettings)).then((settings) => {
+    switch (settings.ok) {
+      case false: return settings;
+      case true: return settings.value.tracker.adapter === "linear"
+        ? withLinearConnector(settings.value.tracker, (client) => probeLinearWithConnector(client, settings.value.tracker))()
+        : nodeProjectIO(project).local({ operation: "search_work_items", query: "" })().then((result) =>
+          flatMap(result, () => ok("Selected adapter completed a read in the configured project without creating a test item.")));
+    }
+  });
 
 /** The production connector path is also usable by an embedded host with an existing MCP client. */
 export const requestWithConnector = (client: Client, settings: TrackerSettings, request: Request): Task<TrackerReply> => () => {
@@ -168,13 +216,8 @@ export const requestWithConnector = (client: Client, settings: TrackerSettings, 
     });
   }
 };
-const remoteRequest = (settings: TrackerSettings, request: Request): Task<TrackerReply> => () => {
-  const tokenEnv = settings.connection?.tokenEnv ?? "LINEAR_API_KEY";
-  const token = process.env[tokenEnv]; // fp-allow: no-ambient-effect -- Node credential boundary; never exposed in settings or output
-  return token === undefined || token === ""
-    ? Promise.resolve(fail("authentication-needed", "The configured tracker credential is not available.", `Set ${tokenEnv} in the connector's environment, then resume the saved request. Do not store credentials in project settings.`))
-    : connectedCall(settings, request, token)();
-};
+const remoteRequest = (settings: TrackerSettings, request: Request): Task<TrackerReply> =>
+  withLinearConnector(settings, (client) => requestWithConnector(client, settings, request));
 
 /** Node effects for the target project; all business decisions remain in the shared service. */
 export const nodeProjectIO = (project: string): ProjectIO => {

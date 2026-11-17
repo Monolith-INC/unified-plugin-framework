@@ -1,50 +1,129 @@
 # Unified Plugin Framework
 
-[![Status](https://img.shields.io/badge/status-foundation-orange)](https://linear.app/agentical-monolithics/project/unified-plugin-framework-fc59ba6d3fd4/overview)
-[![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-10.14-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
-[![Upstream](https://img.shields.io/badge/upstream-Agent_Plugins_Toolkit-blue)](https://github.com/Monolith-INC/agent-plugins-toolkit)
+Unified Plugin Framework (UPF) gives your coding agent a consistent set of workflows for shaping ideas, organizing work, implementing approved plans and reviewing the result. Project knowledge and session records help those workflows carry decisions and unfinished work forward.
 
-A project companion for agent-assisted development. It offers workflows such as code review, Discovery and project tracking, each built on outside plugins the framework onboards as dependencies.
+UPF brings existing plugins together behind its own skills. You work through the framework; its workflow adapters connect those skills to the plugins that perform the work.
 
-This repository is a linked fork of [Agent Plugins Toolkit](https://github.com/Monolith-INC/agent-plugins-toolkit). The inherited toolkit works today; the workflows are being built on top of it.
+[Latest release](https://github.com/Monolith-INC/unified-plugin-framework/releases/latest) · [Installation guide](docs/vendor-payload-installation.md#complete-framework-installation) · [Workflow guide](docs/user-journey.md)
 
-> **Core principle:** each workflow keeps a stable contract with its users; the plugin behind it can change.
+## What you can do
 
-## How it works
+Start with the workflow that matches your task. You can bring an idea, a proposal, an existing design or work already in progress.
 
-- **Workflows** are what users and their agents work with: code review, Discovery and planning, project tracking, continuity across sessions.
-- **Each workflow has a workflow adapter.** The adapter is the workflow's contract, the skills and tools it exposes, and it maps that contract onto the plugin that currently does the work.
-- **Onboarded plugins** are ordinary dependencies, such as the Monolithic Code Review Toolkit, Superpowers or BMad Method. They are declared with a version, pinned, and upgraded only when the adapter's tests still pass. Replacing a plugin means adjusting its adapter's mapping; the contract stays the same.
-- **Project knowledge** is shared by every workflow through one knowledge store per project.
+| Workflow | Use it to | Entry skills |
+| --- | --- | --- |
+| Discovery | Shape an idea into an approved design, with quick, thorough, comprehensive or research-led treatment. | `discover-quick`, `discover-thorough`, `discover-comprehensive`, `discover-research` |
+| Project tracking | Turn an approved design into work items, refine their requirements and break them into implementable tasks. | `track-from-design`, `track-enrich`, `track-validate`, `track-breakdown` |
+| Implementation | Execute or resume an authorized plan, then check the result against its acceptance criteria. | `implement-work`, `implement-verify` |
+| Code review | Review a task, story or feature against its requirements and the project's recorded decisions. | `review-task`, `review-story`, `review-feature` |
+| Continuity | Restore project context, save observed progress and recover usable context from readable records. | `continuity-continue`, `continuity-checkpoint`, `continuity-recover` |
+| Project knowledge | Build and maintain a shared, source-backed record of the project for all workflows to consult. | `setup-project-knowledge`, `discover-project-knowledge` |
 
-The full design is in the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
+Discovery, tracking, implementation, review and continuity skills belong to `unified-plugin-framework`. The knowledge skills belong to the included `project-knowledge` plugin.
 
-## Project and roadmap
+## Install in your project
 
-Planning and delivery are tracked in [Unified Plugin Framework on Linear](https://linear.app/agentical-monolithics/project/unified-plugin-framework-fc59ba6d3fd4/overview).
+The complete release contains the framework CLI, its production Node dependencies, the five workflow plugins and the project-knowledge runtime source. You do not need a framework development checkout, pnpm or separate plugin downloads to use that distribution.
 
-| Stage | Outcome |
-| --- | --- |
-| Fork foundation | Done: upstream baseline recorded, ownership established, inherited behavior verified |
-| First workflow: code review | Shared project knowledge, onboarded plugins declared and pinned, and code review working through its adapter |
-| Discovery | Discovery and planning through an adapter over Superpowers and BMad Method |
-| Further workflows | Project tracking, continuity, and the remaining workflows, one adapter at a time |
+### One command
 
-## Development setup
-
-Project operations use a saved tracker adapter and project language. Missing choices are collected once by `project-bootstrap`, which resumes the operation; subsequent requests use the adapter directly. See [project setup and tracker adapters](docs/user-journey.md#project-setup-and-tracker-adapters).
-
-The complete release distribution supplies the framework CLI, its production Node dependencies, the knowledge runtime source, and all five pinned workflow plugins with their supporting files and licenses. Install it using the [release installation instructions](docs/vendor-payload-installation.md#complete-framework-installation). No framework checkout, pnpm build or plugin repository downloads are needed on the consuming project. Node.js 22+, Python 3.12+ and, for remote release downloads, GitHub CLI are prerequisites. The knowledge runtime's Python packages are installed by its existing isolated runtime setup.
-
-Individual host payload assets remain available for developers and partial installations; they do not replace the complete distribution. For a development source checkout, run `pnpm agent-plugin project describe --project <target-project>` after install/build.
-
-For complete Codex setup, `pnpm agent-plugin project bootstrap --input <plan.json> --project <target-project>` reports reused and missing tooling without installing. After accepting the concrete plan, add `--apply` to install the shipped framework/knowledge skills, activate bundled pinned workflow dependencies, configure the isolated knowledge runtime and shared store, connect review settings and verify host discovery and tracker access. Missing knowledge content or provider bindings are completed through their existing skills before rerunning the accepted plan. See the [tooling bootstrap guide](docs/workflows/tooling-bootstrap.md).
-
-Requires Node.js 22 or newer and pnpm 10.14.0, as pinned in `package.json`.
+Run this in a terminal from the project where you want to use UPF:
 
 ```sh
+bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/releases/latest/download/install.sh)
+```
+
+The interactive installer will:
+
+1. Confirm your project folder, using the current directory as its default.
+2. Confirm the supported host and ask which workflows you want.
+3. Reuse existing project settings and ask for missing tracker, language and document locations.
+4. Show the selected setup and ask for confirmation.
+5. Install the complete distribution, configure the selected tooling and verify its readiness.
+
+The installer creates its setup plan internally. You do not need to write JSON or clone UPF. All five dependency plugins are included in the release; installation does not download their repositories separately.
+
+**Release availability:** interactive installation starts with v0.2.2, whose release assets include `install.sh`. v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
+
+### Requirements and current support
+
+- **Codex on Linux** for complete automated setup. Other hosts are not offered as working wizard choices.
+- **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. The wizard lets you choose the Python executable.
+- Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
+- Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
+
+The supported project trackers are repository-local files and Linear. For a new Linear setup, enter the team and project names or URLs; the connector resolves their identifiers. Your existing choices are reused on subsequent runs.
+
+Individual payloads are also published for Claude, Cursor and Codex. Their availability does not mean complete setup is automated on every host and operating system. macOS qualification remains deferred.
+
+### After installation
+
+Read the verification report. Missing authentication, review-provider bindings or project knowledge content appear as actions to complete, not a successful full setup. Completed steps are preserved when you rerun the installer.
+
+Project knowledge must come from your repository and recorded decisions; installation does not invent it. Restart the agent session when instructed so newly registered skills and tools can load.
+
+The project CLI lives under `.upf-tools/`:
+
+```sh
+./.upf-tools/bin/agent-plugin project describe --project "$PWD"
+```
+
+For a pinned release, set `UPF_VERSION` in the environment before running the installer. For unattended setup, use the explicit `--input` plan-file option. Local archives and advanced recovery are covered in the [installation guide](docs/vendor-payload-installation.md).
+
+## Work with your agent
+
+Ask your agent to use the appropriate installed skill. For example:
+
+> Use `unified-plugin-framework:discover-thorough` to turn this proposal into a design we can approve.
+
+> Use `unified-plugin-framework:track-from-design` to organize the approved design into work items and implementation tasks.
+
+> Use `unified-plugin-framework:implement-work` to continue the approved plan, then `unified-plugin-framework:implement-verify` to check the result.
+
+> Use `unified-plugin-framework:review-story` to review this story against its requirements and our recorded project decisions.
+
+> Use `unified-plugin-framework:continuity-checkpoint` to save the current progress and unfinished work.
+
+The workflows use your project's saved tracker, language and document locations. Missing choices are handled through `project-bootstrap`. The current project-operation adapters support Linear and repository-local work items; remote credentials belong in the supported adapter environment, not in a setup plan or chat.
+
+Continuity operations can be invoked explicitly. Installing their skills does not establish automatic capture of host events or automatic session management.
+
+## What ships together
+
+The complete archive includes these pinned dependencies as unchanged upstream repositories, with their supporting files and licenses:
+
+| Plugin | Role in UPF |
+| --- | --- |
+| Superpowers | Discovery, implementation and verification guidance |
+| BMad Method | Discovery, analysis and design methods |
+| Agile Backlog Toolkit | Work-item preparation, validation and decomposition |
+| Monolithic Code Review Toolkit | Requirements-grounded code review |
+| Agent Continuity | Session orientation, progress records and recovery |
+
+UPF also ships the independent `project-knowledge` plugin and its runtime. The framework's [dependency lock](plugins/unified-plugin-framework/onboarded.lock.json) records the exact plugin versions and the workflow mappings they were checked against. A dependency upgrade must pass the relevant adapter checks before it is accepted.
+
+Installed releases use bundled dependencies locally. Missing or changed bundled content is reported as an error rather than silently fetching a replacement. Each release also provides checksums and signed build provenance.
+
+## Documentation
+
+- [Setup and recovery](docs/workflows/tooling-bootstrap.md)
+- [Release installation and verification](docs/vendor-payload-installation.md)
+- [Workflow guide](docs/user-journey.md)
+- [Discovery](docs/workflows/discovery.md)
+- [Project tracking](docs/workflows/project-tracking.md)
+- [Implementation](docs/workflows/implementation.md)
+- [Code review](docs/workflows/code-review.md)
+- [Continuity](docs/workflows/continuity.md)
+- [Shared project knowledge](docs/knowledge/README.md)
+- [Workflow adapter architecture](docs/adr/ADR-001-workflow-adapter-interface.md)
+
+## Develop UPF
+
+To change the framework itself, clone this repository and use Node.js 22+ with pnpm 10.14.0:
+
+```sh
+git clone https://github.com/Monolith-INC/unified-plugin-framework.git
+cd unified-plugin-framework
 pnpm install --frozen-lockfile
 pnpm build
 pnpm typecheck
@@ -52,222 +131,8 @@ pnpm test
 pnpm payloads:verify
 ```
 
-## Delivery tooling
+Read [AGENTS.md](AGENTS.md) for repository rules and [the architecture guide](docs/architecture.md) for implementation boundaries. Release packaging and artifact checks are documented in the [installation guide](docs/vendor-payload-installation.md#building-and-checking-the-complete-distribution).
 
-This checkout uses [Monolithic Dev Harness v0.7.0-rc.13](https://github.com/Monolith-INC/monolithic-dev-harness/releases/tag/v0.7.0-rc.13), installed for this project in Codex. Work belongs to the Linear project above; plans and specifications belong under `docs/work-items/`.
+## License and origins
 
-To install the same release for another checkout:
-
-```sh
-gh release download v0.7.0-rc.13 --repo Monolith-INC/monolithic-dev-harness --pattern install.sh --output install-harness.sh
-bash install-harness.sh --version 0.7.0-rc.13 --scope local --host codex --project "$PWD" --yes
-```
-
-## Upstream baseline and licensing
-
-Forked from `Monolith-INC/agent-plugins-toolkit` on 2026-11-14. Original history and package names are preserved. The pinned baseline commit, fork details and the clone procedure, including adding the `upstream` remote, are in [docs/upstream/baseline.md](docs/upstream/baseline.md). Review upstream changes through that remote before merging them through a pull request.
-
-Copyright 2026 Monolith-INC. Licensed under the [Apache License 2.0](LICENSE); see also [NOTICE](NOTICE). The inherited baseline had no license file; the owner's ownership statement, the license decision and their dates are recorded in [docs/upstream/ownership.md](docs/upstream/ownership.md). Package publication is not decided, and inherited package names are unchanged.
-
-## Inherited toolkit
-
-The following reference describes the existing toolkit behavior.
-
-Reference implementation and CLI for the Agent Plugins v1.0.0 portable architecture.
-
-The toolkit loads plugin roots, validates portable manifests, discovers immediate Skills, inspects MCP configuration **without executing** plugin scripts or starting MCP servers, and installs verified host payloads through one transactional install command. The repository holds only canonical plugin sources; CI builds each host's payloads and attaches them to the GitHub release.
-
-## Packages
-
-| Package | Role |
-|---|---|
-| `@agent-plugins/core` | Portable types, diagnostics, and `loadPluginRoot` / `inspectPlugin` primitives |
-| `@agent-plugins/compiler` | Canonical plugin normalization, deterministic vendor bundle contracts, build, and determinism verification |
-| `@agent-plugins/adapter-claude` | Claude Code adapter and its payload build script |
-| `@agent-plugins/adapter-cursor` | Cursor adapter and its payload build script |
-| `@agent-plugins/adapter-codex` | Codex adapter and its payload build script |
-| `@agent-plugins/installer` | Transactional payload installer with locking, journaling, rollback, and installed-record verification |
-| `@agent-plugins/cli` | `agent-plugin` CLI (`validate`, `inspect`, `install`, `create`, `add skill`, `adapter-check`) |
-| `@agent-plugins/workflows` | Workflow contracts and their adapters; see [ADR-001](docs/adr/ADR-001-workflow-adapter-interface.md) and the [code review workflow](docs/workflows/code-review.md) |
-| `@agent-plugins/testing` | Shared test helpers |
-
-## Requirements
-
-- Node.js `>= 22`
-- pnpm `10.x` (see `packageManager` in root `package.json`)
-
-## Setup
-
-```sh
-pnpm install
-pnpm build
-pnpm test
-pnpm payloads:verify
-```
-
-## CLI
-
-Build first so the `agent-plugin` bin points at compiled output:
-
-```sh
-pnpm build
-pnpm --filter @agent-plugins/cli exec agent-plugin --help
-```
-
-### `install <plugin> --version <version> | --source <dir>`, with `--vendor <claude|cursor|codex> --target <directory>`
-
-Install one plugin's payload for one host.
-
-```text
-plugins/<plugin>            (hello-world, unified-plugin-framework, project-knowledge) -- the only copy in git
-  plugin.json
-  skills/<skill>/SKILL.md
-        |
-        v  tag v<version>  ->  .github/workflows/release.yml
-release-time assembly (@agent-plugins/workflows) -> @agent-plugins/compiler -> adapter-claude | adapter-cursor | adapter-codex
-        |
-        v
-GitHub release assets: <plugin>-<host>.bundle.json.gz for every plugin and host, plus SHA256SUMS
-        |
-        v
-agent-plugin install <plugin> --version -> download + digest checks -> @agent-plugins/installer -> target directory
-```
-
-With a plugin name and `--version`, the command downloads the plugin's asset for the host from that release, checks it against the release's `SHA256SUMS` and every file digest inside it, then installs it. Each asset also carries a build provenance attestation (`gh attestation verify`):
-
-```sh
-agent-plugin install unified-plugin-framework --version <version> --vendor claude --target <target-directory>
-```
-
-With `--source`, it takes a plugin source directory and builds the payload from it instead, for development:
-
-```sh
-pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor claude --target <target-directory>
-```
-
-Either way the installer plans writes through the host's adapter and commits the transaction under a target lock. Installer provenance lives in `.agent-plugins/installed/*.json`; vendor manifests remain closed to each vendor schema. The [installation guide](docs/vendor-payload-installation.md) lists every plugin and host, the release process and the failure codes.
-
-### `validate [path]`
-
-Validate a plugin root. Defaults to the current working directory.
-
-- Success: prints `{"ok":true}` and exits `0`
-- Failure: prints JSON diagnostics on stderr and exits `1`
-
-```sh
-pnpm --filter @agent-plugins/cli exec agent-plugin validate plugins/hello-world
-pnpm --filter @agent-plugins/cli exec agent-plugin validate fixtures/invalid/missing-name
-```
-
-### `inspect [path]`
-
-Inspect portable components as deterministic JSON (manifest, skills, MCP servers, diagnostics). Defaults to cwd.
-
-```sh
-pnpm --filter @agent-plugins/cli exec agent-plugin inspect plugins/hello-world
-pnpm --filter @agent-plugins/cli exec agent-plugin inspect fixtures/valid/mcp-transports
-```
-
-## Plugin layout
-
-A portable plugin root looks like:
-
-```text
-plugin.json          # required portable manifest
-skills/<name>/SKILL.md
-mcp.json             # optional MCP server map
-```
-
-### Manifest (`plugin.json`)
-
-Closed portable fields:
-
-- `name` (required, lowercase npm-style, optional `@scope/`)
-- `version` (required)
-- `description` (optional string)
-- `schemaVersion` (optional; supported: `1.0.0`)
-- `extensions` (optional object; preserved. Other namespaces are not interpreted.)
-
-### Onboarded plugins
-
-The framework declares the outside plugins its workflows depend on under one namespace in `extensions`:
-
-```json
-"extensions": {
-  "io.github.monolith-inc.upf": {
-    "onboardedPlugins": [
-      {
-        "name": "monolithic-code-review-toolkit",
-        "version": "^1.0.0",
-        "source": "github:Monolith-INC/monolithic-code-review-toolkit",
-        "adapter": "code-review"
-      }
-    ]
-  }
-}
-```
-
-Each entry needs a non-empty `name`, `version` range, `source` and `adapter`, and the adapter must be a known workflow adapter (currently `code-review` or `discovery`). `validate` reports missing fields, unknown adapters and duplicate names; `inspect` lists the valid entries under `onboardedPlugins`. See the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
-
-### Skills
-
-Only **immediate** children of `skills/` are discovered. Nested `SKILL.md` files are ignored. Missing `SKILL.md` yields a structured diagnostic.
-
-### MCP (`mcp.json`)
-
-Missing `mcp.json` is valid. Present configs are parsed into discriminated transports:
-
-- `stdio` — `command` / `args` / optional `cwd`
-- `streamable-http` — `url` (+ `type` or `transport`)
-- `sse` — `url` (+ `type` or `transport`)
-- `config-path` — path reference to another MCP config
-
-`${PLUGIN_ROOT}` and `${PLUGIN_DATA}` placeholders found in path-like fields are listed explicitly on each inspected server under `placeholders`.
-
-Inspection never spawns processes or opens network connections.
-
-## Fixtures & reference plugin
-
-- `plugins/hello-world` — minimum valid reference plugin
-- `fixtures/valid/*` — happy-path fixtures (including skill discovery and MCP transports)
-- `fixtures/invalid/*` — diagnostic category coverage for validate/inspect
-
-## Library usage
-
-```ts
-import { loadPluginRoot, inspectPlugin } from "@agent-plugins/core";
-
-const inspection = loadPluginRoot("./plugins/hello-world");
-// inspection.manifest | skills | mcpServers | diagnostics
-```
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Vendor payload installation guide](docs/vendor-payload-installation.md)
-- [M4 release notes](docs/release-notes/age-13-m4.md)
-- [Changelog](CHANGELOG.md)
-
-## Scripts
-
-```sh
-pnpm install
-pnpm build
-pnpm build:core
-pnpm build:cli
-pnpm build:testing
-pnpm payloads:build     # generate host payloads into the git-ignored packages/adapter-*/payloads/
-pnpm payloads:verify    # generate twice and compare: deterministic and valid for each host
-pnpm release:distribution # complete archive, installer and checksums (fetches pins at build time)
-pnpm release:assets     # build every plugin for every host and pack release-assets/ with SHA256SUMS
-pnpm typecheck
-pnpm test
-```
-
-## Quality gates
-
-See [docs/quality-gates.md](docs/quality-gates.md) for the required local and CI checks (Linux, macOS, Windows).
-
-## Translation plugin dogfood
-
-See [docs/translation-plugin-dogfood.md](docs/translation-plugin-dogfood.md) for the M3 multi-Skill portable consumer and its intentional non-goals.
+UPF is licensed under [Apache License 2.0](LICENSE). It is a fork of [Agent Plugins Toolkit](https://github.com/Monolith-INC/agent-plugins-toolkit); see [NOTICE](NOTICE) and the [upstream baseline](docs/upstream/baseline.md) for attribution and history. Bundled plugins retain their respective licenses.
