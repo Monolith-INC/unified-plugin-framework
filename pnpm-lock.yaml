@@ -27,6 +27,9 @@ importers:
       '@agent-plugins/testing':
         specifier: workspace:*
         version: link:../testing
+      '@agent-plugins/workflows':
+        specifier: workspace:*
+        version: link:../workflows
 
   packages/adapter-codex:
     dependencies:
@@ -40,6 +43,9 @@ importers:
       '@agent-plugins/testing':
         specifier: workspace:*
         version: link:../testing
+      '@agent-plugins/workflows':
+        specifier: workspace:*
+        version: link:../workflows
 
   packages/adapter-cursor:
     dependencies:
@@ -53,6 +59,9 @@ importers:
       '@agent-plugins/testing':
         specifier: workspace:*
         version: link:../testing
+      '@agent-plugins/workflows':
+        specifier: workspace:*
+        version: link:../workflows
 
   packages/cli:
     dependencies:
@@ -106,6 +115,9 @@ importers:
 
   packages/workflows:
     dependencies:
+      '@agent-plugins/compiler':
+        specifier: workspace:*
+        version: link:../compiler
       '@agent-plugins/core':
         specifier: workspace:*
         version: link:../core

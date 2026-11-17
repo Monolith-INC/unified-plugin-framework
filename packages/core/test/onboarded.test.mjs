@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { UPF_EXTENSION, diagnosticCodes, inspectPlugin, loadPluginRoot } from "../dist/index.js";
 
@@ -83,7 +84,7 @@ test("a malformed extension section is rejected without listing plugins", () => 
 });
 
 test("loadPluginRoot reads declarations from a plugin directory", () => {
-  const inspection = loadPluginRoot(new URL("../../../fixtures/valid/onboarded-plugins", import.meta.url).pathname);
+  const inspection = loadPluginRoot(fileURLToPath(new URL("../../../fixtures/valid/onboarded-plugins", import.meta.url)));
 
   assert.deepEqual(inspection.diagnostics, []);
   assert.deepEqual(inspection.onboardedPlugins, [reviewToolkit]);

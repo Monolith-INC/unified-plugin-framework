@@ -189,7 +189,7 @@ function preflightInstall(input: InstallVendorBundleInput): Result<Preflight> {
     }
     if (existingRecord !== undefined) {
       for (const file of existingRecord.installedFiles) {
-        const actual = inspectInstalledFile(targetRoot, file.path);
+        const actual = inspectInstalledFile(targetRoot, file.path, file.mode);
         if (!actual.ok || actual.value.sha256 !== file.sha256 || actual.value.mode !== file.mode) {
           diagnostics.push(installDiagnostic("install.preflight.owned_drift", "Previously installed file was modified or removed.", file.path));
         }
@@ -202,7 +202,7 @@ function preflightInstall(input: InstallVendorBundleInput): Result<Preflight> {
   const stale = existingRecord?.installedFiles.filter((file) => !nextPaths.has(file.path)) ?? [];
   const changed = planned.value.writes.filter((write) => {
     const source = input.bundle.files.find((file) => file.path === write.source) as PayloadFile;
-    const actual = inspectInstalledFile(targetRoot, write.destination);
+    const actual = inspectInstalledFile(targetRoot, write.destination, write.mode);
     return !actual.ok || actual.value.sha256 !== source.sha256 || actual.value.mode !== write.mode;
   });
   return successResult({
@@ -273,7 +273,7 @@ function stagePayload(bundle: VendorBundle, preflight: Preflight, transaction: T
       writeFileSync(path, source.content, { mode: write.mode });
       chmodSync(path, write.mode);
       fsyncFile(path);
-      const staged = inspectFile(path);
+      const staged = inspectFile(path, write.mode);
       if (!staged.ok || staged.value.sha256 !== source.sha256 || staged.value.mode !== write.mode) {
         return failureResult([installDiagnostic("install.stage.invalid", "Staged file failed verification.", write.destination)]);
       }
@@ -305,7 +305,7 @@ function commitTransaction(
       const staged = join(transaction.stage, ...write.destination.split("/"));
       ensureParentDirectories(destination, transaction.createdDirectories);
       if (existsSync(destination)) {
-        const prior = inspectFile(destination);
+        const prior = inspectFile(destination, write.mode);
         if (!prior.ok) throw new Error(`Unable to inspect ${write.destination}.`);
         const backup = backupFile(destination, write.destination, transaction);
         appendJournal(transaction, { kind: "replaced", path: write.destination, backupPath: backup, priorSha256: prior.value.sha256, priorMode: prior.value.mode });
@@ -395,7 +395,7 @@ function verifyInstalledState(targetRoot: string, recordPath: string, record: In
     return failureResult([installDiagnostic("install.verify.record", "Installed record failed verification.", recordPath)]);
   }
   for (const file of record.installedFiles) {
-    const actual = inspectInstalledFile(targetRoot, file.path);
+    const actual = inspectInstalledFile(targetRoot, file.path, file.mode);
     if (!actual.ok || actual.value.sha256 !== file.sha256 || actual.value.mode !== file.mode) {
       return failureResult([installDiagnostic("install.verify.file", "Installed file failed verification.", file.path)]);
     }
@@ -497,15 +497,20 @@ function backupFile(source: string, relativeSource: RelativePayloadPath, transac
   return relativeBackup;
 }
 
-function inspectInstalledFile(root: string, path: RelativePayloadPath): Result<{ readonly sha256: Sha256; readonly mode: PortableFileMode }> {
-  return inspectFile(join(root, ...path.split("/")));
+function inspectInstalledFile(root: string, path: RelativePayloadPath, expected: PortableFileMode): Result<{ readonly sha256: Sha256; readonly mode: PortableFileMode }> {
+  return inspectFile(join(root, ...path.split("/")), expected);
 }
 
-function inspectFile(path: string): Result<{ readonly sha256: Sha256; readonly mode: PortableFileMode }> {
+// Windows has no POSIX permission bits: stat reports 0o666 (0o444 when read-only), so a file there cannot show its
+// mode and is taken to have the one the bundle or record expects. Bytes are still read and checked on every platform.
+const observedMode = (statMode: number, expected: PortableFileMode): number =>
+  process.platform === "win32" ? expected : statMode & 0o777;
+
+function inspectFile(path: string, expected: PortableFileMode = 0o644): Result<{ readonly sha256: Sha256; readonly mode: PortableFileMode }> {
   try {
     const stat = lstatSync(path);
     if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("Not a regular file.");
-    const mode = parsePortableFileMode(stat.mode & 0o777);
+    const mode = parsePortableFileMode(observedMode(stat.mode, expected));
     if (!mode.ok) return failureResult(mode.diagnostics);
     return successResult({ sha256: sha256(readFileSync(path)), mode: mode.value });
   } catch (error) {
@@ -545,7 +550,8 @@ function cleanupEmptyDirectories(created: readonly string[]): void {
   }
 }
 
-function fsyncFile(path: string): void { const handle = openSync(path, "r"); try { fsyncSync(handle); } finally { closeSync(handle); } }
+// Opened read-write: Windows flushes a file only through a handle with write access (EPERM otherwise).
+function fsyncFile(path: string): void { const handle = openSync(path, "r+"); try { fsyncSync(handle); } finally { closeSync(handle); } }
 function fsyncDirectory(path: string): void { try { const handle = openSync(path, "r"); try { fsyncSync(handle); } finally { closeSync(handle); } } catch { /* unsupported on some platforms */ } }
 function relativePath(path: string): RelativePayloadPath { const parsed = parseRelativePayloadPath(path); if (!parsed.ok) throw new Error(`Invalid internal path: ${path}`); return parsed.value; }
 function successResult<T>(value: T): Result<T> { return { ok: true, value }; }

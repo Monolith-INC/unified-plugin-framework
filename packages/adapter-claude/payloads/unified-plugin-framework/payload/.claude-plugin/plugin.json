@@ -1,0 +1,6 @@
+{
+  "description": "Project companion workflows backed by onboarded plugins through workflow adapters.",
+  "name": "unified-plugin-framework",
+  "skills": "./skills/",
+  "version": "0.1.0"
+}

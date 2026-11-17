@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { loadPluginRoot } from "@agent-plugins/core";
 
@@ -36,7 +37,7 @@ test("every contract operation's assembled skill names each plugin skill and sto
 });
 
 test("the framework manifest declares every plugin the adapter references", () => {
-  const declared = loadPluginRoot(new URL(frameworkRoot).pathname).onboardedPlugins ?? [];
+  const declared = loadPluginRoot(fileURLToPath(frameworkRoot)).onboardedPlugins ?? [];
   assert.ok(
     adapterPlugins(reviewToolkitAdapter).every((plugin) =>
       declared.some(({ name, adapter }) => name === plugin && adapter === "code-review"),

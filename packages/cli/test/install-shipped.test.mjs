@@ -1,0 +1,70 @@
+import assert from "node:assert/strict";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import test from "node:test";
+
+import { runInstallCommand } from "../dist/index.js";
+
+const repo = resolve(import.meta.dirname, "../../..");
+const framework = join(repo, "plugins", "unified-plugin-framework");
+const VENDORS = ["claude", "codex", "cursor"];
+
+const capture = (operation) => {
+  const stdout = [];
+  const stderr = [];
+  const priorLog = console.log;
+  const priorError = console.error;
+  console.log = (value) => stdout.push(String(value));
+  console.error = (value) => stderr.push(String(value));
+  try {
+    return { code: operation(), stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  } finally {
+    console.log = priorLog;
+    console.error = priorError;
+  }
+};
+
+const install = (plugin, vendor) => {
+  const target = mkdtempSync(join(tmpdir(), `cli-shipped-${vendor}-`));
+  return { target, ...capture(() => runInstallCommand([plugin, "--vendor", vendor, "--target", target])) };
+};
+
+const diagnosticCodes = (stderr) => JSON.parse(stderr).diagnostics.map(({ code }) => code);
+
+test("the framework plugin installs each host's assembled skills, naming the onboarded plugin and no placeholder", () => {
+  VENDORS.map((vendor) => {
+    const { target, code, stderr } = install(framework, vendor);
+    assert.equal(code, 0, stderr);
+    assert.deepEqual(readdirSync(join(target, "skills")).toSorted(), ["review-feature", "review-story", "review-task"]);
+    readdirSync(join(target, "skills")).map((skill) => {
+      const text = readFileSync(join(target, "skills", skill, "SKILL.md"), "utf8");
+      assert.match(text, /monolithic-code-review-toolkit:/);
+      assert.doesNotMatch(text, /\{\{/);
+      return skill;
+    });
+    return vendor;
+  });
+});
+
+test("a plugin without shipped payloads writes nothing and says how to ship it", () => {
+  const { target, code, stderr } = install(join(repo, "plugins", "translation"), "claude");
+  assert.equal(code, 3);
+  assert.deepEqual(diagnosticCodes(stderr), ["cli.payload.missing"]);
+  assert.match(stderr, /SHIPPED_PLUGINS.*pnpm payloads:build/);
+  assert.deepEqual(readdirSync(target), []);
+});
+
+test("a template edited after the payloads were built writes nothing and asks for a rebuild", () => {
+  const source = join(mkdtempSync(join(tmpdir(), "cli-drift-")), "unified-plugin-framework");
+  cpSync(framework, source, { recursive: true });
+  appendFileSync(join(source, "skills", "review-task", "SKILL.md"), "\nAn edit the payloads have not seen.\n");
+  VENDORS.map((vendor) => {
+    const { target, code, stderr } = install(source, vendor);
+    assert.equal(code, 3);
+    assert.deepEqual(diagnosticCodes(stderr), ["cli.payload.drift"]);
+    assert.match(stderr, /pnpm payloads:build/);
+    assert.deepEqual(readdirSync(target), []);
+    return vendor;
+  });
+});

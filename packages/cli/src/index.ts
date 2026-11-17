@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CLAUDE_SHIPPED_HELLO_WORLD, claudeAdapter } from "@agent-plugins/adapter-claude";
-import { CODEX_SHIPPED_HELLO_WORLD, codexAdapter } from "@agent-plugins/adapter-codex";
-import { CURSOR_SHIPPED_HELLO_WORLD, cursorAdapter } from "@agent-plugins/adapter-cursor";
+import { claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
+import { codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
+import { cursorAdapter, cursorShippedBundle } from "@agent-plugins/adapter-cursor";
 import {
+  normalizeCanonicalPlugin,
   parseVendorId,
   readVendorBundle,
+  type CanonicalPlugin,
   type InstallResult,
   type Result,
   type VendorAdapter,
@@ -26,6 +28,7 @@ import {
 } from "@agent-plugins/core";
 import type { Diagnostic } from "@agent-plugins/core";
 import { installVendorBundle } from "@agent-plugins/installer";
+import { SHIPPED_PLUGINS, withAssembledSource } from "@agent-plugins/workflows";
 
 import { NODE_ADAPTER_CHECK_IO, runAdapterCheck } from "./adapter-check.js";
 
@@ -39,7 +42,7 @@ Commands:
   create <plugin-name> [--path dir] Scaffold a portable plugin root
   add skill <skill-name> [--path dir]
                                     Add an immediate-child Skill to a plugin root
-  adapter-check <workflow> [--framework dir] [--plugin-root dir]... [--project dir]
+  adapter-check <workflow> --framework dir [--plugin-root dir]... [--project dir]
                                     Check a workflow adapter's readiness (declared, installed, bound)
 `;
 
@@ -141,21 +144,62 @@ function resolveShippedBundle(pluginRoot: string, vendor: VendorId): Result<{ re
     const diagnostics = errors.length > 0 ? errors : [cliDiagnostic("cli.plugin.invalid", "Plugin distribution has no valid manifest.", pluginRoot)];
     return { ok: false, diagnostics: [diagnostics[0] as Diagnostic, ...diagnostics.slice(1)] };
   }
-  if (inspection.manifest.name !== "hello-world") {
-    return { ok: false, diagnostics: [cliDiagnostic("cli.payload.missing", "No shipped payload exists for this plugin.", inspection.manifest.name)] };
-  }
-  const selected = selectShippedAdapter(vendor);
-  const bundle = readVendorBundle(fileURLToPath(selected.url));
-  return bundle.ok ? { ok: true, value: { bundle: bundle.value, adapter: selected.adapter } } : bundle;
+  const selected = SHIPPED_ADAPTERS[vendor];
+  const location = fileURLToPath(selected.bundle(pluginDirectoryName(inspection.manifest.name)));
+  const bundle = existsSync(location) ? readVendorBundle(location) : missingPayload(vendor, inspection.manifest.name, location);
+  return bundle.ok ? checkSourceDrift(pluginRoot, vendor, location, bundle.value, selected.adapter) : bundle;
 }
 
-function selectShippedAdapter(vendor: VendorId): { readonly adapter: VendorAdapter; readonly url: URL } {
-  switch (vendor) {
-    case "claude": return { adapter: claudeAdapter, url: CLAUDE_SHIPPED_HELLO_WORLD };
-    case "codex": return { adapter: codexAdapter, url: CODEX_SHIPPED_HELLO_WORLD };
-    case "cursor": return { adapter: cursorAdapter, url: CURSOR_SHIPPED_HELLO_WORLD };
-  }
-}
+const SHIPPED_ADAPTERS: Readonly<Record<VendorId, { readonly adapter: VendorAdapter; readonly bundle: (name: string) => URL }>> = Object.freeze({
+  claude: { adapter: claudeAdapter, bundle: claudeShippedBundle },
+  codex: { adapter: codexAdapter, bundle: codexShippedBundle },
+  cursor: { adapter: cursorAdapter, bundle: cursorShippedBundle },
+});
+
+const REBUILD = "Rebuild the shipped payloads with `pnpm payloads:build`, then install again.";
+
+const SHIPPED: ReadonlySet<string> = new Set(SHIPPED_PLUGINS);
+
+const NOT_SHIPPED = "Add it to `SHIPPED_PLUGINS` in packages/workflows/src/release.ts, build with `pnpm payloads:build`, then install again.";
+
+const missingPayload = (vendor: VendorId, name: string, location: string): Result<VendorBundle> => ({
+  ok: false,
+  diagnostics: [
+    cliDiagnostic(
+      "cli.payload.missing",
+      `No shipped ${vendor} payload exists for ${name}. ${SHIPPED.has(pluginDirectoryName(name)) ? REBUILD : NOT_SHIPPED}`,
+      location,
+    ),
+  ],
+});
+
+/** The plugin as released: its templates assembled, in a temporary copy that is removed once read. */
+const releasedSource = (pluginRoot: string): Result<CanonicalPlugin> => {
+  const staged = withAssembledSource(pluginRoot, normalizeCanonicalPlugin);
+  const [first, ...rest] = staged.ok ? [] : staged.problems.map((problem) => cliDiagnostic("cli.plugin.assembly", problem, pluginRoot));
+  return staged.ok ? staged.value : { ok: false, diagnostics: [first ?? cliDiagnostic("cli.plugin.assembly", "Plugin could not be assembled.", pluginRoot), ...rest] };
+};
+
+const sourceDrift = (vendor: VendorId, location: string, bundle: VendorBundle): Result<never> => ({
+  ok: false,
+  diagnostics: [cliDiagnostic("cli.payload.drift", `The shipped ${vendor} payload for ${bundle.manifest.plugin.name} no longer matches its source. ${REBUILD}`, location)],
+});
+
+/** Refuses a shipped payload built from a different source than the plugin being installed. */
+const checkSourceDrift = (
+  pluginRoot: string,
+  vendor: VendorId,
+  location: string,
+  bundle: VendorBundle,
+  adapter: VendorAdapter,
+): Result<{ readonly bundle: VendorBundle; readonly adapter: VendorAdapter }> => {
+  const released = releasedSource(pluginRoot);
+  return !released.ok
+    ? released
+    : released.value.sourceDigest === bundle.manifest.sourceDigest
+      ? { ok: true, value: { bundle, adapter } }
+      : sourceDrift(vendor, location, bundle);
+};
 
 function printInstallResult(result: InstallResult, target: string): number {
   switch (result.kind) {

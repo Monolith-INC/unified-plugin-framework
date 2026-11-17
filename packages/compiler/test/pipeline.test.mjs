@@ -193,7 +193,7 @@ test("compilation is deterministic, verified, and atomically restores prior outp
   assert.deepEqual(snapshot(output), firstSnapshot);
 });
 
-test("verification regenerates in isolation and detects missing, extra, changed, and mode drift", () => {
+test("verification regenerates in isolation and detects missing, extra, and changed files", () => {
   const source = mkdtempSync(join(tmpdir(), "agent-verify-source-"));
   const shipped = join(mkdtempSync(join(tmpdir(), "agent-verify-output-")), "codex");
   writeCanonicalPlugin(source);
@@ -216,9 +216,17 @@ test("verification regenerates in isolation and detects missing, extra, changed,
   writeFileSync(payload, "modified\n");
   const drift = compiler.verifyShippedPayload({ source, vendor: "codex", shipped });
   assert.equal(drift.ok, false);
+});
+
+// Windows has no POSIX mode bits, so there a bundle's modes come from its manifest (tested below) and cannot drift on disk.
+test("verification detects mode drift", { skip: process.platform === "win32" && "no POSIX file modes on Windows" }, () => {
+  const source = mkdtempSync(join(tmpdir(), "agent-verify-mode-source-"));
+  const shipped = join(mkdtempSync(join(tmpdir(), "agent-verify-mode-output-")), "codex");
+  writeCanonicalPlugin(source);
+  const compiler = createVendorCompiler(registry());
   assert.equal(compiler.compilePlugin({ source, vendor: "codex", output: shipped }).ok, true);
 
-  chmodSync(payload, 0o755);
+  chmodSync(join(shipped, "payload", ".fixture-codex", "plugin.json"), 0o755);
   assert.equal(compiler.verifyShippedPayload({ source, vendor: "codex", shipped }).ok, false);
 });
 
