@@ -7,10 +7,13 @@ import { reviewToolkitAdapter } from "./code-review.js";
 export {
   adapterPlugins,
   checkAdapterReadiness,
+  checkPluginBinding,
   firstFailure,
   PROJECT_KNOWLEDGE_SETUP,
   type Monoid,
   type NonEmpty,
+  type BindingFacts,
+  type InstalledPlugin,
   type PluginKnowledgeStore,
   type PluginSkillRef,
   type Readiness,
@@ -21,6 +24,20 @@ export {
 } from "./adapter.js";
 
 export { renderSkill, type Rendered } from "./render.js";
+
+export {
+  EMPTY_LOCK,
+  LOCK_FILE,
+  lockText,
+  mappingDigest,
+  parseLock,
+  pinFor,
+  satisfiesRange,
+  withPin,
+  type OnboardedLock,
+  type ParsedLock,
+  type PluginPin,
+} from "./lock.js";
 
 import { assemblePluginSource as assembleSource, assembleSkills as assembleWith, type Assembled } from "./assemble.js";
 

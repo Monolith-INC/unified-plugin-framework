@@ -31,6 +31,7 @@ import { installVendorBundle } from "@agent-plugins/installer";
 import { SHIPPED_PLUGINS, withAssembledSource } from "@agent-plugins/workflows";
 
 import { NODE_ADAPTER_CHECK_IO, runAdapterCheck } from "./adapter-check.js";
+import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
 
 const USAGE = `Usage: agent-plugin <command> [options]
 
@@ -44,6 +45,8 @@ Commands:
                                     Add an immediate-child Skill to a plugin root
   adapter-check <workflow> --framework dir [--plugin-root dir]... [--project dir]
                                     Check a workflow adapter's readiness (declared, installed, bound)
+  upgrade-check <workflow> --framework dir --plugin-root dir...
+                                    Check candidate plugin versions against the adapter and pin them
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -68,6 +71,8 @@ export function run(argv: readonly string[]): number {
       return runInstallCommand(rest);
     case "adapter-check":
       return runAdapterCheck(NODE_ADAPTER_CHECK_IO, rest, process.cwd());
+    case "upgrade-check":
+      return runUpgradeCheck(NODE_UPGRADE_CHECK_IO, rest, process.cwd());
     case "help":
     case "--help":
     case "-h":

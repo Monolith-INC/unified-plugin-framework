@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { adapterPlugins, checkAdapterReadiness, firstFailure } from "../dist/index.js";
+import { adapterPlugins, checkAdapterReadiness, checkPluginBinding, firstFailure, mappingDigest } from "../dist/index.js";
 
 const ref = (plugin, skill) => ({ plugin, skill });
 
@@ -19,10 +19,33 @@ const adapter = Object.freeze({
 
 const declared = (name) => ({ name, version: "^1.0.0", source: `github:example/${name}`, adapter: "code-review" });
 
+const CHECKSUM = "a".repeat(64);
+
+/** review-kit as installed: these skills, at this version and checksum. */
+const kit = (skills, { version = "1.2.0", checksum = CHECKSUM } = {}) => new Map([["review-kit", { version, checksum, skills }]]);
+
+const ALL_SKILLS = ["task", "story-pre", "story-post", "setup"];
+
+const pinned = (overrides = {}) => ({
+  lockVersion: 1,
+  plugins: [
+    {
+      plugin: "review-kit",
+      version: "1.2.0",
+      checksum: CHECKSUM,
+      adapter: "code-review",
+      contractVersion: "1.0.0",
+      mappingDigest: mappingDigest(adapter),
+      ...overrides,
+    },
+  ],
+});
+
 const facts = {
   adapter,
   onboarded: [declared("review-kit")],
-  pluginSkills: new Map([["review-kit", ["task", "story-pre", "story-post", "setup"]]]),
+  installed: kit(ALL_SKILLS),
+  lock: pinned(),
   projectStore: "/repo/knowledge",
   pluginStores: new Map([["review-kit", "/repo/knowledge"]]),
 };
@@ -43,13 +66,47 @@ test("a plugin not declared for the workflow fails at the declared step", () => 
 });
 
 test("a plugin with no installed skills fails at the installed step", () => {
-  assert.equal(checkAdapterReadiness({ ...facts, pluginSkills: new Map() }).step, "installed");
+  assert.equal(checkAdapterReadiness({ ...facts, installed: new Map() }).step, "installed");
 });
 
 test("a missing mapped skill fails at the bound step, naming the skill and its operation", () => {
-  const result = checkAdapterReadiness({ ...facts, pluginSkills: new Map([["review-kit", ["task", "story-pre"]]]) });
+  const result = checkAdapterReadiness({ ...facts, installed: kit(["task", "story-pre", "setup"]) });
   assert.equal(result.step, "bound");
   assert.match(result.reason, /review-kit:story-post \(review-story\)/);
+});
+
+test("a missing knowledge-store setup skill fails at the bound step, because recovery relies on it", () => {
+  const result = checkAdapterReadiness({ ...facts, installed: kit(["task", "story-pre", "story-post"]) });
+  assert.equal(result.step, "bound");
+  assert.match(result.reason, /review-kit:setup \(review-kit knowledge store setup\)/);
+});
+
+test("an installed version outside the declared range fails at the installed step", () => {
+  const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { version: "2.0.0" }) });
+  assert.equal(result.step, "installed");
+  assert.match(result.reason, /review-kit 2\.0\.0 \(declared \^1\.0\.0\)/);
+  assert.match(result.recovery.message, /upgrade-check code-review/);
+});
+
+test("an installed plugin whose checksum differs from the lock fails at the installed step, naming both", () => {
+  const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { checksum: "b".repeat(64) }) });
+  assert.equal(result.step, "installed");
+  assert.match(result.reason, /review-kit 1\.2\.0 \(bbbbbbbbbbbb\) is installed, but onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
+});
+
+test("an unpinned plugin, or one pinned against another mapping, fails at the installed step", () => {
+  assert.match(checkAdapterReadiness({ ...facts, lock: { lockVersion: 1, plugins: [] } }).reason, /review-kit is not pinned/);
+  assert.match(
+    checkAdapterReadiness({ ...facts, lock: pinned({ mappingDigest: "c".repeat(64) }) }).reason,
+    /the code-review mapping changed since review-kit 1\.2\.0 was pinned/,
+  );
+});
+
+test("the plugin binding check is the upgrade gate: it ignores the lock and the project's stores", () => {
+  const candidate = { adapter, onboarded: [declared("review-kit")], installed: kit(ALL_SKILLS, { version: "1.9.0", checksum: "d".repeat(64) }) };
+  assert.deepEqual(checkPluginBinding(candidate), { status: "ready" });
+  assert.equal(checkPluginBinding({ ...candidate, installed: kit(["task"], { version: "1.9.0" }) }).step, "bound");
+  assert.equal(checkPluginBinding({ ...candidate, installed: kit(ALL_SKILLS, { version: "2.0.0" }) }).step, "installed");
 });
 
 test("an unconfigured project knowledge store fails at the bound step", () => {
@@ -73,7 +130,14 @@ test("a plugin whose store differs from the project's fails at the bound step", 
 });
 
 test("an adapter whose plugins keep no store of their own needs only the project store", () => {
-  const result = checkAdapterReadiness({ ...facts, adapter: { ...adapter, knowledgeStores: [] }, pluginStores: new Map() });
+  const storeless = { ...adapter, knowledgeStores: [] };
+  const result = checkAdapterReadiness({
+    ...facts,
+    adapter: storeless,
+    lock: pinned({ mappingDigest: mappingDigest(storeless) }),
+    installed: kit(["task", "story-pre", "story-post"]),
+    pluginStores: new Map(),
+  });
   assert.deepEqual(result, { status: "ready" });
 });
 
@@ -89,14 +153,14 @@ test("each failure carries a recovery action", () => {
     skill: { plugin: "review-kit", skill: "setup" },
     goal: "Set knowledge.root in .review-kit/config.json to /repo/knowledge.",
   });
-  assert.equal(recoveryFor({ pluginSkills: new Map() }).action, "ask-user");
-  assert.match(recoveryFor({ pluginSkills: new Map() }).message, /review-kit.*\^1\.0\.0.*github:example\/review-kit/);
+  assert.equal(recoveryFor({ installed: new Map() }).action, "ask-user");
+  assert.match(recoveryFor({ installed: new Map() }).message, /review-kit.*\^1\.0\.0.*github:example\/review-kit/);
   assert.equal(recoveryFor({ onboarded: [] }).action, "ask-user");
-  assert.equal(recoveryFor({ pluginSkills: new Map([["review-kit", ["task"]]]) }).action, "ask-user");
+  assert.equal(recoveryFor({ installed: kit(["task"]) }).action, "ask-user");
 });
 
 test("the first failing step wins", () => {
-  assert.equal(checkAdapterReadiness({ ...facts, onboarded: [], pluginSkills: new Map() }).step, "declared");
+  assert.equal(checkAdapterReadiness({ ...facts, onboarded: [], installed: new Map() }).step, "declared");
 });
 
 test("firstFailure is a lawful monoid over readiness results", () => {
