@@ -56,7 +56,7 @@ test("assemblePluginSource copies the plugin and renders its templates into stag
   readdirSync(join(staging, "skills")).map((skill) => {
     const text = readFileSync(join(staging, "skills", skill, "SKILL.md"), "utf8");
     assert.doesNotMatch(text, /\{\{/);
-    assert.match(text, /monolithic-code-review-toolkit:/);
+    assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/ : /monolithic-code-review-toolkit:/);
     return skill;
   });
   assert.match(readFileSync(new URL("skills/review-task/SKILL.md", pluginSource), "utf8"), /\{\{delegate\}\}/);

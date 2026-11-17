@@ -43,9 +43,9 @@ Commands:
   create <plugin-name> [--path dir] Scaffold a portable plugin root
   add skill <skill-name> [--path dir]
                                     Add an immediate-child Skill to a plugin root
-  adapter-check <workflow> --framework dir [--plugin-root dir]... [--project dir]
+  adapter-check <workflow> --framework dir [--plugin-root [plugin[@version]=]dir]... [--project dir]
                                     Check a workflow adapter's readiness (declared, installed, bound)
-  upgrade-check <workflow> --framework dir --plugin-root dir...
+  upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
 `;
 
@@ -53,34 +53,45 @@ const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
 const ADD_SKILL_USAGE = `Usage: agent-plugin add skill <skill-name> [--path <plugin-root>]`;
 const INSTALL_USAGE = `Usage: agent-plugin install <plugin> --vendor <claude|cursor|codex> --target <directory>`;
 
-export function run(argv: readonly string[]): number {
+/** The effects every command needs, injected so commands are testable without a real console or process. */
+export interface CliIo {
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
+  readonly cwd: () => string;
+}
+
+/** Edge interpreter: the real console and working directory. */
+export const NODE_CLI_IO: CliIo = Object.freeze({
+  out: (line: string) => console.log(line), // fp-allow: no-ambient-effect
+  err: (line: string) => console.error(line), // fp-allow: no-ambient-effect
+  cwd: () => process.cwd(), // fp-allow: no-ambient-effect
+});
+
+export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number {
   const [command, ...rest] = argv;
 
   switch (command) {
     case "validate":
-      return isHelpToken(rest[0]) ? printUsage(0) : validatePlugin(resolve(rest[0] ?? process.cwd()));
+      return isHelpToken(rest[0]) ? printUsage(io, 0) : validatePlugin(io, resolve(io.cwd(), rest[0] ?? "."));
     case "inspect":
-      return isHelpToken(rest[0])
-        ? printUsage(0)
-        : printInspection(loadPluginRoot(resolve(rest[0] ?? process.cwd())));
+      return isHelpToken(rest[0]) ? printUsage(io, 0) : printInspection(io, loadPluginRoot(resolve(io.cwd(), rest[0] ?? ".")));
     case "create":
-      return runCreate(rest);
+      return runCreate(io, rest);
     case "add":
-      return runAdd(rest);
+      return runAdd(io, rest);
     case "install":
-      return runInstallCommand(rest);
+      return runInstallCommand(rest, DEFAULT_INSTALL_RUNTIME, io);
     case "adapter-check":
-      return runAdapterCheck(NODE_ADAPTER_CHECK_IO, rest, process.cwd());
+      return runAdapterCheck(NODE_ADAPTER_CHECK_IO, rest, io.cwd());
     case "upgrade-check":
-      return runUpgradeCheck(NODE_UPGRADE_CHECK_IO, rest, process.cwd());
+      return runUpgradeCheck(NODE_UPGRADE_CHECK_IO, rest, io.cwd());
     case "help":
     case "--help":
     case "-h":
     case undefined:
-      return printUsage(0);
+      return printUsage(io, 0);
     default:
-      console.error(`Unknown command: ${command}\n\n${USAGE.trimEnd()}`);
-      return 1;
+      return printError(io, `Unknown command: ${command}\n\n${USAGE.trimEnd()}`, 1);
   }
 }
 
@@ -90,56 +101,78 @@ export interface InstallCommandRuntime {
 }
 
 const DEFAULT_INSTALL_RUNTIME: InstallCommandRuntime = Object.freeze({
-  resolve: resolveShippedBundle,
+  resolve: (plugin: string, vendor: VendorId) => resolveShippedBundle(plugin, vendor),
   install: installVendorBundle,
 });
 
-export function runInstallCommand(argv: readonly string[], runtime: InstallCommandRuntime = DEFAULT_INSTALL_RUNTIME): number {
-  if (argv.some(isHelpToken)) return printText(INSTALL_USAGE, 0);
-  const parsed = parseInstallArguments(argv);
-  if (!parsed.ok) {
-    console.error(JSON.stringify({ ok: false, outcome: "invalid-arguments", diagnostics: parsed.diagnostics }));
-    return 2;
-  }
+type InstallRequest = { readonly plugin: string; readonly vendor: VendorId; readonly target: string };
+
+export function runInstallCommand(
+  argv: readonly string[],
+  runtime: InstallCommandRuntime = DEFAULT_INSTALL_RUNTIME,
+  io: CliIo = NODE_CLI_IO,
+): number {
+  const parsed = parseInstallArguments(argv, io.cwd());
+  return argv.some(isHelpToken)
+    ? printText(io, INSTALL_USAGE, 0)
+    : parsed.ok
+      ? installSafely(io, runtime, parsed.value)
+      : printError(io, JSON.stringify({ ok: false, outcome: "invalid-arguments", diagnostics: parsed.diagnostics }), 2);
+}
+
+/** Runs the install; an unexpected platform failure is reported without its details, never thrown. */
+function installSafely(io: CliIo, runtime: InstallCommandRuntime, request: InstallRequest): number {
   try {
-    const resolved = runtime.resolve(parsed.value.plugin, parsed.value.vendor);
-    if (!resolved.ok) {
-      printInstallFailure("failed-before-mutation", resolved.diagnostics);
-      return 3;
-    }
-    const target = resolve(parsed.value.target);
-    const result = runtime.install({ bundle: resolved.value.bundle, adapter: resolved.value.adapter, target: { root: target } });
-    return printInstallResult(result, target);
+    return resolveAndInstall(io, runtime, request);
   } catch {
-    printInstallFailure("failed-before-mutation", [cliDiagnostic("cli.unexpected", "Unexpected platform failure.")]);
-    return 70;
+    return printInstallFailure(io, "failed-before-mutation", [cliDiagnostic("cli.unexpected", "Unexpected platform failure.")], 70);
   }
 }
 
-function parseInstallArguments(argv: readonly string[]): Result<{ readonly plugin: string; readonly vendor: VendorId; readonly target: string }> {
-  const diagnostics: Diagnostic[] = [];
-  const plugin = argv[0];
-  if (plugin === undefined || plugin.startsWith("-")) diagnostics.push(cliDiagnostic("cli.arguments.plugin", "Exactly one plugin path is required."));
-  const options = new Map<string, string>();
-  for (let index = 1; index < argv.length; index += 2) {
+function resolveAndInstall(io: CliIo, runtime: InstallCommandRuntime, { plugin, vendor, target }: InstallRequest): number {
+  const resolved = runtime.resolve(plugin, vendor);
+  const root = resolve(io.cwd(), target);
+  return resolved.ok
+    ? printInstallResult(io, runtime.install({ bundle: resolved.value.bundle, adapter: resolved.value.adapter, target: { root } }), root)
+    : printInstallFailure(io, "failed-before-mutation", resolved.diagnostics, 3);
+}
+
+/** The `--vendor`/`--target` pairs after the plugin, read until the first malformed or repeated one. */
+type OptionScan = { readonly options: ReadonlyMap<string, string>; readonly invalid: boolean };
+
+const scanOption =
+  (argv: readonly string[]) =>
+  (scan: OptionScan, index: number): OptionScan => {
     const option = argv[index];
     const value = argv[index + 1];
-    if ((option !== "--vendor" && option !== "--target") || value === undefined || value.startsWith("--") || options.has(option)) {
-      diagnostics.push(cliDiagnostic("cli.arguments.invalid", "Install arguments must contain one --vendor and one --target."));
-      break;
-    }
-    options.set(option, value);
-  }
-  if (argv.length !== 5 || options.size !== 2) diagnostics.push(cliDiagnostic("cli.arguments.count", "Install accepts no extra or missing arguments."));
-  const rawVendor = options.get("--vendor");
+    return scan.invalid
+      ? scan
+      : (option !== "--vendor" && option !== "--target") || value === undefined || value.startsWith("--") || scan.options.has(option)
+        ? { options: scan.options, invalid: true }
+        : { options: new Map([...scan.options, [option, value]]), invalid: false };
+  };
+
+/** Indexes 1, 3, 5, ... below the argument count: where each option name sits. */
+const optionIndexes = (argv: readonly string[]): readonly number[] =>
+  Array.from({ length: Math.max(0, Math.ceil((argv.length - 1) / 2)) }, (_, pair) => 1 + 2 * pair);
+
+function parseInstallArguments(argv: readonly string[], cwd: string): Result<InstallRequest> {
+  const plugin = argv[0];
+  const scan = optionIndexes(argv).reduce<OptionScan>(scanOption(argv), { options: new Map(), invalid: false });
+  const rawVendor = scan.options.get("--vendor");
   const vendor = rawVendor === undefined ? undefined : parseVendorId(rawVendor);
-  if (vendor === undefined || !vendor.ok) diagnostics.push(cliDiagnostic("cli.arguments.vendor", "Vendor must be exactly claude, cursor, or codex."));
-  const target = options.get("--target");
-  if (target === undefined) diagnostics.push(cliDiagnostic("cli.arguments.target", "Exactly one target directory is required."));
-  if (diagnostics.length > 0 || plugin === undefined || vendor === undefined || !vendor.ok || target === undefined) {
-    return { ok: false, diagnostics: [diagnostics[0] as Diagnostic, ...diagnostics.slice(1)] };
-  }
-  return { ok: true, value: { plugin: resolve(plugin), vendor: vendor.value, target } };
+  const target = scan.options.get("--target");
+  const diagnostics: readonly Diagnostic[] = [
+    ...(plugin === undefined || plugin.startsWith("-") ? [cliDiagnostic("cli.arguments.plugin", "Exactly one plugin path is required.")] : []),
+    ...(scan.invalid ? [cliDiagnostic("cli.arguments.invalid", "Install arguments must contain one --vendor and one --target.")] : []),
+    ...(argv.length !== 5 || scan.options.size !== 2 ? [cliDiagnostic("cli.arguments.count", "Install accepts no extra or missing arguments.")] : []),
+    ...(vendor === undefined || !vendor.ok ? [cliDiagnostic("cli.arguments.vendor", "Vendor must be exactly claude, cursor, or codex.")] : []),
+    ...(target === undefined ? [cliDiagnostic("cli.arguments.target", "Exactly one target directory is required.")] : []),
+  ];
+  const [first, ...rest] = diagnostics;
+  return first !== undefined || plugin === undefined || vendor === undefined || !vendor.ok || target === undefined
+    ? { ok: false, diagnostics: [first ?? cliDiagnostic("cli.arguments.invalid", "Install arguments are invalid."), ...rest] }
+    : { ok: true, value: { plugin: resolve(cwd, plugin), vendor: vendor.value, target } };
 }
 
 function resolveShippedBundle(pluginRoot: string, vendor: VendorId): Result<{ readonly bundle: VendorBundle; readonly adapter: VendorAdapter }> {
@@ -206,98 +239,95 @@ const checkSourceDrift = (
       : sourceDrift(vendor, location, bundle);
 };
 
-function printInstallResult(result: InstallResult, target: string): number {
+function printInstallResult(io: CliIo, result: InstallResult, target: string): number {
   switch (result.kind) {
     case "installed":
     case "unchanged":
-      console.log(JSON.stringify({
-        ok: true,
-        outcome: result.kind,
-        plugin: result.record.plugin,
-        version: result.record.version,
-        vendor: result.record.vendor,
-        adapterVersion: result.record.adapterVersion,
-        payloadDigest: result.record.payloadDigest,
-        target,
-        changedPaths: result.changedPaths,
-      }));
-      return 0;
-    case "failed-before-mutation": printInstallFailure(result.kind, result.diagnostics); return 3;
-    case "rolled-back": printInstallFailure(result.kind, result.diagnostics); return 4;
-    case "rollback-failed": printInstallFailure(result.kind, result.diagnostics, result.recoveryJournal); return 5;
+      return printText(
+        io,
+        JSON.stringify({
+          ok: true,
+          outcome: result.kind,
+          plugin: result.record.plugin,
+          version: result.record.version,
+          vendor: result.record.vendor,
+          adapterVersion: result.record.adapterVersion,
+          payloadDigest: result.record.payloadDigest,
+          target,
+          changedPaths: result.changedPaths,
+        }),
+        0,
+      );
+    case "failed-before-mutation":
+      return printInstallFailure(io, result.kind, result.diagnostics, 3);
+    case "rolled-back":
+      return printInstallFailure(io, result.kind, result.diagnostics, 4);
+    case "rollback-failed":
+      return printInstallFailure(io, result.kind, result.diagnostics, 5, result.recoveryJournal);
   }
 }
 
-function printInstallFailure(outcome: string, diagnostics: readonly Diagnostic[], recoveryJournal?: string): void {
-  console.error(JSON.stringify({ ok: false, outcome, diagnostics, ...(recoveryJournal === undefined ? {} : { recoveryJournal }) }));
+function printInstallFailure(io: CliIo, outcome: string, diagnostics: readonly Diagnostic[], exitCode: number, recoveryJournal?: string): number {
+  return printError(io, JSON.stringify({ ok: false, outcome, diagnostics, ...(recoveryJournal === undefined ? {} : { recoveryJournal }) }), exitCode);
 }
 
 function cliDiagnostic(code: string, message: string, path?: string): Diagnostic {
   return { severity: "error", code, message, ...(path === undefined ? {} : { path }) };
 }
 
-function runCreate(argv: readonly string[]): number {
-  if (argv.some(isHelpToken)) return printText(CREATE_USAGE, 0);
-
+function runCreate(io: CliIo, argv: readonly string[]): number {
   const parsed = parseNameAndPath(argv);
+  return argv.some(isHelpToken) ? printText(io, CREATE_USAGE, 0) : createFrom(io, parsed);
+}
+
+function createFrom(io: CliIo, parsed: ParsedNamePath): number {
   switch (parsed.kind) {
     case "missing-name":
-      console.error(CREATE_USAGE);
-      return 1;
+      return printError(io, CREATE_USAGE, 1);
     case "missing-path-value":
-      console.error(`Missing value for --path\n\n${CREATE_USAGE}`);
-      return 1;
+      return printError(io, `Missing value for --path\n\n${CREATE_USAGE}`, 1);
     case "ok": {
-      const destination =
-        parsed.path ?? resolve(process.cwd(), pluginDirectoryName(parsed.name));
+      const destination = parsed.path ?? resolve(io.cwd(), pluginDirectoryName(parsed.name));
       return printAuthoring(
-        createPluginScaffold({
-          name: parsed.name,
-          destination: resolve(destination),
-          rawDestination: parsed.rawPath ?? destination,
-        }),
+        io,
+        createPluginScaffold({ name: parsed.name, destination: resolve(io.cwd(), destination), rawDestination: parsed.rawPath ?? destination }),
         parsed.name,
       );
     }
   }
 }
 
-function runAdd(argv: readonly string[]): number {
+function runAdd(io: CliIo, argv: readonly string[]): number {
   switch (argv[0]) {
     case "skill":
-      return runAddSkill(argv.slice(1));
+      return runAddSkill(io, argv.slice(1));
     case "help":
     case "--help":
     case "-h":
-      return printText(ADD_SKILL_USAGE, 0);
+      return printText(io, ADD_SKILL_USAGE, 0);
     case undefined:
-      console.error(ADD_SKILL_USAGE);
-      return 1;
+      return printError(io, ADD_SKILL_USAGE, 1);
     default:
-      console.error(`Unknown add target: ${argv[0]}\n\n${ADD_SKILL_USAGE}`);
-      return 1;
+      return printError(io, `Unknown add target: ${argv[0]}\n\n${ADD_SKILL_USAGE}`, 1);
   }
 }
 
-function runAddSkill(argv: readonly string[]): number {
-  if (argv.some(isHelpToken)) return printText(ADD_SKILL_USAGE, 0);
-
+function runAddSkill(io: CliIo, argv: readonly string[]): number {
   const parsed = parseNameAndPath(argv);
+  return argv.some(isHelpToken) ? printText(io, ADD_SKILL_USAGE, 0) : addSkillFrom(io, parsed);
+}
+
+function addSkillFrom(io: CliIo, parsed: ParsedNamePath): number {
   switch (parsed.kind) {
     case "missing-name":
-      console.error(ADD_SKILL_USAGE);
-      return 1;
+      return printError(io, ADD_SKILL_USAGE, 1);
     case "missing-path-value":
-      console.error(`Missing value for --path\n\n${ADD_SKILL_USAGE}`);
-      return 1;
+      return printError(io, `Missing value for --path\n\n${ADD_SKILL_USAGE}`, 1);
     case "ok": {
-      const pluginRoot = parsed.path ?? process.cwd();
+      const pluginRoot = parsed.path ?? io.cwd();
       return printAuthoring(
-        addSkillScaffold({
-          skillName: parsed.name,
-          pluginRoot: resolve(pluginRoot),
-          rawPluginRoot: parsed.rawPath ?? pluginRoot,
-        }),
+        io,
+        addSkillScaffold({ skillName: parsed.name, pluginRoot: resolve(io.cwd(), pluginRoot), rawPluginRoot: parsed.rawPath ?? pluginRoot }),
         parsed.name,
       );
     }
@@ -316,42 +346,29 @@ type ParsedNamePath =
 
 function parseNameAndPath(argv: readonly string[]): ParsedNamePath {
   const pathIndex = argv.findIndex((token) => token === "--path");
-  switch (pathIndex) {
-    case -1: {
-      const name = argv[0];
-      return name === undefined ? { kind: "missing-name" } : { kind: "ok", name };
-    }
-    default: {
-      const rawPath = argv[pathIndex + 1];
-      if (rawPath === undefined) return { kind: "missing-path-value" };
-      const name = argv.filter((_, index) => index !== pathIndex && index !== pathIndex + 1)[0];
-      return name === undefined
-        ? { kind: "missing-name" }
+  const rawPath = pathIndex === -1 ? undefined : argv[pathIndex + 1];
+  const name = pathIndex === -1 ? argv[0] : argv.filter((_, index) => index !== pathIndex && index !== pathIndex + 1)[0];
+  return pathIndex !== -1 && rawPath === undefined
+    ? { kind: "missing-path-value" }
+    : name === undefined
+      ? { kind: "missing-name" }
+      : rawPath === undefined
+        ? { kind: "ok", name }
         : { kind: "ok", name, path: rawPath, rawPath };
-    }
-  }
 }
 
-function printAuthoring(result: AuthoringResult, name: string): number {
-  switch (result.diagnostics.length === 0) {
-    case true:
-      console.log(
+function printAuthoring(io: CliIo, result: AuthoringResult, name: string): number {
+  return result.diagnostics.length === 0
+    ? printText(
+        io,
         JSON.stringify(
-          {
-            ok: true,
-            path: result.path,
-            name: result.name ?? name,
-            ...(result.nextSteps === undefined ? {} : { nextSteps: result.nextSteps }),
-          },
+          { ok: true, path: result.path, name: result.name ?? name, ...(result.nextSteps === undefined ? {} : { nextSteps: result.nextSteps }) },
           null,
           2,
         ),
-      );
-      return 0;
-    case false:
-      console.error(JSON.stringify(result.diagnostics, null, 2));
-      return 1;
-  }
+        0,
+      )
+    : printError(io, JSON.stringify(result.diagnostics, null, 2), 1);
 }
 
 function isHelpToken(token: string | undefined): boolean {
@@ -365,42 +382,38 @@ function isHelpToken(token: string | undefined): boolean {
   }
 }
 
-function printUsage(exitCode: number): number {
-  return printText(USAGE.trimEnd(), exitCode);
+function printUsage(io: CliIo, exitCode: number): number {
+  return printText(io, USAGE.trimEnd(), exitCode);
 }
 
-function printText(text: string, exitCode: number): number {
-  console.log(text);
+function printText(io: CliIo, text: string, exitCode: number): number {
+  io.out(text);
   return exitCode;
 }
 
-function validatePlugin(pluginPath: string): number {
+function printError(io: CliIo, text: string, exitCode: number): number {
+  io.err(text);
+  return exitCode;
+}
+
+function validatePlugin(io: CliIo, pluginPath: string): number {
   const inspection = loadPluginRoot(pluginPath);
-  const hasError = inspection.diagnostics.some((diagnostic) => diagnostic.severity === "error");
-  switch (hasError) {
-    case true:
-      console.error(JSON.stringify(inspection.diagnostics, null, 2));
-      return 1;
-    case false:
-      console.log(JSON.stringify({ ok: true }));
-      return 0;
-  }
+  return inspection.diagnostics.some((diagnostic) => diagnostic.severity === "error")
+    ? printError(io, JSON.stringify(inspection.diagnostics, null, 2), 1)
+    : printText(io, JSON.stringify({ ok: true }), 0);
 }
 
-function printInspection(inspection: PluginInspection): number {
-  console.log(JSON.stringify(inspection, null, 2));
-  return inspection.diagnostics.some((diagnostic) => diagnostic.severity === "error") ? 1 : 0;
-}
-
-if (isCliEntrypoint(process.argv[1], import.meta.url)) {
-  process.exit(run(process.argv.slice(2)));
+function printInspection(io: CliIo, inspection: PluginInspection): number {
+  return printText(io, JSON.stringify(inspection, null, 2), inspection.diagnostics.some((diagnostic) => diagnostic.severity === "error") ? 1 : 0);
 }
 
 function isCliEntrypoint(entrypoint: string | undefined, moduleUrl: string): boolean {
-  if (!entrypoint) return false;
-  return toRealPath(entrypoint) === toRealPath(fileURLToPath(moduleUrl));
+  return entrypoint !== undefined && entrypoint !== "" && toRealPath(entrypoint) === toRealPath(fileURLToPath(moduleUrl));
 }
 
 function toRealPath(path: string): string {
   return realpathSync(resolve(path));
 }
+
+// Edge: the program's one effectful invocation, when this module is run as the CLI.
+if (isCliEntrypoint(process.argv[1], import.meta.url)) process.exit(run(process.argv.slice(2))); // fp-allow: no-ambient-effect

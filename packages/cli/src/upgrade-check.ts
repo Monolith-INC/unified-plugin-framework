@@ -15,9 +15,12 @@ import {
   type WorkflowAdapter,
 } from "@agent-plugins/workflows";
 
-import { configError, gatherBinding, NODE_PLUGIN_FACTS_IO, tokenize, type PluginFactsIo } from "./plugin-facts.js";
+import { configError, gatherBinding, parseRootArgs, tokenize, type PluginFactsIo, type PluginRootArg } from "./plugin-facts.js";
+import { NODE_PLUGIN_FACTS_IO } from "./plugin-reader.js";
 
-export const UPGRADE_CHECK_USAGE = `Usage: agent-plugin upgrade-check <workflow> --framework <dir> --plugin-root <dir>...
+export const UPGRADE_CHECK_USAGE = `Usage: agent-plugin upgrade-check <workflow> --framework <dir> --plugin-root [<plugin>[@<version>]=]<dir>...
+
+Name a plugin that has no manifest, such as a bare skills folder, as <plugin>=<dir>, and give its release as <plugin>@<version>=<dir>.
 
 Checks each candidate plugin version against the workflow adapter and, when every check passes, pins it in the
 framework's ${LOCK_FILE}. Exit codes: 0 pinned, 1 a check failed (the lock is unchanged), 2 invalid arguments or
@@ -36,7 +39,7 @@ export interface UpgradeCheckIo extends PluginFactsIo {
 interface UpgradeRequest {
   readonly adapter: WorkflowAdapter<string>;
   readonly framework: string;
-  readonly pluginRoots: readonly string[];
+  readonly pluginRoots: readonly PluginRootArg[];
 }
 
 type Parsed =
@@ -57,19 +60,19 @@ const toRequest = (
 ): Parsed => {
   const [workflow, ...extra] = positionals;
   const adapter = workflow === undefined ? undefined : findWorkflow(workflow);
-  const roots = values["plugin-root"] ?? [];
+  const given = values["plugin-root"] ?? [];
+  const roots = parseRootArgs(cwd, given);
   return extra.length > 0
     ? { kind: "invalid", message: `Unexpected arguments: ${extra.join(" ")}.` }
     : adapter === undefined
       ? { kind: "invalid", message: `Unknown workflow ${JSON.stringify(workflow ?? "")}.` }
       : values.framework === undefined
         ? { kind: "invalid", message: "--framework is required: the framework plugin root whose manifest declares the plugins." }
-        : roots.length === 0
+        : given.length === 0
           ? { kind: "invalid", message: "--plugin-root is required: the candidate version of each plugin to check." }
-          : {
-              kind: "ok",
-              request: { adapter, framework: resolve(cwd, values.framework), pluginRoots: roots.map((root) => resolve(cwd, root)) },
-            };
+          : !roots.ok
+            ? { kind: "invalid", message: roots.message }
+            : { kind: "ok", request: { adapter, framework: resolve(cwd, values.framework), pluginRoots: roots.roots } };
 };
 
 /** Parses `upgrade-check` arguments; `cwd` resolves relative paths. */

@@ -10,7 +10,7 @@ Review a finished user story against its description, requirements and definitio
 
 ## Check readiness and recover
 
-Before reviewing, check each step in order. When a step fails, take its recovery action and continue with the review. Involve the user only where a step says so, in one short message.
+Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message.
 
 1. **Available:** `monolithic-code-review-toolkit:review-story-preflight` and `monolithic-code-review-toolkit:review-story-postflight` are available in this session. If not, ask the user to install and enable `monolithic-code-review-toolkit` for this host, then continue once it is. This workflow is tested with `monolithic-code-review-toolkit` 0.6.0. If the session shows another version installed, mention it to the user once, in one line, and continue.
 2. **Project knowledge store:** `.project-knowledge.json` names a `knowledgeRoot`. If not, run `project-knowledge:setup-project-knowledge` with its recommended defaults, then continue.
@@ -19,7 +19,7 @@ Before reviewing, check each step in order. When a step fails, take its recovery
 
 ## Run the review
 
-Hand the review to the skill that fits:
+Hand the work to the skill that fits:
 
 - `monolithic-code-review-toolkit:review-story-preflight` — Before the pull request exists: reviews the story branch and reports findings only.
 - `monolithic-code-review-toolkit:review-story-postflight` — Once the pull request is open: reviews the remote diff and posts review comments; confirm before posting.

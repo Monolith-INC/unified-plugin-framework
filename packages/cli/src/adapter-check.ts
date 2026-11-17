@@ -12,14 +12,18 @@ import {
 import {
   configError,
   gatherBinding,
-  NODE_PLUGIN_FACTS_IO,
+  parseRootArgs,
   tokenize,
   type Gathered,
   type JsonFile,
   type PluginFactsIo,
+  type PluginRootArg,
 } from "./plugin-facts.js";
+import { NODE_PLUGIN_FACTS_IO } from "./plugin-reader.js";
 
-export const ADAPTER_CHECK_USAGE = `Usage: agent-plugin adapter-check <workflow> --framework <dir> [--plugin-root <dir>]... [--project <dir>]
+export const ADAPTER_CHECK_USAGE = `Usage: agent-plugin adapter-check <workflow> --framework <dir> [--plugin-root [<plugin>[@<version>]=]<dir>]... [--project <dir>]
+
+Name a plugin that has no manifest, such as a bare skills folder, as <plugin>=<dir>, and give its release as <plugin>@<version>=<dir>.
 
 Exit codes: 0 ready, 1 not ready (prints the failing step), 2 invalid arguments or configuration.`;
 
@@ -33,7 +37,7 @@ interface CheckRequest {
   readonly adapter: WorkflowAdapter<string>;
   readonly framework: string;
   readonly project: string;
-  readonly pluginRoots: readonly string[];
+  readonly pluginRoots: readonly PluginRootArg[];
 }
 
 type Parsed =
@@ -55,21 +59,24 @@ const toRequest = (
 ): Parsed => {
   const [workflow, ...extra] = positionals;
   const adapter = workflow === undefined ? undefined : findWorkflow(workflow);
+  const roots = parseRootArgs(cwd, values["plugin-root"] ?? []);
   return extra.length > 0
     ? { kind: "invalid", message: `Unexpected arguments: ${extra.join(" ")}.` }
     : adapter === undefined
       ? { kind: "invalid", message: `Unknown workflow ${JSON.stringify(workflow ?? "")}.` }
       : values.framework === undefined
         ? { kind: "invalid", message: "--framework is required: the framework plugin root whose manifest declares the plugins." }
-        : {
-            kind: "ok",
-            request: {
-              adapter,
-              framework: resolve(cwd, values.framework),
-              project: resolve(cwd, values.project ?? "."),
-              pluginRoots: (values["plugin-root"] ?? []).map((root) => resolve(cwd, root)),
-            },
-          };
+        : !roots.ok
+          ? { kind: "invalid", message: roots.message }
+          : {
+              kind: "ok",
+              request: {
+                adapter,
+                framework: resolve(cwd, values.framework),
+                project: resolve(cwd, values.project ?? "."),
+                pluginRoots: roots.roots,
+              },
+            };
 };
 
 /** Parses `adapter-check` arguments; `cwd` resolves relative paths. */

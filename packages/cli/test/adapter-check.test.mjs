@@ -68,7 +68,7 @@ test("adapter-check rejects bad input with exit 2 instead of a readiness result"
   const toolkit = fakeToolkit(TOOLKIT_SKILLS);
   const cases = [
     ["adapter-check", "toString", "--framework", framework],
-    ["adapter-check", "discovery", "--framework", framework],
+    ["adapter-check", "planning", "--framework", framework],
     ["adapter-check", "code-review"],
     ["adapter-check", "code-review", "--framework", framework, "--plugin-root"],
     ["adapter-check", "code-review", "--framework", framework, "--colour", "red"],

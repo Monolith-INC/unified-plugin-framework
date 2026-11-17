@@ -11,30 +11,54 @@
       "sha256": "6a47f4bdb35cedf232adaf3464f26a0a3872fa73bfed4e58d41c748de16a6819"
     },
     {
-      "bytes": 2132,
+      "bytes": 3500,
+      "mode": 420,
+      "path": "skills/discover-comprehensive/SKILL.md",
+      "sha256": "5df56f7336ffcf929e0217d30567c81494738b3131256b802439bcf17582f524"
+    },
+    {
+      "bytes": 3217,
+      "mode": 420,
+      "path": "skills/discover-quick/SKILL.md",
+      "sha256": "e1910d7b2b155c1811d77b7474c7e0e3f1c033c0991e5e2d5eb37e3bf4bfbe23"
+    },
+    {
+      "bytes": 3446,
+      "mode": 420,
+      "path": "skills/discover-research/SKILL.md",
+      "sha256": "7781cd992683552d4d4cc946f5a136952ad43d07e8e23718e4e612f921ebd896"
+    },
+    {
+      "bytes": 3385,
+      "mode": 420,
+      "path": "skills/discover-thorough/SKILL.md",
+      "sha256": "faeb5ec5184d8c9f3937fb47433da286c1071ffe4db725fb162128a43556ad7b"
+    },
+    {
+      "bytes": 2115,
       "mode": 420,
       "path": "skills/review-feature/SKILL.md",
-      "sha256": "2a891d3ed1d9a2cdb0babe81089d0228ca43e55993e4d50e92fb094bf352eee3"
+      "sha256": "caff4816c85581ba491782b981b69f3589efa8fae4acc10147046ae5e794adac"
     },
     {
-      "bytes": 2822,
+      "bytes": 2803,
       "mode": 420,
       "path": "skills/review-story/SKILL.md",
-      "sha256": "05fc65a95f03752abbae9c87f62ff3b932a5816470baf5618dd051d1360122b7"
+      "sha256": "7de71d8823e7b2733aaf07b6045545c35a6c7c0cec29dd76fe11e962f93ce7a2"
     },
     {
-      "bytes": 2200,
+      "bytes": 2183,
       "mode": 420,
       "path": "skills/review-task/SKILL.md",
-      "sha256": "1d8044ba5dbc391557703e3f18fc8afa37910cc1a1906c5e834cb95f95be8292"
+      "sha256": "2d3a76f64fc8783b2f9cab9cb12c262b40381455471ccd7c3d7dd50e63cdef75"
     }
   ],
-  "payloadDigest": "948d2f02e5fdc1b6b0906db023fa0eef12e6a09decf75132586e98ff96e68131",
+  "payloadDigest": "7da87d1539bb6af77d1037d8efe825a4e0c91405336a497fe86f3e67d6c6da7b",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "f97d670170208b4086354db10d5419f8166013c4fad8fd2f1ec5e17cfd7f5d7c",
+  "sourceDigest": "438e2a39973c3d40f144547886df86e433d471c1ca3876aff9c959fece50ae36",
   "vendor": "claude"
 }

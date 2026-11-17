@@ -193,7 +193,7 @@ The framework declares the outside plugins its workflows depend on under one nam
 }
 ```
 
-Each entry needs a non-empty `name`, `version` range, `source` and `adapter`, and the adapter must be a known workflow adapter (currently `code-review`). `validate` reports missing fields, unknown adapters and duplicate names; `inspect` lists the valid entries under `onboardedPlugins`. See the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
+Each entry needs a non-empty `name`, `version` range, `source` and `adapter`, and the adapter must be a known workflow adapter (currently `code-review` or `discovery`). `validate` reports missing fields, unknown adapters and duplicate names; `inspect` lists the valid entries under `onboardedPlugins`. See the [workflow adapter architecture](docs/work-items/2026-11-15-workflow-adapter-architecture.md).
 
 ### Skills
 
