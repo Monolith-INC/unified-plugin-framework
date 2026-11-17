@@ -20,6 +20,18 @@ Follow the linked Linear implementation plan. Keep pure planning separate from f
 
 Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify when implementation changes require them.
 
+## Working efficiently
+
+Resources are limited: every review, check and sub-agent must add quality, not repeat work already done.
+
+1. **One review pass per change, sized to the change.**
+   - A feature or behaviour change gets one requirements review on the open pull request (`review-story-postflight`, posting only after the user confirms) and one thermos pass. Do not also run pre-flight or `review-feature` on the same change; they repeat the post-flight.
+   - A small change, such as docs, a one-file fix or a test-only change, gets no thermos and no separate review skill: check it yourself once, against what was asked.
+   - Apply all findings in one round of fixes. Do not review the fixes again unless they change behaviour.
+2. **Sub-agents run on a mid-tier model.** Launch reviewers and other sub-agents on a mid-tier model, not the most capable tier, overriding any top-tier default in their definitions. Use the top tier only when the user asks for it.
+3. **Low reasoning effort for routine steps.** Pushing, committing, status checks, ticket updates and small edits need no deep reasoning; keep replies and tool use short.
+4. **Full checks once, before pushing.** While working, run only the narrow check that answers the question at hand: build the touched package, run its own tests. Run the full suite (install, typecheck, build, test, `payloads:verify`, hook tests, in a clean clone) once, when the work is done and before asking to push. Re-run it only if code changed after that run.
+
 # Functional programming rules
 
 These rules are mandatory. Runnable TypeScript references: `docs/functional-rules/examples/`.
