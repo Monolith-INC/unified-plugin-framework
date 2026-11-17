@@ -41,9 +41,10 @@ test("a shipped plugin that cannot be assembled is reported per plugin and nothi
   });
   const reports = releasePayloads("build", unusedAdapter, { pluginsRoot, payloadsRoot });
   assert.deepEqual(reports.map(({ plugin }) => plugin), [...SHIPPED_PLUGINS]);
-  reports.map(({ result }) => {
+  reports.map(({ plugin, result }) => {
     assert.equal(result.ok, false);
     assert.equal(result.diagnostics[0].code, "release.assembly.failed");
+    assert.equal(result.diagnostics[0].path, plugin);
     return result;
   });
   assert.deepEqual(readdirSync(payloadsRoot), []);
@@ -64,7 +65,7 @@ test("a shipped plugin whose directory and manifest names differ is reported and
   reports.map(({ plugin, result }) => {
     assert.equal(result.ok, false);
     assert.equal(result.diagnostics[0].code, "release.plugin.name_mismatch");
-    assert.match(result.diagnostics[0].message, new RegExp(`renamed-${plugin}`));
+    assert.match(result.diagnostics[0].message, new RegExp(`plugins/${plugin} to plugins/renamed-${plugin}`));
     return plugin;
   });
   assert.deepEqual(readdirSync(payloadsRoot), []);

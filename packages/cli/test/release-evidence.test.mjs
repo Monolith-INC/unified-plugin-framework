@@ -12,9 +12,9 @@ import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { CLAUDE_SHIPPED_HELLO_WORLD, claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
-import { CODEX_SHIPPED_HELLO_WORLD, codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
-import { CURSOR_SHIPPED_HELLO_WORLD, cursorAdapter, cursorShippedBundle } from "@agent-plugins/adapter-cursor";
+import { claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
+import { codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
+import { cursorAdapter, cursorShippedBundle } from "@agent-plugins/adapter-cursor";
 import {
   finalizeVendorBundle,
   normalizeCanonicalPlugin,
@@ -32,21 +32,18 @@ const vendors = [
     adapter: claudeAdapter,
     manifestPath: ".claude-plugin/plugin.json",
     packageRoot: "packages/adapter-claude",
-    shipped: CLAUDE_SHIPPED_HELLO_WORLD,
     shippedBundle: claudeShippedBundle,
   },
   {
     adapter: codexAdapter,
     manifestPath: ".codex-plugin/plugin.json",
     packageRoot: "packages/adapter-codex",
-    shipped: CODEX_SHIPPED_HELLO_WORLD,
     shippedBundle: codexShippedBundle,
   },
   {
     adapter: cursorAdapter,
     manifestPath: ".cursor-plugin/plugin.json",
     packageRoot: "packages/adapter-cursor",
-    shipped: CURSOR_SHIPPED_HELLO_WORLD,
     shippedBundle: cursorShippedBundle,
   },
 ];
@@ -107,8 +104,8 @@ test("every vendor supports install, unchanged reinstall, upgrade, compatible ol
   const canonical = normalizeCanonicalPlugin(helloWorldRoot);
   assert.equal(canonical.ok, true);
 
-  for (const { adapter, shipped } of vendors) {
-    const loaded = readVendorBundle(fileURLToPath(shipped));
+  for (const { adapter, shippedBundle } of vendors) {
+    const loaded = readVendorBundle(fileURLToPath(shippedBundle("hello-world")));
     assert.equal(loaded.ok, true);
     const target = mkdtempSync(join(tmpdir(), `release-${adapter.vendor}-`));
     writeFileSync(join(target, "unrelated.txt"), "preserve me\n");
@@ -204,22 +201,23 @@ test("release documentation is backed by shipped payloads and exercised install 
     assert.equal(JSON.parse(result.stdout).vendor, command.vendor);
   }
 
-  const shippedBundles = vendors.flatMap((vendor) =>
-    SHIPPED_PLUGINS.map((plugin) => ({ ...vendor, shipped: vendor.shippedBundle(plugin) })),
-  );
-  for (const { adapter, manifestPath, packageRoot, shipped } of shippedBundles) {
-    const bundlePath = join(fileURLToPath(shipped), "bundle.json");
+  for (const { adapter, packageRoot } of vendors) {
+    const packageManifest = readJson(join(repositoryRoot, packageRoot, "package.json"));
+    assert.ok(packageManifest.files.includes("payloads"), `${adapter.vendor} package publishes payloads`);
+    assert.ok(packageManifest.files.includes("schema"), `${adapter.vendor} package publishes schema evidence`);
+  }
+
+  const shippedBundles = vendors.flatMap((vendor) => SHIPPED_PLUGINS.map((plugin) => ({ ...vendor, plugin })));
+  for (const { manifestPath, plugin, shippedBundle } of shippedBundles) {
+    const shipped = fileURLToPath(shippedBundle(plugin));
+    const bundlePath = join(shipped, "bundle.json");
     const bundle = readJson(bundlePath);
     const documentedPath = relativeRepositoryPath(bundlePath);
     assert.match(documentation, new RegExp(documentedPath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
     assert.match(documentation, new RegExp(bundle.payloadDigest, "u"));
     assert.match(documentation, new RegExp(bundle.adapter.vendorSchemaVersion, "u"));
 
-    const packageManifest = readJson(join(repositoryRoot, packageRoot, "package.json"));
-    assert.ok(packageManifest.files.includes("payloads"), `${adapter.vendor} package publishes payloads`);
-    assert.ok(packageManifest.files.includes("schema"), `${adapter.vendor} package publishes schema evidence`);
-
-    const vendorManifest = readJson(join(fileURLToPath(shipped), "payload", manifestPath));
+    const vendorManifest = readJson(join(shipped, "payload", manifestPath));
     assert.equal(vendorManifest.sourceDigest, undefined);
     assert.equal(vendorManifest.payloadDigest, undefined);
     assert.equal(vendorManifest.adapter, undefined);

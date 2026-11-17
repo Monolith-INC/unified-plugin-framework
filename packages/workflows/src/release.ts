@@ -64,36 +64,45 @@ export const withAssembledSource = <A>(
   }
 };
 
-/** Install finds a payload by the plugin's manifest name, so a shipped plugin's directory must carry that name. */
-const nameMismatch = (plugin: string, root: string): string | undefined => {
+/**
+ * Install finds a payload by the unscoped part of the plugin's manifest name, so a shipped plugin's directory must be
+ * named after it. An unreadable manifest passes here and is left to the compiler to report.
+ */
+const nameMismatch = (plugin: string, root: string): CompileResult | undefined => {
   const name = loadPluginRoot(root).manifest?.name;
-  return name === undefined || pluginDirectoryName(name) === plugin
+  const expected = name === undefined ? plugin : pluginDirectoryName(name);
+  return expected === plugin
     ? undefined
-    : `Plugin directory ${plugin} must be named after its manifest name ${name}: install looks payloads up by manifest name.`;
+    : failed(
+        "release.plugin.name_mismatch",
+        [`Rename plugins/${plugin} to plugins/${expected}: install looks payloads up by the manifest name ${name ?? ""}.`],
+        plugin,
+      );
 };
 
-const releaseStaged = (
-  step: PayloadStep,
-  adapter: VendorAdapter,
-  adapters: readonly WorkflowAdapter<string>[],
-  root: string,
-  shipped: string,
-): CompileResult | VerificationResult => {
-  const staged = withAssembledSource(root, adapters, (source) => step(source, shipped, adapter));
-  return staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, root);
-};
+/** One shipped plugin: its name, its source directory, and where its payload is shipped. */
+interface ShippedPlugin {
+  readonly plugin: string;
+  readonly root: string;
+  readonly shipped: string;
+}
+
+const releaseStaged =
+  (step: PayloadStep, adapter: VendorAdapter, adapters: readonly WorkflowAdapter<string>[]) =>
+  ({ plugin, root, shipped }: ShippedPlugin): CompileResult | VerificationResult => {
+    const staged = withAssembledSource(root, adapters, (source) => step(source, shipped, adapter));
+    return staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, plugin);
+  };
 
 const releaseOne =
   (step: PayloadStep, adapter: VendorAdapter, layout: ReleaseLayout, adapters: readonly WorkflowAdapter<string>[]) =>
   (plugin: string): PayloadReport => {
     const root = join(layout.pluginsRoot, plugin);
-    const mismatch = nameMismatch(plugin, root);
     return {
       plugin,
       result:
-        mismatch === undefined
-          ? releaseStaged(step, adapter, adapters, root, join(layout.payloadsRoot, plugin))
-          : failed("release.plugin.name_mismatch", [mismatch], plugin),
+        nameMismatch(plugin, root) ??
+        releaseStaged(step, adapter, adapters)({ plugin, root, shipped: join(layout.payloadsRoot, plugin) }),
     };
   };
 
