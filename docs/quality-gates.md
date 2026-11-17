@@ -28,7 +28,7 @@ GitHub Actions workflow `.github/workflows/ci.yml` runs on every pull request an
 
 Failures identify the OS/Node job name. On failure, CI attempts to upload log artifacts for 14 days.
 
-The CI matrix also runs `pnpm payloads:verify` and `pnpm release:assets`, so every shipped plugin builds deterministically for every host and packs into release assets that round-trip, on every pull request. Payloads are generated, never committed; tagging `v<version>` publishes them through `.github/workflows/release.yml`.
+The CI matrix also runs `pnpm payloads:verify` and `pnpm release:assets`, so every shipped plugin builds deterministically for every host and packs into release assets that round-trip, on every pull request. Payloads are generated, never committed; tagging `v<version>` on `main` runs this suite again and publishes them through `.github/workflows/release.yml`.
 
 ## Platform-specific filesystem notes
 

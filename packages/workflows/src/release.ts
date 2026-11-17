@@ -12,6 +12,7 @@ import {
   type VendorBundle,
   type VerificationResult,
 } from "@agent-plugins/compiler";
+import { failureOf } from "@agent-plugins/compiler/railway";
 import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plugins/core";
 
 import type { WorkflowAdapter } from "./adapter.js";
@@ -37,9 +38,17 @@ export interface PayloadReport {
 
 type PayloadStep = (source: string, shipped: string, adapter: VendorAdapter) => CompileResult | VerificationResult;
 
+const buildPayload: PayloadStep = (source, shipped, adapter) => compileVendorPayload({ source, vendor: adapter.vendor, output: shipped }, adapter);
+
+/** Builds, then builds again and compares, so a payload that is not deterministic or not valid for its host fails. */
+const verifyPayload: PayloadStep = (source, shipped, adapter) => {
+  const built = buildPayload(source, shipped, adapter);
+  return built.ok ? verifyVendorPayload({ source, vendor: adapter.vendor, shipped }, adapter) : built;
+};
+
 const PAYLOAD_STEPS: ReadonlyMap<string, PayloadStep> = new Map<string, PayloadStep>([
-  ["build", (source, shipped, adapter) => compileVendorPayload({ source, vendor: adapter.vendor, output: shipped }, adapter)],
-  ["verify", (source, shipped, adapter) => verifyVendorPayload({ source, vendor: adapter.vendor, shipped }, adapter)],
+  ["build", buildPayload],
+  ["verify", verifyPayload],
 ]);
 
 const failed = (code: string, messages: readonly string[], path: string): CompileResult => ({
@@ -122,29 +131,31 @@ export const releasePayloads = (
     : SHIPPED_PLUGINS.map(releaseOne(step, adapter, layout, adapters));
 };
 
-const asResult = (diagnostics: readonly Diagnostic[], path: string): Result<never> => {
-  const [first, ...rest] = diagnostics;
-  return { ok: false, diagnostics: [first ?? { severity: "error", code: "release.build.failed", message: "Plugin could not be built.", path }, ...rest] };
-};
+const buildDiagnostic =
+  (code: string, path: string) =>
+  (message: string): Diagnostic => ({ severity: "error", code, message, path });
 
-const readCompiled = (result: CompileResult, output: string): Result<VendorBundle> =>
-  result.ok ? readVendorBundle(output) : asResult(result.diagnostics, output);
+/** Compiles the assembled copy into a sibling directory of the same temporary staging area, then reads it back. */
+const compileAssembled =
+  (adapter: VendorAdapter) =>
+  (source: string): Result<VendorBundle> => {
+    const output = `${source}.compiled`;
+    const compiled = compileVendorPayload({ source, vendor: adapter.vendor, output }, adapter);
+    return compiled.ok ? readVendorBundle(output) : failureOf(compiled.diagnostics, buildDiagnostic("release.build.failed", output)("Plugin could not be built."));
+  };
 
-// Effect boundary: compiles into a temporary directory, reads the bundle into memory, and always removes the directory.
+// Boundary: assembly copies the source tree and throws when it is missing or unreadable; that throw becomes a diagnostic.
 /** Builds one host's bundle from a plugin source checkout the way the release build does; nothing written outlives the call. */
 export const buildVendorBundle = (
   sourceRoot: string,
   adapter: VendorAdapter,
   adapters: readonly WorkflowAdapter<string>[],
 ): Result<VendorBundle> => {
-  const scratch = mkdtempSync(join(tmpdir(), "upf-bundle-"));
+  const assemblyFailure = buildDiagnostic("release.assembly.failed", sourceRoot);
   try {
-    const output = join(scratch, "bundle");
-    const staged = withAssembledSource(sourceRoot, adapters, (source) =>
-      readCompiled(compileVendorPayload({ source, vendor: adapter.vendor, output }, adapter), output),
-    );
-    return staged.ok ? staged.value : asResult(staged.problems.map((message): Diagnostic => ({ severity: "error", code: "release.assembly.failed", message, path: sourceRoot })), sourceRoot);
-  } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    const staged = withAssembledSource(sourceRoot, adapters, compileAssembled(adapter));
+    return staged.ok ? staged.value : failureOf(staged.problems.map(assemblyFailure), assemblyFailure("Plugin could not be assembled."));
+  } catch {
+    return failureOf([], buildDiagnostic("release.source.unreadable", sourceRoot)("Plugin source could not be read; pass a plugin directory."));
   }
 };

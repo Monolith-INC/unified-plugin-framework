@@ -1,33 +1,29 @@
-// Release edge: packs the generated host payloads (`pnpm payloads:build`) into one archive per plugin per host,
-// writes SHA256SUMS beside them, and proves every archive unpacks to the bundle it was packed from.
+// Release edge: builds every shipped plugin for every host from source, packs one archive per plugin per host,
+// proves each archive round-trips, then writes the archives and SHA256SUMS. All logic is in packReleaseSet.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { VENDOR_IDS, readVendorBundle } from "@agent-plugins/compiler";
-import { CHECKSUMS_ASSET, SHIPPED_PLUGINS, packReleaseAsset, parseChecksums, renderChecksums, unpackReleaseAsset } from "@agent-plugins/workflows";
+import { SHIPPED_PLUGINS, buildVendorBundle } from "@agent-plugins/workflows";
+
+import { HOST_ADAPTERS } from "../dist/bundle-source.js";
+import { CHECKSUMS_ASSET, packReleaseSet } from "../dist/release-asset.js";
 
 const repository = resolve(import.meta.dirname, "../../..");
 const output = resolve(process.argv[2] ?? join(repository, "release-assets"));
 
-const loaded = VENDOR_IDS.flatMap((vendor) =>
-  SHIPPED_PLUGINS.map((plugin) => ({ vendor, plugin, bundle: readVendorBundle(join(repository, "packages", `adapter-${vendor}`, "payloads", plugin)) })),
+const set = packReleaseSet(
+  Object.values(HOST_ADAPTERS).flatMap((adapter) =>
+    SHIPPED_PLUGINS.map((plugin) => buildVendorBundle(join(repository, "plugins", plugin), adapter)),
+  ),
 );
-const unreadable = loaded.filter(({ bundle }) => !bundle.ok);
-const assets = unreadable.length === 0 ? loaded.map(({ bundle }) => packReleaseAsset(bundle.value)) : [];
-const checksums = renderChecksums(assets);
-const digests = parseChecksums(checksums);
-const roundTrips = loaded.flatMap(({ bundle }, index) => {
-  const asset = assets[index];
-  const unpacked = asset === undefined ? undefined : unpackReleaseAsset(asset.bytes, digests.get(asset.name) ?? "");
-  return unpacked?.ok === true && unpacked.value.manifest.payloadDigest === bundle.value.manifest.payloadDigest ? [] : [asset?.name ?? "?"];
-});
 
-const report = { output, assets: assets.map(({ name }) => name), unreadable, roundTripFailures: unreadable.length === 0 ? roundTrips : [] };
-const ok = unreadable.length === 0 && roundTrips.length === 0;
-if (ok) {
+// Effect: write the release files only when every bundle built and every archive round-tripped.
+const writeRelease = ({ assets, checksums }) => {
   mkdirSync(output, { recursive: true });
-  assets.map(({ name, bytes }) => writeFileSync(join(output, name), bytes));
-  writeFileSync(join(output, CHECKSUMS_ASSET), checksums);
-}
+  [...assets, { name: CHECKSUMS_ASSET, bytes: checksums }].map(({ name, bytes }) => writeFileSync(join(output, name), bytes));
+  return assets.map(({ name }) => name);
+};
+
+const report = set.ok ? { ok: true, output, assets: writeRelease(set.value) } : { ok: false, diagnostics: set.diagnostics };
 process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-process.exitCode = ok ? 0 : 1;
+process.exitCode = set.ok ? 0 : 1;

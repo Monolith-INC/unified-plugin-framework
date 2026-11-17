@@ -4,17 +4,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runProject } from "./project.js";
 
-import { claudeAdapter } from "@agent-plugins/adapter-claude";
-import { codexAdapter } from "@agent-plugins/adapter-codex";
-import { cursorAdapter } from "@agent-plugins/adapter-cursor";
-import {
-  parseVendorId,
-  type InstallResult,
-  type Result,
-  type VendorAdapter,
-  type VendorBundle,
-  type VendorId,
-} from "@agent-plugins/compiler";
+import { failure, parseVendorId, success, type InstallResult, type Result, type VendorId } from "@agent-plugins/compiler";
+import { andThen, failureOf } from "@agent-plugins/compiler/railway";
 
 import {
   addSkillScaffold,
@@ -26,10 +17,11 @@ import {
 } from "@agent-plugins/core";
 import type { Diagnostic } from "@agent-plugins/core";
 import { installVendorBundle } from "@agent-plugins/installer";
-import { buildVendorBundle } from "@agent-plugins/workflows";
 
 import { NODE_ADAPTER_CHECK_IO, runAdapterCheck } from "./adapter-check.js";
-import { downloadReleaseBundle, nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
+import { bundleResolver, type BundleSource, type ResolvedBundle } from "./bundle-source.js";
+import { RELEASE_VERSION } from "./release-asset.js";
+import { nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
 import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
 
 const USAGE = `Usage: agent-plugin <command> [options]
@@ -37,10 +29,10 @@ const USAGE = `Usage: agent-plugin <command> [options]
 Commands:
   validate [path]                   Validate a plugin root (defaults to cwd)
   inspect  [path]                   Inspect portable components as JSON (defaults to cwd)
-  install <plugin> --vendor <claude|cursor|codex> --target <directory> --version <version>
+  install <plugin> --version <version> --vendor <claude|cursor|codex> --target <directory>
                                     Download a released host payload, verify it, install it transactionally
-  install <plugin-directory> --vendor <claude|cursor|codex> --target <directory>
-                                    Build a host payload from a source checkout and install it (development)
+  install --source <plugin-directory> --vendor <claude|cursor|codex> --target <directory>
+                                    Build a host payload from a source directory and install it (development)
   create <plugin-name> [--path dir] Scaffold a portable plugin root
   add skill <skill-name> [--path dir]
                                     Add an immediate-child Skill to a plugin root
@@ -54,11 +46,11 @@ Commands:
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
 const ADD_SKILL_USAGE = `Usage: agent-plugin add skill <skill-name> [--path <plugin-root>]`;
-const INSTALL_USAGE = `Usage: agent-plugin install <plugin> --vendor <claude|cursor|codex> --target <directory> --version <version>
-       agent-plugin install <plugin-directory> --vendor <claude|cursor|codex> --target <directory>
+const INSTALL_USAGE = `Usage: agent-plugin install <plugin> --version <version> --vendor <claude|cursor|codex> --target <directory>
+       agent-plugin install --source <plugin-directory> --vendor <claude|cursor|codex> --target <directory>
 
 With --version, downloads <plugin>'s payload for the host from that GitHub release, checks it against the release's
-SHA256SUMS, then installs it. Without --version, builds the payload from the plugin source directory (development).`;
+SHA256SUMS, then installs it. With --source, builds the payload from a plugin source directory (development).`;
 
 /** The effects every command needs, injected so commands are testable without a real console or process. */
 export interface CliIo {
@@ -104,32 +96,15 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
   }
 }
 
-/** Where an install takes its payload from: a GitHub release, or a plugin source checkout built on the spot. */
-export type BundleSource =
-  | { readonly kind: "release"; readonly plugin: string; readonly version: string; readonly vendor: VendorId }
-  | { readonly kind: "source"; readonly root: string; readonly vendor: VendorId };
-
-/** A bundle ready to install, with the adapter that plans its installation. */
-export type ResolvedBundle = Result<{ readonly bundle: VendorBundle; readonly adapter: VendorAdapter }>;
-
 export interface InstallCommandRuntime {
-  readonly resolve: (source: BundleSource) => ResolvedBundle | Promise<ResolvedBundle>;
+  readonly resolve: (source: BundleSource) => Promise<ResolvedBundle>;
   readonly install: typeof installVendorBundle;
 }
 
-const withAdapter = (vendor: VendorId, bundle: Result<VendorBundle>): ResolvedBundle =>
-  bundle.ok ? { ok: true, value: { bundle: bundle.value, adapter: HOST_ADAPTERS[vendor] } } : bundle;
-
-const resolveBundle = (source: BundleSource): ResolvedBundle | Promise<ResolvedBundle> => {
-  switch (source.kind) {
-    case "release":
-      return downloadReleaseBundle(nodeFetchBytes, releaseBaseUrl())(source).then((bundle) => withAdapter(source.vendor, bundle));
-    case "source":
-      return resolveSourceBundle(source.root, source.vendor);
-  }
-};
-
-const DEFAULT_INSTALL_RUNTIME: InstallCommandRuntime = Object.freeze({ resolve: resolveBundle, install: installVendorBundle });
+const DEFAULT_INSTALL_RUNTIME: InstallCommandRuntime = Object.freeze({
+  resolve: (source: BundleSource) => bundleResolver(nodeFetchBytes, releaseBaseUrl())(source),
+  install: installVendorBundle,
+});
 
 type InstallRequest = { readonly source: BundleSource; readonly target: string };
 
@@ -137,30 +112,24 @@ export function runInstallCommand(
   argv: readonly string[],
   runtime: InstallCommandRuntime = DEFAULT_INSTALL_RUNTIME,
   io: CliIo = NODE_CLI_IO,
-): number | Promise<number> {
+): Promise<number> {
   const parsed = parseInstallArguments(argv, io.cwd());
   return argv.some(isHelpToken)
-    ? printText(io, INSTALL_USAGE, 0)
+    ? Promise.resolve(printText(io, INSTALL_USAGE, 0))
     : parsed.ok
-      ? installSafely(io, runtime, parsed.value)
-      : printError(io, JSON.stringify({ ok: false, outcome: "invalid-arguments", diagnostics: parsed.diagnostics }), 2);
+      ? installFrom(io, runtime, parsed.value)
+      : Promise.resolve(printError(io, JSON.stringify({ ok: false, outcome: "invalid-arguments", diagnostics: parsed.diagnostics }), 2));
 }
 
 const unexpectedFailure = (io: CliIo): number =>
   printInstallFailure(io, "failed-before-mutation", [cliDiagnostic("cli.unexpected", "Unexpected platform failure.")], 70);
 
-/** Continues with a resolution that a local build returns at once and a download returns later. */
-const afterResolve = (pending: ResolvedBundle | Promise<ResolvedBundle>, finish: (resolved: ResolvedBundle) => number, crash: () => number): number | Promise<number> =>
-  pending instanceof Promise ? pending.then(finish).catch(crash) : finish(pending);
-
-/** Runs the install; an unexpected platform failure is reported without its details, never thrown. */
-function installSafely(io: CliIo, runtime: InstallCommandRuntime, request: InstallRequest): number | Promise<number> {
-  try {
-    return afterResolve(runtime.resolve(request.source), (resolved) => installResolved(io, runtime, request.target, resolved), () => unexpectedFailure(io));
-  } catch {
-    return unexpectedFailure(io);
-  }
-}
+/** One channel for every outcome: a resolver or installer that throws or rejects is reported without its details. */
+const installFrom = (io: CliIo, runtime: InstallCommandRuntime, { source, target }: InstallRequest): Promise<number> =>
+  Promise.resolve(source)
+    .then((selected) => runtime.resolve(selected))
+    .then((resolved) => installResolved(io, runtime, target, resolved))
+    .catch(() => unexpectedFailure(io));
 
 function installResolved(io: CliIo, runtime: InstallCommandRuntime, target: string, resolved: ResolvedBundle): number {
   const root = resolve(io.cwd(), target);
@@ -169,10 +138,10 @@ function installResolved(io: CliIo, runtime: InstallCommandRuntime, target: stri
     : printInstallFailure(io, "failed-before-mutation", resolved.diagnostics, 3);
 }
 
-/** The `--vendor`/`--target`/`--version` pairs after the plugin, read until the first malformed or repeated one. */
+/** The option pairs, read until the first malformed or repeated one. */
 type OptionScan = { readonly options: ReadonlyMap<string, string>; readonly invalid: boolean };
 
-const INSTALL_OPTIONS: ReadonlySet<string> = new Set(["--vendor", "--target", "--version"]);
+const INSTALL_OPTIONS: ReadonlySet<string> = new Set(["--vendor", "--target", "--version", "--source"]);
 
 const scanOption =
   (argv: readonly string[]) =>
@@ -186,70 +155,70 @@ const scanOption =
         : { options: new Map([...scan.options, [option, value]]), invalid: false };
   };
 
-/** A release version such as `0.2.0`, `v0.2.0` or `v0.2.0-rc.1`. */
-const RELEASE_VERSION = /^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+/** Indexes 0, 2, 4, ... below the argument count: where each option name sits. */
+const pairIndexes = (argv: readonly string[]): readonly number[] => Array.from({ length: Math.ceil(argv.length / 2) }, (_, pair) => 2 * pair);
+
+/** `<plugin>` when the first argument is not an option. */
+const positionalOf = (argv: readonly string[]): string | undefined => {
+  const first = argv[0];
+  return first !== undefined && !first.startsWith("-") ? first : undefined;
+};
 
 /** A released plugin is named by its directory name, never by a path. */
 const RELEASED_PLUGIN = /^[a-z0-9][a-z0-9-]*$/u;
 
-const versionDiagnostics = (plugin: string | undefined, version: string | undefined): readonly Diagnostic[] =>
-  version === undefined
+const nameDiagnostics = (plugin: string | undefined, version: string | undefined): readonly Diagnostic[] => [
+  ...(version === undefined || RELEASE_VERSION.test(version)
     ? []
-    : [
-        ...(RELEASE_VERSION.test(version) ? [] : [cliDiagnostic("cli.arguments.version", "Version must look like 0.2.0, v0.2.0 or v0.2.0-rc.1.")]),
-        ...(plugin === undefined || RELEASED_PLUGIN.test(plugin)
-          ? []
-          : [cliDiagnostic("cli.arguments.plugin", "With --version, name a released plugin such as unified-plugin-framework, not a path.")]),
-      ];
+    : [cliDiagnostic("cli.arguments.version", "Version must look like 0.2.0, v0.2.0 or v0.2.0-rc.1.")]),
+  ...(plugin === undefined || RELEASED_PLUGIN.test(plugin)
+    ? []
+    : [cliDiagnostic("cli.arguments.plugin", "Name a released plugin such as unified-plugin-framework; for a plugin directory use --source <dir>.")]),
+];
 
-const bundleSource = (plugin: string, vendor: VendorId, version: string | undefined, cwd: string): BundleSource =>
-  version === undefined ? { kind: "source", root: resolve(cwd, plugin), vendor } : { kind: "release", plugin, version, vendor };
+const MODE_HINT = "Install a released plugin with <plugin> --version <version>, or a plugin directory with --source <dir>; not both.";
 
-/** Indexes 1, 3, 5, ... below the argument count: where each option name sits. */
-const optionIndexes = (argv: readonly string[]): readonly number[] =>
-  Array.from({ length: Math.max(0, Math.ceil((argv.length - 1) / 2)) }, (_, pair) => 1 + 2 * pair);
+/** Exactly one mode: a released plugin and its version, or a source directory alone. */
+const bundleSource = (
+  arguments_: { readonly plugin: string | undefined; readonly version: string | undefined; readonly source: string | undefined },
+  vendor: VendorId,
+  cwd: string,
+): Result<BundleSource> => {
+  const { plugin, version, source } = arguments_;
+  return plugin !== undefined && version !== undefined && source === undefined
+    ? success({ kind: "release", plugin, version, vendor })
+    : plugin === undefined && version === undefined && source !== undefined
+      ? success({ kind: "source", root: resolve(cwd, source), vendor })
+      : failure(
+          cliDiagnostic(
+            "cli.arguments.mode",
+            plugin !== undefined && version === undefined && source === undefined
+              ? `Add --version <version> to install the released ${plugin}, or use --source <dir> to build a plugin directory.`
+              : MODE_HINT,
+          ),
+        );
+};
 
 function parseInstallArguments(argv: readonly string[], cwd: string): Result<InstallRequest> {
-  const plugin = argv[0];
-  const scan = optionIndexes(argv).reduce<OptionScan>(scanOption(argv), { options: new Map(), invalid: false });
+  const plugin = positionalOf(argv);
+  const optionArgs = plugin === undefined ? argv : argv.slice(1);
+  const scan = pairIndexes(optionArgs).reduce<OptionScan>(scanOption(optionArgs), { options: new Map(), invalid: false });
   const rawVendor = scan.options.get("--vendor");
   const vendor = rawVendor === undefined ? undefined : parseVendorId(rawVendor);
   const target = scan.options.get("--target");
   const version = scan.options.get("--version");
   const diagnostics: readonly Diagnostic[] = [
-    ...(plugin === undefined || plugin.startsWith("-") ? [cliDiagnostic("cli.arguments.plugin", "Exactly one plugin is required.")] : []),
-    ...(scan.invalid ? [cliDiagnostic("cli.arguments.invalid", "Install arguments must contain one --vendor, one --target and at most one --version.")] : []),
-    ...(argv.length !== 1 + 2 * scan.options.size || !scan.options.has("--vendor") || !scan.options.has("--target")
+    ...(scan.invalid ? [cliDiagnostic("cli.arguments.invalid", "Install options are --vendor, --target, and --version or --source, each at most once.")] : []),
+    ...(optionArgs.length !== 2 * scan.options.size || !scan.options.has("--vendor") || !scan.options.has("--target")
       ? [cliDiagnostic("cli.arguments.count", "Install accepts no extra or missing arguments.")]
       : []),
     ...(vendor === undefined || !vendor.ok ? [cliDiagnostic("cli.arguments.vendor", "Vendor must be exactly claude, cursor, or codex.")] : []),
     ...(target === undefined ? [cliDiagnostic("cli.arguments.target", "Exactly one target directory is required.")] : []),
-    ...versionDiagnostics(plugin, version),
+    ...nameDiagnostics(plugin, version),
   ];
-  const [first, ...rest] = diagnostics;
-  return first !== undefined || plugin === undefined || vendor === undefined || !vendor.ok || target === undefined
-    ? { ok: false, diagnostics: [first ?? cliDiagnostic("cli.arguments.invalid", "Install arguments are invalid."), ...rest] }
-    : { ok: true, value: { source: bundleSource(plugin, vendor.value, version, cwd), target } };
-}
-
-const HOST_ADAPTERS: Readonly<Record<VendorId, VendorAdapter>> = Object.freeze({
-  claude: claudeAdapter,
-  codex: codexAdapter,
-  cursor: cursorAdapter,
-});
-
-const invalidPlugin = (pluginRoot: string, errors: readonly Diagnostic[]): ResolvedBundle => {
-  const [first, ...rest] = errors;
-  return { ok: false, diagnostics: [first ?? cliDiagnostic("cli.plugin.invalid", "Plugin distribution has no valid manifest.", pluginRoot), ...rest] };
-};
-
-/** Builds one host's bundle from a plugin source checkout, exactly as the release build does, for development installs. */
-export function resolveSourceBundle(pluginRoot: string, vendor: VendorId): ResolvedBundle {
-  const inspection = loadPluginRoot(pluginRoot);
-  const errors = inspection.diagnostics.filter((entry) => entry.severity === "error");
-  return inspection.manifest === undefined || errors.length > 0
-    ? invalidPlugin(pluginRoot, errors)
-    : withAdapter(vendor, buildVendorBundle(pluginRoot, HOST_ADAPTERS[vendor]));
+  return diagnostics.length > 0 || vendor === undefined || !vendor.ok || target === undefined
+    ? failureOf(diagnostics, cliDiagnostic("cli.arguments.invalid", "Install arguments are invalid."))
+    : andThen(bundleSource({ plugin, version, source: scan.options.get("--source") }, vendor.value, cwd), (source) => success({ source, target }));
 }
 
 function printInstallResult(io: CliIo, result: InstallResult, target: string): number {

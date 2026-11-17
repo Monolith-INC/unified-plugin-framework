@@ -115,17 +115,6 @@ import {
 } from "./release.js";
 
 export { SHIPPED_PLUGINS, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
-export {
-  CHECKSUMS_ASSET,
-  RELEASE_ASSET_FORMAT,
-  packReleaseAsset,
-  parseChecksums,
-  releaseAssetName,
-  releaseTag,
-  renderChecksums,
-  unpackReleaseAsset,
-  type ReleaseAsset,
-} from "./release-asset.js";
 
 /** Runs `use` on a temporary, assembled copy of the plugin at `sourceRoot`, then removes the copy. */
 export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: string) => A): Staged<A> =>

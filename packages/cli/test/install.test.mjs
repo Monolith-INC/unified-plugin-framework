@@ -11,18 +11,20 @@ import { runInstallCommand } from "../dist/index.js";
 const repo = resolve(import.meta.dirname, "../../..");
 const plugin = join(repo, "plugins", "hello-world");
 
-function capture(operation) {
+async function capture(operation) {
   const stdout = [];
   const stderr = [];
   const priorLog = console.log;
   const priorError = console.error;
   console.log = (value) => stdout.push(String(value));
   console.error = (value) => stderr.push(String(value));
-  try { return { code: operation(), stdout: stdout.join("\n"), stderr: stderr.join("\n") }; }
-  finally { console.log = priorLog; console.error = priorError; }
+  try {
+    const code = await operation();
+    return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  } finally { console.log = priorLog; console.error = priorError; }
 }
 
-test("install without --version builds each host payload from the source checkout and installs it", () => {
+test("install --source builds each host payload from the source directory and installs it", async () => {
   const expected = {
     claude: ".claude-plugin/plugin.json",
     codex: ".codex-plugin/plugin.json",
@@ -30,7 +32,7 @@ test("install without --version builds each host payload from the source checkou
   };
   for (const [vendor, manifest] of Object.entries(expected)) {
     const target = mkdtempSync(join(tmpdir(), `cli-${vendor}-`));
-    const result = capture(() => runInstallCommand([plugin, "--vendor", vendor, "--target", target]));
+    const result = await capture(() => runInstallCommand(["--source", plugin, "--vendor", vendor, "--target", target]));
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.stderr, "");
     const output = JSON.parse(result.stdout);
@@ -42,30 +44,31 @@ test("install without --version builds each host payload from the source checkou
   }
 });
 
-test("install parser rejects missing, duplicate, unknown, and extra arguments with exit 2", () => {
+test("install parser rejects missing, duplicate, unknown, and extra arguments with exit 2", async () => {
   const cases = [
     [],
-    [plugin, "--vendor", "unknown", "--target", "/tmp"],
-    [plugin, "--vendor", "claude", "--vendor", "codex"],
-    [plugin, "--vendor", "claude", "--target", "/tmp", "extra"],
-    [plugin, "--mystery", "x", "--target", "/tmp"],
+    ["--source", plugin, "--vendor", "unknown", "--target", "/tmp"],
+    ["--source", plugin, "--vendor", "claude", "--vendor", "codex"],
+    ["--source", plugin, "--vendor", "claude", "--target", "/tmp", "extra"],
+    ["--source", plugin, "--mystery", "x", "--target", "/tmp"],
+    [plugin, "--vendor", "claude", "--target", "/tmp"],
   ];
   for (const argv of cases) {
-    const result = capture(() => runInstallCommand(argv));
+    const result = await capture(() => runInstallCommand(argv));
     assert.equal(result.code, 2);
     assert.equal(result.stdout, "");
     assert.equal(JSON.parse(result.stderr).outcome, "invalid-arguments");
   }
 });
 
-test("install help is the only non-installing zero-exit path", () => {
-  const result = capture(() => runInstallCommand(["--help"]));
+test("install help is the only non-installing zero-exit path", async () => {
+  const result = await capture(() => runInstallCommand(["--help"]));
   assert.equal(result.code, 0);
   assert.match(result.stdout, /^Usage: agent-plugin install/u);
   assert.equal(result.stderr, "");
 });
 
-test("CLI maps every transaction failure variant to the stable envelope and exit code", () => {
+test("CLI maps every transaction failure variant to the stable envelope and exit code", async () => {
   const loaded = buildVendorBundle(plugin, cursorAdapter);
   assert.equal(loaded.ok, true);
   const record = {
@@ -90,13 +93,13 @@ test("CLI maps every transaction failure variant to the stable envelope and exit
       install: () => installResult,
     };
     const target = mkdtempSync(join(tmpdir(), "cli-failure-"));
-    const result = capture(() => runInstallCommand([plugin, "--vendor", "cursor", "--target", target], runtime));
+    const result = await capture(() => runInstallCommand(["--source", plugin, "--vendor", "cursor", "--target", target], runtime));
     assert.equal(result.code, exitCode);
     assert.equal(result.stdout, "");
     assert.equal(JSON.parse(result.stderr).outcome, installResult.kind);
   }
 
-  const unexpected = capture(() => runInstallCommand([plugin, "--vendor", "cursor", "--target", "/tmp"], {
+  const unexpected = await capture(() => runInstallCommand(["--source", plugin, "--vendor", "cursor", "--target", "/tmp"], {
     resolve() { throw new Error("secret details"); },
     install: () => ({ kind: "unchanged", changedPaths: 0, record }),
   }));

@@ -11,8 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Host payloads are no longer committed. The repository keeps one copy of each plugin, its source under `plugins/`; `packages/adapter-*/payloads/` is git-ignored build output ([AGE-104](https://linear.app/agentical-monolithics/issue/AGE-104)).
 - Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds every shipped plugin for Claude, Cursor and Codex and attaches `<plugin>-<host>.bundle.json.gz` assets plus `SHA256SUMS` to the GitHub release; tags with a suffix such as `-rc.1` publish pre-releases.
-- `agent-plugin install <plugin> --vendor <host> --target <dir> --version <version>` downloads the release asset, checks it against `SHA256SUMS` and every digest inside it, then installs it. Without `--version`, `install <plugin-directory>` builds the payload from a source checkout for development.
+- `agent-plugin install <plugin> --version <version> --vendor <host> --target <dir>` downloads the release asset over HTTPS (with a timeout), checks it against `SHA256SUMS` and every digest inside it, then installs it. `install --source <plugin-directory>` builds the payload from a source directory for development. Each release asset carries a build provenance attestation.
+- The release workflow publishes only tags shaped like `v0.2.0` or `v0.2.0-rc.1` that are on `main` and pass the full CI suite; it can be run by hand to publish an existing tag again.
 - `pnpm payloads:verify` now generates the payloads and checks the build is deterministic and valid instead of comparing against committed copies; `pnpm release:assets` packs and round-trips the release assets. CI runs both on every pull request. The `cli.payload.missing` and `cli.payload.drift` install errors are gone, and payload digests are no longer pinned in the documentation.
+
+### Breaking
+
+- `install <plugin-directory> --vendor --target` is now `install --source <plugin-directory> --vendor --target`; a plugin name without `--version` fails with `cli.arguments.mode`.
+- `runInstallCommand` always returns `Promise<number>`, and `InstallCommandRuntime.resolve` takes one `BundleSource` (`{ kind: "release", plugin, version, vendor }` or `{ kind: "source", root, vendor }`) and returns a promise.
+- `resolveShippedBundle` is replaced by `resolveSourceBundle` in `packages/cli/src/bundle-source.ts`.
+- The adapter packages no longer export `claudeShippedBundle`, `codexShippedBundle`, `cursorShippedBundle` or the `*_SHIPPED_HELLO_WORLD` constants, and no longer publish `payloads/`.
+
+### Added
+
+- `@agent-plugins/compiler/railway`: `andThen`, `andThenAsync`, `failureOf`, `fromDiagnostics`, `sequenceResults`, the `resultListMonoid` and `isRecord`.
+- `buildVendorBundle` in `@agent-plugins/workflows` builds one host's bundle from a source directory in memory and reports a missing directory as `release.source.unreadable`.
 
 ## M4 Vendor Payload Compiler & Transactional Installer
 

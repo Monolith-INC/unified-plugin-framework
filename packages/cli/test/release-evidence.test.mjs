@@ -66,15 +66,17 @@ function compiledBundle(adapter, canonical, version) {
   return bundle.value;
 }
 
-function capture(operation) {
+async function capture(operation) {
   const stdout = [];
   const stderr = [];
   const priorLog = console.log;
   const priorError = console.error;
   console.log = (value) => stdout.push(String(value));
   console.error = (value) => stderr.push(String(value));
-  try { return { code: operation(), stdout: stdout.join("\n"), stderr: stderr.join("\n") }; }
-  finally { console.log = priorLog; console.error = priorError; }
+  try {
+    const code = await operation();
+    return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  } finally { console.log = priorLog; console.error = priorError; }
 }
 
 function markdownFiles(root) {
@@ -138,11 +140,12 @@ test("every vendor supports install, unchanged reinstall, upgrade, compatible ol
   }
 });
 
-test("the installation path has no compilation, execution or elevation, and its one network read is the release download", () => {
+test("the release install path has no compilation, execution or elevation, and its one network read is the asset download", () => {
   const source = (...path) => readFileSync(join(repositoryRoot, "packages", ...path), "utf8");
   const installer = source("installer", "src", "index.ts");
   const command = source("cli", "src", "index.ts");
   const download = source("cli", "src", "release-download.ts");
+  const asset = source("cli", "src", "release-asset.ts");
   const forbidden = [
     /\b(?:compilePlugin|compileVendorPayload|normalizeCanonicalPlugin|verifyShippedPayload)\s*\(/u,
     /node:(?:child_process|http|https|net|tls|dns)/u,
@@ -150,13 +153,13 @@ test("the installation path has no compilation, execution or elevation, and its 
     /\b(?:sudo|doas)\b/u,
   ];
   const network = /\b(?:fetch|request|connect|createConnection)\s*\(/gu;
-  for (const pattern of forbidden) [installer, command, download].map((text) => assert.doesNotMatch(text, pattern));
-  assert.doesNotMatch(`${installer}\n${command}`, network);
+  for (const pattern of forbidden) [installer, command, download, asset].map((text) => assert.doesNotMatch(text, pattern));
+  assert.doesNotMatch(`${installer}\n${command}\n${asset}`, network);
   assert.equal([...download.matchAll(network)].length, 1, "the release download makes exactly one kind of request: an HTTPS GET");
   assert.match(download, /DEFAULT_RELEASE_URL = "https:\/\/github\.com\//u);
 });
 
-test("release documentation describes release-asset installs and exercises the source install commands", () => {
+test("release documentation describes release-asset installs and exercises the source install commands", async () => {
   const documentedFiles = [
     join(repositoryRoot, "README.md"),
     join(repositoryRoot, "CHANGELOG.md"),
@@ -171,7 +174,7 @@ test("release documentation describes release-asset installs and exercises the s
   ];
   for (const pattern of forbiddenDocumentationModels) assert.doesNotMatch(documentation, pattern);
 
-  const commandPattern = /pnpm --filter @agent-plugins\/cli exec agent-plugin install (?<plugin>plugins\/[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
+  const commandPattern = /pnpm agent-plugin install --source (?<plugin>plugins\/[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
   const commands = [...documentation.matchAll(commandPattern)].map((match) => match.groups);
   SHIPPED_PLUGINS.map((plugin) =>
     assert.deepEqual(
@@ -183,7 +186,8 @@ test("release documentation describes release-asset installs and exercises the s
 
   for (const command of commands) {
     const target = mkdtempSync(join(tmpdir(), `docs-${command.vendor}-`));
-    const result = capture(() => runInstallCommand([
+    const result = await capture(() => runInstallCommand([
+      "--source",
       join(repositoryRoot, command.plugin),
       "--vendor",
       command.vendor,
@@ -194,7 +198,7 @@ test("release documentation describes release-asset installs and exercises the s
     assert.equal(JSON.parse(result.stdout).vendor, command.vendor);
   }
 
-  const releaseCommand = /agent-plugin install (?<plugin>[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory> --version <version>/gu;
+  const releaseCommand = /agent-plugin install (?<plugin>[a-z0-9-]+) --version <version> --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
   const released = [...documentation.matchAll(releaseCommand)].map((match) => match.groups);
   SHIPPED_PLUGINS.map((plugin) =>
     assert.deepEqual(

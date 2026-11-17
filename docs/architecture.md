@@ -41,14 +41,14 @@ release-time assembly + canonical compiler model, once per host adapter
 release assets: <plugin>-<host>.bundle.json.gz + SHA256SUMS
         |
         v
-agent-plugin install --version  (download, check digests)
+agent-plugin install <plugin> --version  (download, check digests)
         |
         v
 transactional target mutation
 ```
 
-For development, `agent-plugin install <plugin-directory>` without `--version` runs the same assembly and compiler on a source checkout in a temporary directory and installs the result; nothing generated is kept.
+For development, `agent-plugin install --source <plugin-directory>` runs the same assembly and compiler on a source checkout in a temporary directory and installs the result; nothing generated is kept.
 
 Vendor payload provenance is stored in the toolkit `bundle.json` envelope inside each release asset. Closed vendor files such as `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`, and `.codex-plugin/plugin.json` contain only fields accepted by their owning adapter schema.
 
-The installer receives a verified bundle and an adapter. It never compiles portable source, fetches remote artifacts, executes plugin content, or bypasses the shared transaction engine. Downloading is the CLI's job and lives in one edge module (`packages/cli/src/release-download.ts`): it fetches `SHA256SUMS` and the asset, and hands over a bundle only after the asset digest, every file digest and the payload digest check out.
+The installer receives a verified bundle and an adapter. It never compiles portable source, fetches remote artifacts, executes plugin content, or bypasses the shared transaction engine. Downloading is the CLI's job and lives in one edge module (`packages/cli/src/release-download.ts`): it fetches `SHA256SUMS` and the asset, and hands over a bundle only after the asset digest, every file digest and the payload digest check out. Those checks prove integrity; each asset's build provenance attestation proves it came from this repository's release workflow.

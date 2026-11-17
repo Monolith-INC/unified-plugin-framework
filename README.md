@@ -112,7 +112,7 @@ pnpm build
 pnpm --filter @agent-plugins/cli exec agent-plugin --help
 ```
 
-### `install <plugin> --vendor <claude|cursor|codex> --target <directory> [--version <version>]`
+### `install <plugin> --version <version> | --source <dir>`, with `--vendor <claude|cursor|codex> --target <directory>`
 
 Install one plugin's payload for one host.
 
@@ -128,19 +128,19 @@ release-time assembly (@agent-plugins/workflows) -> @agent-plugins/compiler -> a
 GitHub release assets: <plugin>-<host>.bundle.json.gz for every plugin and host, plus SHA256SUMS
         |
         v
-agent-plugin install --version -> download + digest checks -> @agent-plugins/installer -> target directory
+agent-plugin install <plugin> --version -> download + digest checks -> @agent-plugins/installer -> target directory
 ```
 
-With `--version`, the command downloads the plugin's asset for the host from that release, checks it against the release's `SHA256SUMS` and every file digest inside it, then installs it:
+With a plugin name and `--version`, the command downloads the plugin's asset for the host from that release, checks it against the release's `SHA256SUMS` and every file digest inside it, then installs it. Each asset also carries a build provenance attestation (`gh attestation verify`):
 
 ```sh
-agent-plugin install unified-plugin-framework --vendor claude --target <target-directory> --version <version>
+agent-plugin install unified-plugin-framework --version <version> --vendor claude --target <target-directory>
 ```
 
-Without `--version`, it takes a plugin source directory and builds the payload from the checkout instead, for development:
+With `--source`, it takes a plugin source directory and builds the payload from it instead, for development:
 
 ```sh
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor claude --target <target-directory>
+pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor claude --target <target-directory>
 ```
 
 Either way the installer plans writes through the host's adapter and commits the transaction under a target lock. Installer provenance lives in `.agent-plugins/installed/*.json`; vendor manifests remain closed to each vendor schema. The [installation guide](docs/vendor-payload-installation.md) lists every plugin and host, the release process and the failure codes.
@@ -256,7 +256,7 @@ pnpm build:cli
 pnpm build:testing
 pnpm payloads:build     # generate host payloads into the git-ignored packages/adapter-*/payloads/
 pnpm payloads:verify    # generate twice and compare: deterministic and valid for each host
-pnpm release:assets     # pack the generated payloads into release-assets/ with SHA256SUMS
+pnpm release:assets     # build every plugin for every host and pack release-assets/ with SHA256SUMS
 pnpm typecheck
 pnpm test
 ```

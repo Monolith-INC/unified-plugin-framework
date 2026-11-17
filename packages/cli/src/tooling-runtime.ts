@@ -7,7 +7,7 @@ import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
 import { FRAMEWORK_ROOT, pluginTarget, toolsRoot } from "./tooling-host.js";
-import { resolveSourceBundle } from "./index.js";
+import { resolveSourceBundle } from "./bundle-source.js";
 
 export const pythonRuntime = (project: string): string => join(project, ".project-knowledge/runtime", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 export const knowledgeExecutable = (project: string): string => join(project, ".project-knowledge/runtime/bin/upf-project-knowledge");

@@ -21,7 +21,7 @@ release assets (pnpm release:assets)
   SHA256SUMS
         |
         v
-agent-plugin install <plugin> --vendor <host> --target <dir> --version <version>
+agent-plugin install <plugin> --version <version> --vendor <host> --target <dir>
   downloads SHA256SUMS and the asset, checks the asset digest, then every file and payload digest inside it
         |
         v
@@ -30,18 +30,18 @@ transactional installer
 
 ## Installation
 
-Install a released plugin for one host by naming the plugin, the host and the release version. Use the version of a published [release](https://github.com/Monolith-INC/unified-plugin-framework/releases), such as `0.2.0` or `0.2.0-rc.1`:
+Install a released plugin for one host by naming the plugin, the release version and the host. Use the version of a published [release](https://github.com/Monolith-INC/unified-plugin-framework/releases) that lists `SHA256SUMS` among its assets; releases made before this workflow existed (up to `v0.2.0-rc.1`) have none:
 
 ```sh
-agent-plugin install unified-plugin-framework --vendor claude --target <target-directory> --version <version>
-agent-plugin install unified-plugin-framework --vendor cursor --target <target-directory> --version <version>
-agent-plugin install unified-plugin-framework --vendor codex --target <target-directory> --version <version>
-agent-plugin install project-knowledge --vendor claude --target <target-directory> --version <version>
-agent-plugin install project-knowledge --vendor cursor --target <target-directory> --version <version>
-agent-plugin install project-knowledge --vendor codex --target <target-directory> --version <version>
-agent-plugin install hello-world --vendor claude --target <target-directory> --version <version>
-agent-plugin install hello-world --vendor cursor --target <target-directory> --version <version>
-agent-plugin install hello-world --vendor codex --target <target-directory> --version <version>
+agent-plugin install unified-plugin-framework --version <version> --vendor claude --target <target-directory>
+agent-plugin install unified-plugin-framework --version <version> --vendor cursor --target <target-directory>
+agent-plugin install unified-plugin-framework --version <version> --vendor codex --target <target-directory>
+agent-plugin install project-knowledge --version <version> --vendor claude --target <target-directory>
+agent-plugin install project-knowledge --version <version> --vendor cursor --target <target-directory>
+agent-plugin install project-knowledge --version <version> --vendor codex --target <target-directory>
+agent-plugin install hello-world --version <version> --vendor claude --target <target-directory>
+agent-plugin install hello-world --version <version> --vendor cursor --target <target-directory>
+agent-plugin install hello-world --version <version> --vendor codex --target <target-directory>
 ```
 
 The command downloads the release's `SHA256SUMS`, then `<plugin>-<host>.bundle.json.gz`. Before anything is written it checks:
@@ -50,7 +50,17 @@ The command downloads the release's `SHA256SUMS`, then `<plugin>-<host>.bundle.j
 - every payload file's digest, size and mode, and the payload digest, with the compiler's own bundle validation;
 - that the asset holds the requested plugin for the requested host (`cli.release.identity`).
 
-A release without the asset fails with `cli.release.asset_missing`; an unreachable release or a version that does not exist fails with `cli.release.download`. Assets are downloaded from `https://github.com/Monolith-INC/unified-plugin-framework/releases/download/v<version>/`; set `AGENT_PLUGIN_RELEASE_URL` to use a mirror that serves the same files.
+A release without the asset fails with `cli.release.asset_missing`; an unreachable release, a version that does not exist, a download cut off part-way or one that stalls for a minute fails with `cli.release.download`. A release built by a different adapter version than this CLI's fails with `cli.release.adapter_mismatch`; install a release made for your CLI, or upgrade the CLI. Leaving out `--version` when naming a plugin fails with `cli.arguments.mode` and says which flag to add.
+
+Assets are downloaded over HTTPS from `https://github.com/Monolith-INC/unified-plugin-framework/releases/download/v<version>/`; set `AGENT_PLUGIN_RELEASE_URL` to an `https://` mirror that serves the same files.
+
+### What the checks prove
+
+The digest checks prove the asset is intact and is the one the release's `SHA256SUMS` lists. They do not prove who published it: `SHA256SUMS` comes from the same release, so anyone able to replace the release's files could replace both. To check origin, verify the build provenance attestation the release workflow records for every asset; it shows the asset was built by this repository's release workflow from the tagged commit:
+
+```sh
+gh attestation verify <plugin>-<host>.bundle.json.gz --repo Monolith-INC/unified-plugin-framework
+```
 
 Successful output is a stable JSON envelope:
 
@@ -72,28 +82,28 @@ Re-running the same command returns `outcome: "unchanged"` when the installed re
 
 ### Installing from a source checkout
 
-For development, leave out `--version` and pass the plugin's source directory. The command builds the host payload from that checkout the same way the release build does, then installs it; nothing generated is kept. Build the workspace first so the CLI runs the current compiled output:
+For development, pass the plugin's source directory with `--source` instead of a plugin name and version. The command builds the host payload from that directory the same way the release build does, then installs it; nothing generated is kept. Build the workspace first so the CLI runs the current compiled output; `pnpm agent-plugin` runs it from the repository root:
 
 ```sh
 pnpm build
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor claude --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor cursor --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor codex --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor claude --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor cursor --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor codex --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor claude --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor cursor --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor codex --target <target-directory>
+pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor claude --target <target-directory>
+pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor cursor --target <target-directory>
+pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor codex --target <target-directory>
+pnpm agent-plugin install --source plugins/hello-world --vendor claude --target <target-directory>
+pnpm agent-plugin install --source plugins/hello-world --vendor cursor --target <target-directory>
+pnpm agent-plugin install --source plugins/hello-world --vendor codex --target <target-directory>
+pnpm agent-plugin install --source plugins/project-knowledge --vendor claude --target <target-directory>
+pnpm agent-plugin install --source plugins/project-knowledge --vendor cursor --target <target-directory>
+pnpm agent-plugin install --source plugins/project-knowledge --vendor codex --target <target-directory>
 ```
 
 A source install reflects the checkout as it is, including uncommitted edits, so it is the way to try a skill change on a host before it is released.
 
 ## Releasing
 
-Push a tag named `v<version>` from `main`. The release workflow (`.github/workflows/release.yml`) installs, builds, runs `pnpm payloads:verify`, packs the assets with `pnpm release:assets`, and creates the GitHub release with every asset attached. A tag with a suffix, such as `v0.2.0-rc.1`, publishes a pre-release. Re-running the workflow for an existing release replaces its assets.
+Push a tag named `v<version>` on a commit of `main`. The release workflow (`.github/workflows/release.yml`) refuses a tag that is not shaped like `v0.2.0` or `v0.2.0-rc.1` or is not on `main`, runs the full CI suite on it, then builds every shipped plugin for every host with `pnpm release:assets`, records a build provenance attestation for each asset, and creates the GitHub release with every asset attached. A tag with a suffix, such as `v0.2.0-rc.2`, publishes a pre-release. To publish an existing tag again (for example after a failed run), run the workflow by hand with that tag; it replaces the release's assets. A tag must contain the workflow to be published, so tags up to `v0.2.0-rc.1` cannot be.
 
-`pnpm payloads:verify` generates every shipped plugin's payload for every host into the git-ignored `packages/adapter-*/payloads/`, then generates them again and compares, so a build that is not deterministic, or not valid for its host, fails. `pnpm release:assets` packs those payloads into `release-assets/`, writes `SHA256SUMS`, and unpacks each archive again to prove it round-trips to the same payload digest. CI runs both on every pull request, so a release is never the first time a payload is built.
+`pnpm payloads:verify` generates every shipped plugin's payload for every host into the git-ignored `packages/adapter-*/payloads/`, then generates them again and compares, so a build that is not deterministic, or not valid for its host, fails. `pnpm release:assets` builds the same payloads from source, packs them into `release-assets/`, writes `SHA256SUMS`, and unpacks each archive again to prove it round-trips to the same payload digest. CI runs both on every pull request, so a release is never the first time a payload is built.
 
 To release another plugin, add its directory name to `SHIPPED_PLUGINS`. The directory must be named after the unscoped part of the plugin's manifest name (`foo` for `@scope/foo`), because release assets are named after it; the build refuses a plugin whose names differ.
 
@@ -122,6 +132,7 @@ The installer creates `.agent-plugins/install.lock`, stages files on the same fi
 Failure outcomes:
 
 - `failed-before-mutation`, exit `3`: download, digest, validation, collision, target, lock, or adapter mismatch failed before managed files changed.
+- exit `70`: an unexpected platform failure; nothing was changed and the details are not printed.
 - `rolled-back`, exit `4`: a mutation failed and the installer restored the previous managed state.
 - `rollback-failed`, exit `5`: rollback could not finish; stderr includes `recoveryJournal` pointing at the preserved journal.
 

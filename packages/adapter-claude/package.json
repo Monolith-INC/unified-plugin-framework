@@ -15,7 +15,7 @@
     "typecheck": "tsc -b tsconfig.json",
     "test": "tsc -b tsconfig.json && node --test test/**/*.test.mjs",
     "payload:build": "tsc -b tsconfig.json ../workflows/tsconfig.json && node scripts/payload.mjs build",
-    "payload:verify": "tsc -b tsconfig.json ../workflows/tsconfig.json && node scripts/payload.mjs build && node scripts/payload.mjs verify"
+    "payload:verify": "tsc -b tsconfig.json ../workflows/tsconfig.json && node scripts/payload.mjs verify"
   },
   "dependencies": {
     "@agent-plugins/compiler": "workspace:*",
