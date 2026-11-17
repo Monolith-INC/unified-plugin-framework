@@ -37,6 +37,9 @@ test("the framework plugin installs each host's assembled skills, naming the onb
     const { target, code, stderr } = install(framework, vendor);
     assert.equal(code, 0, stderr);
     assert.deepEqual(readdirSync(join(target, "skills")).toSorted(), [
+      "continuity-checkpoint",
+      "continuity-continue",
+      "continuity-recover",
       "discover-comprehensive",
       "discover-quick",
       "discover-research",
@@ -58,7 +61,8 @@ test("the framework plugin installs each host's assembled skills, naming the onb
       const text = readFileSync(join(target, "skills", skill, "SKILL.md"), "utf8");
       assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
         : skill.startsWith("project-") ? /agent-plugin project/
-          : skill.startsWith("track-") ? /reviewed content excerpts/ : /monolithic-code-review-toolkit:/);
+          : skill.startsWith("track-") ? /reviewed content excerpts/
+            : skill.startsWith("continuity-") ? /agent-continuity:session-/ : /monolithic-code-review-toolkit:/);
       assert.doesNotMatch(text, /\{\{/);
       return skill;
     });
