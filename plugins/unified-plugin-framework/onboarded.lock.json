@@ -5,7 +5,7 @@
       "adapter": "code-review",
       "checksum": "fb6ce6fa82be37782146a46d8b17f1bdb1f4982a9b49621d637a4dca10828395",
       "contractVersion": "1.0.0",
-      "mappingDigest": "30485a4587b8d5fd509ad4ec6d28a7f621739aaf5993976ae66cf67c9afbb061",
+      "mappingDigest": "bde0acb09d99260b6ad8e28d11da939adefb39c415738dece66e333b7bd4dfa9",
       "plugin": "monolithic-code-review-toolkit",
       "version": "0.6.0"
     }

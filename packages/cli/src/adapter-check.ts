@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { parseArgs } from "node:util";
 
 import {
   checkAdapterReadiness,
@@ -11,10 +10,10 @@ import {
 } from "@agent-plugins/workflows";
 
 import {
-  errorsOf,
-  installedFrom,
-  lockFrom,
+  configError,
+  gatherBinding,
   NODE_PLUGIN_FACTS_IO,
+  tokenize,
   type Gathered,
   type JsonFile,
   type PluginFactsIo,
@@ -49,15 +48,6 @@ const OPTIONS = {
   help: { type: "boolean", short: "h" },
 } as const;
 
-/** Node's parser throws on unknown or malformed options; turn that into a value at this boundary. */
-const tokenize = (argv: readonly string[]) => {
-  try {
-    return parseArgs({ args: [...argv], options: OPTIONS, allowPositionals: true, strict: true });
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-};
-
 const toRequest = (
   positionals: readonly string[],
   values: { readonly framework?: string; readonly project?: string; readonly "plugin-root"?: readonly string[] },
@@ -84,7 +74,7 @@ const toRequest = (
 
 /** Parses `adapter-check` arguments; `cwd` resolves relative paths. */
 export const parseAdapterCheck = (argv: readonly string[], cwd: string): Parsed => {
-  const tokens = tokenize(argv);
+  const tokens = tokenize(argv, OPTIONS);
   return typeof tokens === "string"
     ? { kind: "invalid", message: tokens }
     : tokens.values.help === true
@@ -107,31 +97,25 @@ const storePath = (project: string, file: JsonFile, key: readonly string[]): str
 const unreadable = (files: readonly JsonFile[]): readonly string[] =>
   files.flatMap((file) => (file.kind === "unreadable" ? [`Could not read valid JSON from ${file.path}.`] : []));
 
+/** The binding facts plus the project's knowledge stores. */
 const gather = (io: AdapterCheckIo, { adapter, framework, project, pluginRoots }: CheckRequest): Gathered<ReadinessFacts> => {
-  const frameworkInspection = io.inspectPlugin(framework);
-  const plugins = installedFrom(io, pluginRoots);
-  const locked = lockFrom(io, framework);
+  const binding = gatherBinding(io, adapter, framework, pluginRoots);
   const projectFile = io.readJson(resolve(project, ".project-knowledge.json"));
   const storeFiles = adapter.knowledgeStores.map((store: PluginKnowledgeStore) => [store, io.readJson(resolve(project, store.file))] as const);
   const problems = [
-    ...errorsOf(`Framework ${framework}`, frameworkInspection),
-    ...plugins.problems,
-    ...locked.problems,
+    ...(binding.kind === "config-error" ? binding.problems : []),
     ...unreadable([projectFile, ...storeFiles.map(([, file]) => file)]),
   ];
-  return problems.length > 0
-    ? { kind: "config-error", problems }
-    : {
+  return binding.kind === "facts" && problems.length === 0
+    ? {
         kind: "facts",
         facts: {
-          adapter,
-          onboarded: frameworkInspection.onboardedPlugins ?? [],
-          installed: plugins.installed,
-          lock: locked.lock,
+          ...binding.facts,
           projectStore: storePath(project, projectFile, ["knowledgeRoot"]),
           pluginStores: new Map(storeFiles.map(([store, file]) => [store.plugin, storePath(project, file, store.key)])),
         },
-      };
+      }
+    : { kind: "config-error", problems };
 };
 
 const report = (io: AdapterCheckIo, adapter: WorkflowAdapter<string>, readiness: Readiness): number => {
@@ -151,11 +135,6 @@ const report = (io: AdapterCheckIo, adapter: WorkflowAdapter<string>, readiness:
       );
       return 1;
   }
-};
-
-const configError = (io: AdapterCheckIo, problems: readonly string[]): number => {
-  io.err(`Configuration problems:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
-  return 2;
 };
 
 const checkRequest = (io: AdapterCheckIo, request: CheckRequest): number => {

@@ -1,6 +1,5 @@
-import { writeFileSync } from "node:fs";
+import { renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseArgs } from "node:util";
 
 import {
   adapterPlugins,
@@ -12,22 +11,24 @@ import {
   withPin,
   type BindingFacts,
   type InstalledPlugin,
-  type OnboardedLock,
   type PluginPin,
   type WorkflowAdapter,
 } from "@agent-plugins/workflows";
 
-import { errorsOf, installedFrom, lockFrom, NODE_PLUGIN_FACTS_IO, type Gathered, type PluginFactsIo } from "./plugin-facts.js";
+import { configError, gatherBinding, NODE_PLUGIN_FACTS_IO, tokenize, type PluginFactsIo } from "./plugin-facts.js";
 
 export const UPGRADE_CHECK_USAGE = `Usage: agent-plugin upgrade-check <workflow> --framework <dir> --plugin-root <dir>...
 
 Checks each candidate plugin version against the workflow adapter and, when every check passes, pins it in the
 framework's ${LOCK_FILE}. Exit codes: 0 pinned, 1 a check failed (the lock is unchanged), 2 invalid arguments or
-configuration.`;
+configuration, including a lock that cannot be written.`;
+
+/** Writing a file: done, or why not. */
+export type Written = { readonly ok: true } | { readonly ok: false; readonly message: string };
 
 /** The effects upgrade-check needs: the plugin reads, writing the lock, and output. */
 export interface UpgradeCheckIo extends PluginFactsIo {
-  readonly writeText: (path: string, text: string) => void;
+  readonly writeText: (path: string, text: string) => Written;
   readonly out: (line: string) => void;
   readonly err: (line: string) => void;
 }
@@ -43,25 +44,11 @@ type Parsed =
   | { readonly kind: "invalid"; readonly message: string }
   | { readonly kind: "ok"; readonly request: UpgradeRequest };
 
-interface UpgradeFacts {
-  readonly binding: BindingFacts;
-  readonly lock: OnboardedLock;
-}
-
 const OPTIONS = {
   framework: { type: "string" },
   "plugin-root": { type: "string", multiple: true },
   help: { type: "boolean", short: "h" },
 } as const;
-
-/** Node's parser throws on unknown or malformed options; turn that into a value at this boundary. */
-const tokenize = (argv: readonly string[]) => {
-  try {
-    return parseArgs({ args: [...argv], options: OPTIONS, allowPositionals: true, strict: true });
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-};
 
 const toRequest = (
   positionals: readonly string[],
@@ -87,28 +74,12 @@ const toRequest = (
 
 /** Parses `upgrade-check` arguments; `cwd` resolves relative paths. */
 export const parseUpgradeCheck = (argv: readonly string[], cwd: string): Parsed => {
-  const tokens = tokenize(argv);
+  const tokens = tokenize(argv, OPTIONS);
   return typeof tokens === "string"
     ? { kind: "invalid", message: tokens }
     : tokens.values.help === true
       ? { kind: "help" }
       : toRequest(tokens.positionals, tokens.values, cwd);
-};
-
-const gather = (io: UpgradeCheckIo, { adapter, framework, pluginRoots }: UpgradeRequest): Gathered<UpgradeFacts> => {
-  const frameworkInspection = io.inspectPlugin(framework);
-  const plugins = installedFrom(io, pluginRoots);
-  const locked = lockFrom(io, framework);
-  const problems = [...errorsOf(`Framework ${framework}`, frameworkInspection), ...plugins.problems, ...locked.problems];
-  return problems.length > 0
-    ? { kind: "config-error", problems }
-    : {
-        kind: "facts",
-        facts: {
-          binding: { adapter, onboarded: frameworkInspection.onboardedPlugins ?? [], installed: plugins.installed },
-          lock: locked.lock,
-        },
-      };
 };
 
 const pinOf = (adapter: WorkflowAdapter<string>, plugin: string, { version, checksum }: InstalledPlugin): PluginPin => ({
@@ -120,36 +91,43 @@ const pinOf = (adapter: WorkflowAdapter<string>, plugin: string, { version, chec
   mappingDigest: mappingDigest(adapter),
 });
 
-/** The pins a passing check produces: one per plugin the adapter references. */
+/** The pins a passing check produces: one per plugin the adapter references, all of them installed by then. */
 const pinsFor = ({ adapter, installed }: BindingFacts): readonly PluginPin[] =>
   adapterPlugins(adapter).flatMap((plugin) => {
     const found = installed.get(plugin);
     return found === undefined ? [] : [pinOf(adapter, plugin, found)];
   });
 
-const pin = (io: UpgradeCheckIo, framework: string, { binding, lock }: UpgradeFacts): number => {
-  const pins = pinsFor(binding);
-  const before = lockText(lock);
-  const after = lockText(pins.reduce(withPin, lock));
-  // Effect: the lock is written only after every check passed.
-  io.writeText(join(framework, LOCK_FILE), after);
+const reportPinned = (io: UpgradeCheckIo, workflow: string, path: string, changed: boolean, pins: readonly PluginPin[]): number => {
   io.out(
     JSON.stringify({
       ok: true,
-      workflow: binding.adapter.workflow,
-      lock: join(framework, LOCK_FILE),
-      changed: before !== after,
+      workflow,
+      lock: path,
+      changed,
       pinned: pins.map(({ plugin, version, checksum }) => ({ plugin, version, checksum })),
     }),
   );
   return 0;
 };
 
-const decide = (io: UpgradeCheckIo, request: UpgradeRequest, facts: UpgradeFacts): number => {
-  const readiness = checkPluginBinding(facts.binding);
+const pin = (io: UpgradeCheckIo, framework: string, binding: BindingFacts): number => {
+  const pins = pinsFor(binding);
+  const path = join(framework, LOCK_FILE);
+  const before = lockText(binding.lock);
+  const after = lockText(pins.reduce(withPin, binding.lock));
+  // Effect: the lock is written only after every check passed.
+  const written = io.writeText(path, after);
+  return written.ok
+    ? reportPinned(io, binding.adapter.workflow, path, before !== after, pins)
+    : configError(io, [`Could not write ${path}: ${written.message}. The lock is unchanged.`]);
+};
+
+const decide = (io: UpgradeCheckIo, request: UpgradeRequest, binding: BindingFacts): number => {
+  const readiness = checkPluginBinding(binding);
   switch (readiness.status) {
     case "ready":
-      return pin(io, request.framework, facts);
+      return pin(io, request.framework, binding);
     case "not-ready":
       io.err(
         JSON.stringify({
@@ -157,6 +135,7 @@ const decide = (io: UpgradeCheckIo, request: UpgradeRequest, facts: UpgradeFacts
           workflow: request.adapter.workflow,
           step: readiness.step,
           reason: readiness.reason,
+          recovery: readiness.recovery,
           lock: "unchanged",
         }),
       );
@@ -165,11 +144,10 @@ const decide = (io: UpgradeCheckIo, request: UpgradeRequest, facts: UpgradeFacts
 };
 
 const checkRequest = (io: UpgradeCheckIo, request: UpgradeRequest): number => {
-  const gathered = gather(io, request);
+  const gathered = gatherBinding(io, request.adapter, request.framework, request.pluginRoots);
   switch (gathered.kind) {
     case "config-error":
-      io.err(`Configuration problems:\n${gathered.problems.map((problem) => `- ${problem}`).join("\n")}`);
-      return 2;
+      return configError(io, gathered.problems);
     case "facts":
       return decide(io, request, gathered.facts);
   }
@@ -190,10 +168,23 @@ export const runUpgradeCheck = (io: UpgradeCheckIo, argv: readonly string[], cwd
   }
 };
 
+/** Edge interpreter: writes beside the target and renames over it, so an interrupted write never leaves half a lock. */
+const writeTextToDisk = (path: string, text: string): Written => {
+  const staged = `${path}.tmp`;
+  try {
+    writeFileSync(staged, text); // fp-allow: no-ambient-effect
+    renameSync(staged, path); // fp-allow: no-ambient-effect
+    return { ok: true };
+  } catch (error) {
+    rmSync(staged, { force: true }); // fp-allow: no-ambient-effect
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
+};
+
 /** Edge interpreter: the real console and filesystem. */
 export const NODE_UPGRADE_CHECK_IO: UpgradeCheckIo = Object.freeze({
   ...NODE_PLUGIN_FACTS_IO,
-  writeText: (path: string, text: string) => writeFileSync(path, text), // fp-allow: no-ambient-effect
+  writeText: writeTextToDisk,
   out: (line: string) => console.log(line), // fp-allow: no-ambient-effect
   err: (line: string) => console.error(line), // fp-allow: no-ambient-effect
 });

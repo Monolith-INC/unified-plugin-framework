@@ -30,10 +30,10 @@ Each step is checked in order. A failing step never just stops the review: it ca
 
 | Step | Fails when | Recovery |
 | --- | --- | --- |
-| Declared | The framework manifest does not declare the plugin for `code-review` | Ask the user to reinstall the framework; this is a packaging problem |
+| Declared | The framework manifest does not declare the plugin for `code-review`, or declares a range other than `x.y.z`, `^x.y.z` or `~x.y.z` | Ask the user to reinstall the framework, or fix the declared range; this is a packaging problem |
 | Installed | The plugin is missing, or not enabled in the session | Ask the user, in one line, to install and enable it for this host; continue once it is |
-| Installed: range | The installed version is outside the declared range | Ask the user to install a version inside it, or check the new version with `upgrade-check` |
-| Installed: pinned | The installed version or content checksum differs from the lock, the plugin is not pinned, or the mapping changed since it was pinned (`adapter-check` only) | Ask the user to install the pinned version, or check the installed one with `upgrade-check` and commit the lock |
+| Installed: range | The installed version is outside the declared range | Ask the user to install a version inside it; adopting a newer one means widening the range first, then `upgrade-check` |
+| Installed: pinned | The installed version or content checksum differs from the lock, the plugin is not pinned, or the contract or mapping changed since it was pinned (`adapter-check` only) | Same version, different content: reinstall the pinned release. Another version: install the pinned one, or check it with `upgrade-check` and commit the lock |
 | Bound: skills | The installed version lacks a mapped skill, or the `review-setup` skill the store recovery relies on | Ask the user to install a version that provides it |
 | Bound: project store | `.project-knowledge.json` has no `knowledgeRoot` | Run `setup-project-knowledge` with its defaults, then continue |
 | Bound: shared store | `.monolithic-code-review/sources.json` does not set `knowledge.root` to the project store (the toolkit reads only its own setting) | Run `monolithic-code-review-toolkit:review-setup`, point it at the project store, then continue |
@@ -53,7 +53,7 @@ It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the fa
 
 ## Pinning and upgrading the review plugin
 
-The lock pins each onboarded plugin's exact version and content checksum (the compiler's source digest), together with the adapter and a digest of its mapping. To move to a new toolkit release, check out that release and run:
+The lock pins each onboarded plugin's exact version and content checksum, together with the adapter, its contract version and a digest of the contract version and mapping. The checksum is the compiler's source digest: it covers the plugin manifest, each skill's `SKILL.md`, the MCP configuration and the framework extension, not other files such as scripts beside a skill. To move to a new toolkit release, check out that release and run:
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin upgrade-check code-review \
@@ -61,7 +61,7 @@ pnpm --filter @agent-plugins/cli exec agent-plugin upgrade-check code-review \
   --plugin-root <candidate-toolkit>/plugins/monolithic-code-review-toolkit
 ```
 
-It runs the plugin side of readiness against the candidate: declared, installed inside the declared range, and every mapped skill present. When all pass it writes the new pin and exits `0`; commit the updated lock. When one fails it prints the step and the reason, leaves the lock unchanged, and exits `1`. A release outside the declared range needs the range widened in the manifest first. A changed mapping also needs `upgrade-check`, because the lock records the mapping it was checked against; a test fails until it is re-pinned.
+It runs the plugin side of readiness against the candidate: declared with a supported range, installed inside it, no new content under the version the lock already pins, and every mapped skill present. When all pass it writes the new pin and exits `0`; commit the updated lock. When one fails it prints the step, the reason and the recovery, leaves the lock unchanged, and exits `1`. Invalid arguments, unreadable plugins, two plugin roots for one plugin, or a lock it cannot write exit `2`. A release outside the declared range needs the range widened in the manifest first. A changed contract version or mapping also needs `upgrade-check`, because the lock records what it was checked against; a test fails until it is re-pinned.
 
 ## Replacing the review plugin
 

@@ -8,6 +8,7 @@ export {
   adapterPlugins,
   checkAdapterReadiness,
   checkPluginBinding,
+  mappingDigest,
   firstFailure,
   PROJECT_KNOWLEDGE_SETUP,
   type Monoid,
@@ -29,15 +30,15 @@ export {
   EMPTY_LOCK,
   LOCK_FILE,
   lockText,
-  mappingDigest,
   parseLock,
   pinFor,
-  satisfiesRange,
   withPin,
   type OnboardedLock,
   type ParsedLock,
   type PluginPin,
 } from "./lock.js";
+
+export { parseRange, parseVersion, satisfies, type Version, type VersionRange } from "./versions.js";
 
 import { assemblePluginSource as assembleSource, assembleSkills as assembleWith, type Assembled } from "./assemble.js";
 

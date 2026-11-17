@@ -81,32 +81,54 @@ test("a missing knowledge-store setup skill fails at the bound step, because rec
   assert.match(result.reason, /review-kit:setup \(review-kit knowledge store setup\)/);
 });
 
-test("an installed version outside the declared range fails at the installed step", () => {
+test("an installed version outside the declared range fails at the installed step, widening before re-checking", () => {
   const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { version: "2.0.0" }) });
   assert.equal(result.step, "installed");
   assert.match(result.reason, /review-kit 2\.0\.0 \(declared \^1\.0\.0\)/);
-  assert.match(result.recovery.message, /upgrade-check code-review/);
+  assert.match(result.recovery.message, /widen the range .* first, then run `agent-plugin upgrade-check code-review --framework .* --plugin-root .*`/);
+});
+
+test("a declared range the framework cannot read fails at the declared step, not as a version outside it", () => {
+  const result = checkAdapterReadiness({ ...facts, onboarded: [{ ...declared("review-kit"), version: ">=1.0.0" }] });
+  assert.equal(result.step, "declared");
+  assert.match(result.reason, /unsupported version ranges: review-kit ">=1\.0\.0"/);
+  assert.match(result.recovery.message, /x\.y\.z, \^x\.y\.z or ~x\.y\.z/);
 });
 
 test("an installed plugin whose checksum differs from the lock fails at the installed step, naming both", () => {
   const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { checksum: "b".repeat(64) }) });
   assert.equal(result.step, "installed");
   assert.match(result.reason, /review-kit 1\.2\.0 \(bbbbbbbbbbbb\) is installed, but onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
+  assert.match(result.recovery.message, /Reinstall the pinned release/);
+});
+
+test("a different installed version is told how to adopt it with the full upgrade-check command", () => {
+  const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { version: "1.3.0", checksum: "b".repeat(64) }) });
+  assert.equal(result.step, "installed");
+  assert.match(result.recovery.message, /Install the pinned version, or check the installed one with `agent-plugin upgrade-check code-review --framework/);
 });
 
 test("an unpinned plugin, or one pinned against another mapping, fails at the installed step", () => {
   assert.match(checkAdapterReadiness({ ...facts, lock: { lockVersion: 1, plugins: [] } }).reason, /review-kit is not pinned/);
   assert.match(
     checkAdapterReadiness({ ...facts, lock: pinned({ mappingDigest: "c".repeat(64) }) }).reason,
-    /the code-review mapping changed since review-kit 1\.2\.0 was pinned/,
+    /the code-review contract or mapping changed since review-kit 1\.2\.0 was pinned/,
   );
 });
 
-test("the plugin binding check is the upgrade gate: it ignores the lock and the project's stores", () => {
-  const candidate = { adapter, onboarded: [declared("review-kit")], installed: kit(ALL_SKILLS, { version: "1.9.0", checksum: "d".repeat(64) }) };
+test("the plugin binding check is the upgrade gate: a newer pin is no obstacle, and the project's stores are not read", () => {
+  const candidate = { adapter, onboarded: [declared("review-kit")], lock: pinned(), installed: kit(ALL_SKILLS, { version: "1.9.0", checksum: "d".repeat(64) }) };
   assert.deepEqual(checkPluginBinding(candidate), { status: "ready" });
   assert.equal(checkPluginBinding({ ...candidate, installed: kit(["task"], { version: "1.9.0" }) }).step, "bound");
   assert.equal(checkPluginBinding({ ...candidate, installed: kit(ALL_SKILLS, { version: "2.0.0" }) }).step, "installed");
+});
+
+test("the upgrade gate refuses new content under the version the lock already pins", () => {
+  const candidate = { adapter, onboarded: [declared("review-kit")], lock: pinned(), installed: kit(ALL_SKILLS, { checksum: "d".repeat(64) }) };
+  const result = checkPluginBinding(candidate);
+  assert.equal(result.step, "installed");
+  assert.match(result.reason, /must not change under its own version: review-kit 1\.2\.0 \(dddddddddddd\) is installed, but onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
+  assert.deepEqual(checkPluginBinding({ ...candidate, installed: kit(ALL_SKILLS) }), { status: "ready" });
 });
 
 test("an unconfigured project knowledge store fails at the bound step", () => {

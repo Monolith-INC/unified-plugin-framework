@@ -12,9 +12,10 @@ import {
   lockText,
   mappingDigest,
   parseLock,
+  parseRange,
   pinFor,
   reviewToolkitAdapter,
-  satisfiesRange,
+  satisfies,
   withPin,
 } from "../dist/index.js";
 
@@ -30,7 +31,7 @@ const pin = (plugin, overrides = {}) => ({
   ...overrides,
 });
 
-test("satisfiesRange follows exact, caret and tilde ranges and fails closed on anything else", () => {
+test("ranges follow exact, caret and tilde rules; other syntax is unreadable and pre-releases never match", () => {
   const cases = [
     ["0.6.0", "^0.6.0", true],
     ["0.6.9", "^0.6.0", true],
@@ -45,12 +46,14 @@ test("satisfiesRange follows exact, caret and tilde ranges and fails closed on a
     ["1.2.3", "1.2.3", true],
     ["1.2.4", "1.2.3", false],
     ["1.0.0-beta.1", "^1.0.0", false],
-    ["1.5.0", ">=1.0.0", false],
-    ["1.5.0", "*", false],
   ];
   cases.map(([version, range, expected]) => {
-    assert.equal(satisfiesRange(version, range), expected, `${version} in ${range}`);
+    assert.equal(satisfies(version, parseRange(range)), expected, `${version} in ${range}`);
     return version;
+  });
+  [">=1.0.0", "*", "1.x", "^1.0", "v1.0.0", ""].map((range) => {
+    assert.equal(parseRange(range), undefined, range);
+    return range;
   });
 });
 
@@ -86,13 +89,14 @@ test("lockText is stable, so re-pinning the same versions changes no bytes", () 
   assert.deepEqual(parseLock(JSON.parse(lockText(lock))), { ok: true, lock });
 });
 
-test("mappingDigest changes whenever the mapping does", () => {
+test("mappingDigest changes whenever the mapping or the contract version does", () => {
   const changed = {
     ...reviewToolkitAdapter,
     fulfil: { ...reviewToolkitAdapter.fulfil, "review-task": [{ plugin: "other", skill: "review-task" }] },
   };
   assert.match(mappingDigest(reviewToolkitAdapter), /^[0-9a-f]{64}$/);
   assert.notEqual(mappingDigest(changed), mappingDigest(reviewToolkitAdapter));
+  assert.notEqual(mappingDigest({ ...reviewToolkitAdapter, contractVersion: "2.0.0" }), mappingDigest(reviewToolkitAdapter));
   assert.equal(mappingDigest({ ...reviewToolkitAdapter }), mappingDigest(reviewToolkitAdapter));
 });
 
@@ -104,7 +108,7 @@ test("the committed lock pins every declared plugin against the current code rev
     const locked = pinFor(parsed.lock, plugin);
     const declaration = declared.find(({ name }) => name === plugin);
     assert.ok(locked, `${plugin} is pinned`);
-    assert.ok(satisfiesRange(locked.version, declaration.version), `${plugin} ${locked.version} is inside ${declaration.version}`);
+    assert.ok(satisfies(locked.version, parseRange(declaration.version)), `${plugin} ${locked.version} is inside ${declaration.version}`);
     assert.equal(locked.mappingDigest, mappingDigest(reviewToolkitAdapter), `${plugin} was pinned against the current mapping; run upgrade-check`);
     return plugin;
   });
