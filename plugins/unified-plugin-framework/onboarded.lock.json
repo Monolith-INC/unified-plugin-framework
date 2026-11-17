@@ -1,57 +1,85 @@
 {
-  "lockVersion": 1,
+  "lockVersion": 2,
   "plugins": [
     {
-      "adapter": "continuity",
+      "bindings": [
+        {
+          "adapter": "continuity",
+          "contractVersion": "1.0.0",
+          "mappingDigest": "2b56059b5a1eb7bd62b3d0fb975b0d2e732103f44f675f0a53eac8795787e80a"
+        }
+      ],
       "checksum": "c54b7d77ef1de3cd3151a84910a45fa98336842b3768cc9e528c2e3574596d73",
-      "contractVersion": "1.0.0",
-      "mappingDigest": "2b56059b5a1eb7bd62b3d0fb975b0d2e732103f44f675f0a53eac8795787e80a",
       "plugin": "agent-continuity",
       "version": "0.13.0"
     },
     {
-      "adapter": "project-tracking",
-      "checksum": "3c79094b2810aa06ee0d521b28ee00fdf1fcdb7b587d9ab8b815af36aa091429",
-      "contentSource": {
-        "checksum": "c33aea4ba8e188280ac73fe4f40dfa5e0ef36fdf9a1b9e1f826ad5a17bacf8b2",
-        "files": {
-          "LICENSE": "dc06e35bccf00e3f5c74fb57b52021c1464ccb8cbd119e63219c2018e1c53336",
-          "common/workflows/enrichers/work-item-enricher.prompt.md": "e3f3250d35abdff46cf44f4bc8d5fe2225076dd95bc4d3eab274b8ee388c6d48",
-          "references/audit-checklist.md": "dfb4cfa5e70e769ffe8de79df2ef6696af2c60b74c41bf561449fb3f9e1b14af",
-          "references/decomposition-rules.md": "d4830c0b291a8d0f952509a37a0f7c9c677a4439f35a3d0e9d84a09972e2b5e5",
-          "skills/amend-workitems/SKILL.md": "efe5458e2c73bd3ac023837def5a71951ed71d2be9a18ef7ff39381e15777858",
-          "skills/auto-fix-artifact/SKILL.md": "d3c26600670485d3bfc91727e206675dce10014f257c259c5b65d241c7f941a9",
-          "skills/generate-breakdown-work-items/references/atomic-tasks.md": "82abe08326b430e23278c99e6b6b850d673d64afab8dbc8dd40717111ce6f382",
-          "skills/generate-breakdown-work-items/references/plan-generation.md": "8c73af0ec3bd83f6b5a55968b440829f589a0150b77941024a595ad6774563e5",
-          "skills/split-story/references/split-patterns.md": "a2d32ea05d4f763b48427bac59bb6c9ff8140327829db342af33cf062ee92274"
+      "bindings": [
+        {
+          "adapter": "project-tracking",
+          "contractVersion": "1.0.0",
+          "files": {
+            "LICENSE": "dc06e35bccf00e3f5c74fb57b52021c1464ccb8cbd119e63219c2018e1c53336",
+            "common/workflows/enrichers/work-item-enricher.prompt.md": "e3f3250d35abdff46cf44f4bc8d5fe2225076dd95bc4d3eab274b8ee388c6d48",
+            "references/audit-checklist.md": "dfb4cfa5e70e769ffe8de79df2ef6696af2c60b74c41bf561449fb3f9e1b14af",
+            "references/decomposition-rules.md": "d4830c0b291a8d0f952509a37a0f7c9c677a4439f35a3d0e9d84a09972e2b5e5",
+            "skills/amend-workitems/SKILL.md": "efe5458e2c73bd3ac023837def5a71951ed71d2be9a18ef7ff39381e15777858",
+            "skills/auto-fix-artifact/SKILL.md": "d3c26600670485d3bfc91727e206675dce10014f257c259c5b65d241c7f941a9",
+            "skills/generate-breakdown-work-items/references/atomic-tasks.md": "82abe08326b430e23278c99e6b6b850d673d64afab8dbc8dd40717111ce6f382",
+            "skills/generate-breakdown-work-items/references/plan-generation.md": "8c73af0ec3bd83f6b5a55968b440829f589a0150b77941024a595ad6774563e5",
+            "skills/split-story/references/split-patterns.md": "a2d32ea05d4f763b48427bac59bb6c9ff8140327829db342af33cf062ee92274"
+          },
+          "mappingDigest": "6e444ee63fec2139e22407fa623604a7038c621963849df714c0e221725cddfb"
         }
-      },
-      "contractVersion": "1.0.0",
-      "mappingDigest": "ce51331fd75c3efd7d76b25c28e34a0e710c51fcd4232bf93f938214632ba9cf",
+      ],
+      "checksum": "c33aea4ba8e188280ac73fe4f40dfa5e0ef36fdf9a1b9e1f826ad5a17bacf8b2",
       "plugin": "agile-backlog-toolkit",
       "version": "0.12.1"
     },
     {
-      "adapter": "discovery",
+      "bindings": [
+        {
+          "adapter": "discovery",
+          "contractVersion": "1.0.0",
+          "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42"
+        }
+      ],
       "checksum": "652b35eb98e9b941819012d2c179d8a9bdf3cad206d05dcae41b91c863cf8b48",
-      "contractVersion": "1.0.0",
-      "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42",
       "plugin": "bmad-method",
       "version": "6.12.0"
     },
     {
-      "adapter": "code-review",
+      "bindings": [
+        {
+          "adapter": "code-review",
+          "contractVersion": "1.0.0",
+          "mappingDigest": "98c193cec36c01c4500f109af874b8db11a3083ce4cf114101178e1be17e0822"
+        }
+      ],
       "checksum": "fb6ce6fa82be37782146a46d8b17f1bdb1f4982a9b49621d637a4dca10828395",
-      "contractVersion": "1.0.0",
-      "mappingDigest": "98c193cec36c01c4500f109af874b8db11a3083ce4cf114101178e1be17e0822",
       "plugin": "monolithic-code-review-toolkit",
       "version": "0.6.0"
     },
     {
-      "adapter": "discovery",
+      "bindings": [
+        {
+          "adapter": "discovery",
+          "contractVersion": "1.0.0",
+          "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42"
+        },
+        {
+          "adapter": "implementation",
+          "contractVersion": "1.0.0",
+          "files": {
+            "LICENSE": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
+            "skills/executing-plans/SKILL.md": "f38e8f2ddcf079f65493adc713c1fed78421dfaf5f4dbf6b3a6b2b1d95466e71",
+            "skills/systematic-debugging/SKILL.md": "51c6435d98c83c42c96ba7c35725a0b2c376cd487fb1a4e6bd0ddbe7e33ef202",
+            "skills/verification-before-completion/SKILL.md": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3"
+          },
+          "mappingDigest": "5e323359a4728c0798fba99335f3716e5362213c60ff644b84ab6ab88d7cf3af"
+        }
+      ],
       "checksum": "0221b59049f5bb2d68d43587b61034ce79acfe031c2f341041a3ee7d0b0b3a88",
-      "contractVersion": "1.0.0",
-      "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42",
       "plugin": "superpowers",
       "version": "7.0.0"
     }

@@ -8,7 +8,7 @@ description: Derive a story's implementation plan and atomic tasks with acceptan
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Plan implementation
 

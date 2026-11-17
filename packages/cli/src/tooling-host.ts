@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
 import { fail, nodeProjectFiles, object, ok, type Result } from "@agent-plugins/project";
-import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, type BindingFacts } from "@agent-plugins/workflows";
+import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinFor, sourceMatches, type BindingFacts } from "@agent-plugins/workflows";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
 import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
@@ -37,8 +37,8 @@ const checkedBindings = (bindings: readonly BindingFacts[]): Result<readonly Bin
   const failed = bindings.map(checkPluginBinding).find((result) => result.status !== "ready");
   const unpinned = bindings.flatMap(({ adapter, installed, lock }) => adapterPlugins(adapter).filter((name) => {
     const found = installed.get(name);
-    const pin = lock.plugins.find((entry) => entry.plugin === name);
-    return pin === undefined || found?.version !== pin.version || found?.checksum !== pin.checksum;
+    const pin = pinFor(lock, name, adapter.workflow);
+    return pin === undefined || found === undefined || !sourceMatches(pin, found);
   }));
   return failed?.status === "not-ready" ? fail("dependency-binding", failed.reason,
     failed.recovery.action === "ask-user" ? failed.recovery.message : failed.recovery.goal)

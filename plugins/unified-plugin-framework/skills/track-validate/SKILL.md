@@ -8,7 +8,7 @@ description: Validate work against the team template, source coverage and hierar
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Validate and repair
 

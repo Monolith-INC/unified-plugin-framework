@@ -8,7 +8,7 @@ description: Fill gaps in a work item using its approved source and the project'
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Fill the gaps
 

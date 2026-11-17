@@ -4,7 +4,7 @@ import type { Diagnostic } from "./index.js";
 export const UPF_EXTENSION = "io.github.monolith-inc.upf";
 
 /** The workflows the framework offers; each has one adapter in `@agent-plugins/workflows` (ADR-001). */
-export const WORKFLOW_NAMES = Object.freeze(["code-review", "discovery", "project-tracking", "continuity"] as const);
+export const WORKFLOW_NAMES = Object.freeze(["code-review", "discovery", "project-tracking", "continuity", "implementation"] as const);
 
 export type WorkflowName = (typeof WORKFLOW_NAMES)[number];
 
@@ -24,8 +24,12 @@ export interface OnboardedPlugin {
   readonly name: string;
   readonly version: string;
   readonly source: string;
-  readonly adapter: string;
+  readonly adapter: string | readonly string[];
 }
+
+/** Legacy single-workflow declarations and shared declarations have one consuming-workflow view. */
+export const declaredWorkflows = (plugin: OnboardedPlugin): readonly string[] =>
+  typeof plugin.adapter === "string" ? [plugin.adapter] : plugin.adapter;
 
 export interface OnboardedPluginsRead {
   readonly plugins: readonly OnboardedPlugin[];
@@ -56,9 +60,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const nonEmptyString = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value : undefined;
 
+const adapterValue = (value: unknown): string | readonly string[] | undefined =>
+  nonEmptyString(value) ?? (Array.isArray(value) && value.length > 0 && value.every((name) => nonEmptyString(name) !== undefined)
+    && new Set(value).size === value.length ? value : undefined);
+
 const missingFields = (entry: Record<string, unknown>, index: number): readonly Diagnostic[] =>
   FIELDS.flatMap((field) =>
-    nonEmptyString(entry[field]) === undefined
+    (field === "adapter" ? adapterValue(entry[field]) : nonEmptyString(entry[field])) === undefined
       ? [
           error(
             onboardedDiagnosticCodes.onboardedPluginFieldRequired,
@@ -73,11 +81,11 @@ const toPlugin = (entry: Record<string, unknown>): OnboardedPlugin => ({
   name: nonEmptyString(entry["name"]) ?? "",
   version: nonEmptyString(entry["version"]) ?? "",
   source: nonEmptyString(entry["source"]) ?? "",
-  adapter: nonEmptyString(entry["adapter"]) ?? "",
+  adapter: adapterValue(entry["adapter"]) ?? "",
 });
 
 const unknownAdapter = (plugin: OnboardedPlugin, index: number): readonly Diagnostic[] =>
-  WORKFLOW_ADAPTERS.has(plugin.adapter)
+  declaredWorkflows(plugin).every((name) => WORKFLOW_ADAPTERS.has(name))
     ? []
     : [
         error(

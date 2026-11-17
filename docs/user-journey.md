@@ -25,7 +25,7 @@ flowchart TD
     C["Start or resume a session<br/><small>Continuity · AGE-97</small>"]
     D["Discovery<br/><small>Four modes · AGE-93</small>"]
     T["Project tracking<br/><small>Design to work items · AGE-98</small>"]
-    I["Implementation<br/><small>No workflow yet</small>"]
+    I["Implementation<br/><small>Execute, resume, verify · AGE-102</small>"]
     R["Code review<br/><small>Task, story, feature · shipped</small>"]
     K[("Project knowledge<br/>one shared store")]
 
@@ -38,8 +38,7 @@ flowchart TD
     classDef built fill:#EEEDFE,stroke:#534AB7,color:#3C3489
     classDef planned fill:#F1EFE8,stroke:#5F5E5A,color:#444441
     classDef store fill:#E1F5EE,stroke:#0F6E56,color:#085041
-    class C,D,T,R built
-    class I planned
+    class C,D,T,I,R built
     class K store
 ```
 
@@ -48,7 +47,7 @@ flowchart TD
 | Continuity | Agent Continuity | Implemented: [continuity workflow](workflows/continuity.md) |
 | Discovery | Superpowers and BMad Method | Shipped: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
 | Project tracking | Agile Backlog Toolkit | Implemented: [project tracking workflow](workflows/project-tracking.md) |
-| Implementation | Not chosen | No workflow or ticket yet |
+| Implementation | Superpowers | Implemented: [implementation workflow](workflows/implementation.md) |
 | Code review | Monolithic Code Review Toolkit | Shipped: [code review workflow](workflows/code-review.md) |
 | Project knowledge | Project knowledge plugin | Shipped: used by every workflow |
 

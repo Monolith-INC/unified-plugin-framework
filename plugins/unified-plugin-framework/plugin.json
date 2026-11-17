@@ -28,7 +28,10 @@
           "name": "superpowers",
           "version": "^7.0.0",
           "source": "github:obra/superpowers",
-          "adapter": "discovery"
+          "adapter": [
+            "discovery",
+            "implementation"
+          ]
         },
         {
           "name": "bmad-method",

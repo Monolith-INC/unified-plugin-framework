@@ -5,13 +5,13 @@ import { loadPluginRoot } from "@agent-plugins/core";
 import { fileURLToPath } from "node:url";
 import {
   backlogTrackingAdapter as adapter, TRACKING_OPERATIONS, checkPluginBinding,
-  checkAdapterReadiness, findWorkflow, mappingDigest, renderSkill, selectContent, providerLeak,
+  checkAdapterReadiness, findWorkflow, mappingDigest, renderSkill, selectContent, providerLeak, pinFor,
 } from "../dist/index.js";
 
 const root = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
 const lock = JSON.parse(readFileSync(new URL("onboarded.lock.json", root), "utf8"));
 const template = (name) => readFileSync(new URL(`skills/${name}/SKILL.md`, root), "utf8");
-const pin = lock.plugins.find(({ plugin }) => plugin === "agile-backlog-toolkit");
+const pin = pinFor(lock, "agile-backlog-toolkit", "project-tracking");
 const plugin = {
   version: pin.version, checksum: pin.checksum,
   skills: Object.values(adapter.fulfil).flat().map(({ skill }) => skill),
@@ -86,7 +86,7 @@ test("selection expansion accepts unchanged source while any previously pinned s
 
 test("an incomplete content view or missing lifecycle cannot assemble", () => {
   assert.equal(renderSkill(template("track-enrich"), { ...adapter, contentViews: [] }, "track-enrich", lock).ok, false);
-  assert.equal(renderSkill(template("track-enrich").replace("{{tracking}}", ""), adapter, "track-enrich", lock).ok, false);
+  assert.equal(renderSkill(template("track-enrich").replace("{{protocol}}", ""), adapter, "track-enrich", lock).ok, false);
 });
 
 test("content selection rejects missing, ambiguous and provider-specific source sections", () => {
