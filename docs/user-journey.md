@@ -22,7 +22,7 @@ A session starts or resumes with Continuity, then moves through Discovery, proje
 
 ```mermaid
 flowchart TD
-    C["Start or resume a session<br/><small>Continuity · AGE-97, planned</small>"]
+    C["Start or resume a session<br/><small>Continuity · AGE-97</small>"]
     D["Discovery<br/><small>Four modes · AGE-93</small>"]
     T["Project tracking<br/><small>Design to work items · AGE-98</small>"]
     I["Implementation<br/><small>No workflow yet</small>"]
@@ -38,14 +38,14 @@ flowchart TD
     classDef built fill:#EEEDFE,stroke:#534AB7,color:#3C3489
     classDef planned fill:#F1EFE8,stroke:#5F5E5A,color:#444441
     classDef store fill:#E1F5EE,stroke:#0F6E56,color:#085041
-    class D,T,R built
-    class C,I planned
+    class C,D,T,R built
+    class I planned
     class K store
 ```
 
 | Workflow | Plugin behind it | Status |
 | --- | --- | --- |
-| Continuity | Agent Continuity | Implemented, awaiting framework merge: [continuity workflow](workflows/continuity.md) |
+| Continuity | Agent Continuity | Implemented: [continuity workflow](workflows/continuity.md) |
 | Discovery | Superpowers and BMad Method | Shipped: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
 | Project tracking | Agile Backlog Toolkit | Implemented: [project tracking workflow](workflows/project-tracking.md) |
 | Implementation | Not chosen | No workflow or ticket yet |
