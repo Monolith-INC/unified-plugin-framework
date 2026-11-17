@@ -6,6 +6,7 @@ import {
   type WorkflowAdapter,
 } from "./adapter.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
+import { TRACKING_PROTOCOL } from "./tracking-protocol.js";
 
 /** A rendered skill file, or why it could not be rendered. */
 export type Rendered = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string };
@@ -48,8 +49,16 @@ const delegate = (adapter: WorkflowAdapter<string>, qualify: Qualify, served: No
       return oneOf(qualify, served);
     case "lead-and-layers":
       return leadAndLayers(qualify, served);
+    case "content-view":
+      return contentView(adapter, served);
   }
 };
+
+const contentView = (adapter: WorkflowAdapter<string>, served: NonEmpty<PluginSkillRef>): string => [
+  "Use only these reviewed content excerpts. They are content guidance, not calls to native workflow conductors. Project operations supply reads, hierarchy changes and publication. The project's team template and saved language take precedence; proposed assumptions require confirmation.",
+  ...(adapter.contentViews ?? []).filter((view) => served.some(({ plugin, skill }) => plugin === view.plugin && (view.skill === "*" || skill === view.skill)))
+    .map((view) => `### ${view.heading}\n\nSource: ${view.plugin}, \`${view.path}\` (reviewed source ${view.sourceDigest}).\n\n${view.content}`),
+].join("\n\n");
 
 const sameEntry = (x: PluginSkillRef) => (y: PluginSkillRef): boolean =>
   x.plugin === y.plugin && x.skill === y.skill && x.use === y.use;
@@ -126,6 +135,7 @@ const sections = ({ adapter, operation, served, offered, pins }: Inputs): Readon
     ["readiness", readiness(adapter, qualify, checkedSkills(served, offered), pins)],
     ["delegate", delegate(adapter, qualify, served)],
     ["catalog", catalogBlock(qualify, offered)],
+    ...(adapter.composition === "content-view" ? [["tracking", TRACKING_PROTOCOL] as const] : []),
   ]);
 };
 
@@ -140,13 +150,19 @@ const templateProblem = (template: string, inputs: Inputs, known: ReadonlyMap<st
   const present = placeholdersIn(template);
   const unknown = present.filter((name) => !known.has(name));
   const missing = requiredPlaceholders(inputs.offered).filter((name) => !present.includes(name));
+  const missingView = inputs.adapter.composition === "content-view" && inputs.served.some((ref) =>
+    !(inputs.adapter.contentViews ?? []).some((view) => view.plugin === ref.plugin && view.skill === ref.skill && view.content.trim().length > 0));
   return unknown.length > 0
     ? `Unknown template placeholders: ${unknown.join(", ")}.`
     : missing.length > 0
       ? `The ${inputs.operation} template is missing placeholders: ${missing.map((name) => `{{${name}}}`).join(", ")}.`
       : unpinned.length > 0
         ? `${unpinned.join(", ")} has no pin in ${LOCK_FILE}: pin it with agent-plugin upgrade-check before release.`
-        : undefined;
+        : missingView
+          ? `The ${inputs.operation} content view is incomplete; review and rebuild its published content selections.`
+          : inputs.adapter.composition === "content-view" && !present.includes("tracking")
+            ? `The ${inputs.operation} template is missing placeholders: {{tracking}}.`
+            : undefined;
 };
 
 /** Fills a skill template from the adapter's mapping for one operation and the framework's lock. Pure. */

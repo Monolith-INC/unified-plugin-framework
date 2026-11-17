@@ -7,6 +7,12 @@
     "io.github.monolith-inc.upf": {
       "onboardedPlugins": [
         {
+          "name": "agile-backlog-toolkit",
+          "version": "0.12.1",
+          "source": "github:theocarranza/agile-backlog-toolkit",
+          "adapter": "project-tracking"
+        },
+        {
           "name": "monolithic-code-review-toolkit",
           "version": "^0.6.0",
           "source": "github:Monolith-INC/monolithic-code-review-toolkit",

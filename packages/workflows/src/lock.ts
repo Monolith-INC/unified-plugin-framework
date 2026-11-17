@@ -4,6 +4,12 @@ import { WORKFLOW_ADAPTERS, type WorkflowName } from "@agent-plugins/core";
 /** The lock beside the framework manifest: one pin per onboarded plugin, like `package-lock.json` beside `package.json`. */
 export const LOCK_FILE = "onboarded.lock.json";
 
+/** Underlying plugin identity and previously reviewed public files, independent of selection growth. */
+export type ContentSource = {
+  readonly checksum: string;
+  readonly files: Readonly<Record<string, string>>;
+};
+
 /**
  * One onboarded plugin as last accepted by its adapter's checks: the exact version, the compiler's content digest of
  * the plugin source, and the adapter, contract version and mapping digest it was checked against.
@@ -15,6 +21,7 @@ export type PluginPin = {
   readonly adapter: WorkflowName;
   readonly contractVersion: string;
   readonly mappingDigest: string;
+  readonly contentSource?: ContentSource;
 };
 
 export type OnboardedLock = {
@@ -41,9 +48,14 @@ const field = (value: Readonly<Record<string, unknown>>, key: string): string | 
 
 const isDigest = (text: string | undefined): boolean => text !== undefined && SHA256.test(text);
 
+const isContentSource = (value: unknown): value is ContentSource => isRecord(value)
+  && Object.keys(value).length === 2 && isDigest(field(value, "checksum")) && isRecord(value.files)
+  && Object.entries(value.files).every(([path, digest]) => path.length > 0 && typeof digest === "string" && isDigest(digest));
+
 const isPin = (value: unknown): value is PluginPin =>
   isRecord(value) &&
-  Object.keys(value).length === PIN_FIELDS.length &&
+  Object.keys(value).every((key) => (PIN_FIELDS as readonly string[]).includes(key) || key === "contentSource") &&
+  (value.contentSource === undefined || isContentSource(value.contentSource)) &&
   PIN_FIELDS.every((key) => field(value, key) !== undefined) &&
   WORKFLOW_ADAPTERS.has(field(value, "adapter") ?? "") &&
   isDigest(field(value, "checksum")) &&

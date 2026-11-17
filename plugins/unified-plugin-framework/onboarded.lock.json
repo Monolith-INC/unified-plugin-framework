@@ -2,6 +2,28 @@
   "lockVersion": 1,
   "plugins": [
     {
+      "adapter": "project-tracking",
+      "checksum": "3c79094b2810aa06ee0d521b28ee00fdf1fcdb7b587d9ab8b815af36aa091429",
+      "contentSource": {
+        "checksum": "c33aea4ba8e188280ac73fe4f40dfa5e0ef36fdf9a1b9e1f826ad5a17bacf8b2",
+        "files": {
+          "LICENSE": "dc06e35bccf00e3f5c74fb57b52021c1464ccb8cbd119e63219c2018e1c53336",
+          "common/workflows/enrichers/work-item-enricher.prompt.md": "e3f3250d35abdff46cf44f4bc8d5fe2225076dd95bc4d3eab274b8ee388c6d48",
+          "references/audit-checklist.md": "dfb4cfa5e70e769ffe8de79df2ef6696af2c60b74c41bf561449fb3f9e1b14af",
+          "references/decomposition-rules.md": "d4830c0b291a8d0f952509a37a0f7c9c677a4439f35a3d0e9d84a09972e2b5e5",
+          "skills/amend-workitems/SKILL.md": "efe5458e2c73bd3ac023837def5a71951ed71d2be9a18ef7ff39381e15777858",
+          "skills/auto-fix-artifact/SKILL.md": "d3c26600670485d3bfc91727e206675dce10014f257c259c5b65d241c7f941a9",
+          "skills/generate-breakdown-work-items/references/atomic-tasks.md": "82abe08326b430e23278c99e6b6b850d673d64afab8dbc8dd40717111ce6f382",
+          "skills/generate-breakdown-work-items/references/plan-generation.md": "8c73af0ec3bd83f6b5a55968b440829f589a0150b77941024a595ad6774563e5",
+          "skills/split-story/references/split-patterns.md": "a2d32ea05d4f763b48427bac59bb6c9ff8140327829db342af33cf062ee92274"
+        }
+      },
+      "contractVersion": "1.0.0",
+      "mappingDigest": "ce51331fd75c3efd7d76b25c28e34a0e710c51fcd4232bf93f938214632ba9cf",
+      "plugin": "agile-backlog-toolkit",
+      "version": "0.12.1"
+    },
+    {
       "adapter": "discovery",
       "checksum": "652b35eb98e9b941819012d2c179d8a9bdf3cad206d05dcae41b91c863cf8b48",
       "contractVersion": "1.0.0",

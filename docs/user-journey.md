@@ -4,7 +4,7 @@ The paths a user can take through Unified Plugin Framework: the workflows in the
 
 ## Project setup and tracker adapters
 
-Planned in [AGE-100](https://linear.app/agentical-monolithics/issue/AGE-100/project-bootstrap-and-tracker-adapters), before the project tracking workflow.
+Shipped in [AGE-100](https://linear.app/agentical-monolithics/issue/AGE-100/project-bootstrap-and-tracker-adapters).
 
 When a skill needs a project operation, it uses the configured adapter. If setup is missing, bootstrap asks for the tracker, its project settings, the project's language and necessary document/knowledge locations, then resumes the original request. Later calls use the adapter directly. Skills do not repeat setup checks or choose a tracker.
 
@@ -20,7 +20,7 @@ A session starts or resumes with Continuity, then moves through Discovery, proje
 flowchart TD
     C["Start or resume a session<br/><small>Continuity · AGE-97, planned</small>"]
     D["Discovery<br/><small>Four modes · AGE-93</small>"]
-    T["Project tracking<br/><small>Design to work items · AGE-98, planned</small>"]
+    T["Project tracking<br/><small>Design to work items · AGE-98</small>"]
     I["Implementation<br/><small>No workflow yet</small>"]
     R["Code review<br/><small>Task, story, feature · shipped</small>"]
     K[("Project knowledge<br/>one shared store")]
@@ -34,8 +34,8 @@ flowchart TD
     classDef built fill:#EEEDFE,stroke:#534AB7,color:#3C3489
     classDef planned fill:#F1EFE8,stroke:#5F5E5A,color:#444441
     classDef store fill:#E1F5EE,stroke:#0F6E56,color:#085041
-    class D,R built
-    class C,T,I planned
+    class D,T,R built
+    class C,I planned
     class K store
 ```
 
@@ -43,7 +43,7 @@ flowchart TD
 | --- | --- | --- |
 | Continuity | Agent Continuity | Planned: [AGE-97](https://linear.app/agentical-monolithics/issue/AGE-97/continuity-workflow-adapter-agent-continuity) |
 | Discovery | Superpowers and BMad Method | Shipped: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
-| Project tracking | Agile Backlog Toolkit | Planned: [AGE-98](https://linear.app/agentical-monolithics/issue/AGE-98/project-tracking-workflow-adapter-agile-backlog-toolkit) |
+| Project tracking | Agile Backlog Toolkit | Implemented: [project tracking workflow](workflows/project-tracking.md) |
 | Implementation | Not chosen | No workflow or ticket yet |
 | Code review | Monolithic Code Review Toolkit | Shipped: [code review workflow](workflows/code-review.md) |
 | Project knowledge | Project knowledge plugin | Shipped: used by every workflow |
@@ -110,7 +110,7 @@ See the [Discovery workflow](workflows/discovery.md) for which skill is added at
 
 ### Project tracking: from design to work items
 
-Between Discovery and implementation, the approved design becomes work items. The scope of the mapped-out work decides the top-level item; each item is then enriched to the team's format, validated, and broken down until every piece is implementable. Planned in [AGE-98](https://linear.app/agentical-monolithics/issue/AGE-98/project-tracking-workflow-adapter-agile-backlog-toolkit), on the Agile Backlog Toolkit.
+Between Discovery and implementation, the approved design becomes work items. The scope of the mapped-out work decides the top-level item; each item is then enriched to the team's format, validated, and broken down until every piece is implementable. Start with `track-from-design`, or use any [tracking operation](workflows/project-tracking.md) independently on existing work.
 
 ```mermaid
 flowchart TD
@@ -144,7 +144,7 @@ flowchart TD
 | Break down | Writes a story's implementation plan and its tasks | `generate-breakdown-work-items` |
 | Amend | Applies later corrections consistently across the whole tree | `amend-workitems` |
 
-As with every workflow, the framework's own tracking skills will name no plugin; the adapter maps them onto these toolkit skills.
+The tracking templates name no plugin. The adapter contributes reviewed toolkit content while the project's adapter handles every work-item read and write. Its native tracker conductors are not invoked. The team's template and saved language take precedence over toolkit defaults; complete sections and existing item identities are preserved on resume.
 
 ### Code review: choose by where you are
 
