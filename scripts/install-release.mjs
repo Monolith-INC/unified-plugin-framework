@@ -142,10 +142,18 @@ const bootstrap=(root,project,input)=>{
  process.stderr.write(result.stderr ?? '');
  return result.status!==0 ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.') : bootstrapReport(result.stdout,root,project);
 };
+// Steps an agent completes after installation. Any other unfinished step means installation itself did not finish,
+// and must not read like the routine follow-ups every fresh install reports.
+const FOLLOW_UPS=new Set(['knowledge-content','knowledge-server','review','tracker']);
+const listed=steps=>steps.map(({step,failure})=>`- ${step}: ${failure.message} ${failure.recovery}`).join('\n');
 const bootstrapReport=(output,root,project)=>{
  const report=JSON.parse(output);
- return report.ok && report.value.tooling.status==='ready' ? {ok:true,distribution:root,project}
-  : stop('Distribution installed; setup needs the actions reported above. Rerun the accepted plan after resolving them.');
+ const open=report.ok ? report.value.tooling.steps.filter(({status})=>status!=='ready') : [];
+ const failed=open.filter(({step})=>!FOLLOW_UPS.has(step));
+ return !report.ok ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.')
+  : open.length===0 ? {ok:true,distribution:root,project}
+  : failed.length>0 ? stop(`\nSetup did not finish. The workflows will not work until these steps succeed:\n${listed(failed)}\nRerun the installer; completed steps are reused.`)
+  : stop(`\nInstallation finished. Ask your agent to complete these follow-ups:\n${listed(open)}`);
 };
 await main().then(result=>result===undefined || typeof result==='boolean' ? undefined : process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error=>{
  process.stderr.write(`${error.message}\n`);process.exitCode=1;

@@ -6,7 +6,7 @@ import { nodeProjectFiles, object, ok, fail, type Result } from "@agent-plugins/
 import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
-import { FRAMEWORK_ROOT, pluginTarget, toolsRoot } from "./tooling-host.js";
+import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, pluginTarget, toolsRoot } from "./tooling-host.js";
 import { resolveSourceBundle } from "./bundle-source.js";
 
 export const pythonRuntime = (project: string): string => join(project, ".project-knowledge/runtime", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
@@ -17,7 +17,7 @@ export const installSkills = (project: string): Promise<Result<string>> => insta
 
 /** Validate observed installed bytes against the bundle built from the framework source, as the installer builds it. */
 export const installedSkills = async (project: string): Promise<boolean> => {
-  const checked = await Promise.all(["unified-plugin-framework", "project-knowledge"].map((name) => installedPlugin(project, name)));
+  const checked = await Promise.all(FRAMEWORK_PLUGINS.map((name) => installedPlugin(project, name)));
   return checked.every(Boolean);
 };
 const installedPlugin = async (project: string, name: string): Promise<boolean> => {

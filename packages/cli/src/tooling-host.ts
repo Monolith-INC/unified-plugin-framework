@@ -10,7 +10,7 @@ import { fetchSources, GIT_FETCHER, unfetched, type FetchContext } from "./depen
 import { bundledRoots } from "./distribution.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
-import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
+import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
 import { checkPluginBinding } from "@agent-plugins/workflows";
 import { command, hostRequest, sequence } from "./tooling-process.js";
 import { directory, readText, readToml, safePath, setupFailure, writeText } from "./tooling-files.js";
@@ -89,16 +89,27 @@ const dependencyRefs = (adapter: BindingFacts["adapter"]) => [...Object.values(a
 /** Validate the content the host actually discovered, including cache copies and bare skills. */
 export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly {readonly name: string; readonly path: string}[]): boolean => {
   const bindings = stagedBindings(project, input);
-  return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) => {
-    const name = adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`;
-    const matches = discovered.filter((entry) => entry.name === name);
-    const source = readContentTree(join(pluginTarget(project, plugin), "source/skills", skill));
-    return source.ok && matches.length > 0 && matches.every((entry) => {
-      const active = readContentTree(dirname(entry.path));
-      return active.ok && active.value === source.value;
-    });
-  }));
+  return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) =>
+    activeMatches(discovered, adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`, join(pluginTarget(project, plugin), "source/skills", skill))));
 };
+const activeMatches = (discovered: readonly {readonly name: string; readonly path: string}[], name: string, sourceDir: string): boolean => {
+  const matches = discovered.filter((entry) => entry.name === name);
+  const source = readContentTree(sourceDir);
+  return source.ok && matches.length > 0 && matches.every((entry) => {
+    const active = readContentTree(dirname(entry.path));
+    return active.ok && active.value === source.value;
+  });
+};
+
+/** Plugins this framework ships itself, rather than pinned dependencies. */
+export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework", "project-knowledge"]);
+/** Every skill the installed framework plugins provide, under the name the host discovers it by. */
+export const frameworkSkills = (project: string): readonly { readonly name: string; readonly source: string }[] =>
+  FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(pluginTarget(project, plugin), "skills"))
+    .map((skill) => ({ name: `${plugin}:${skill}`, source: join(pluginTarget(project, plugin), "skills", skill) })));
+/** The host serves its own cached copy, current only once activation succeeds; an earlier install's copy can share every name, so compare bytes. */
+export const frameworkSkillsMatch = (project: string, discovered: readonly {readonly name: string; readonly path: string}[]): boolean =>
+  frameworkSkills(project).every(({ name, source }) => activeMatches(discovered, name, source));
 
 /** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
 export const stageDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher = GIT_FETCHER): Promise<Result<string>> =>

@@ -5,7 +5,7 @@ import { CODEX_TOOLING, codexToolingRegistration } from "@agent-plugins/adapter-
 import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, readToml, setupFailure } from "./tooling-files.js";
-import { activeSkillsMatch, discoverHost, expectedDependencySkills, installHostPlugins, marketplaceRoot, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
+import { activeSkillsMatch, discoverHost, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, installHostPlugins, marketplaceRoot, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
@@ -100,9 +100,10 @@ const inspectReview = async (project: string, input: BootstrapInput): Promise<Re
     ? ready("Review settings point to the project's single knowledge root and server.") : missing("Run review-setup for provider bindings if absent, then point review knowledge to the accepted project root.");
 };
 const inspectDiscovery = (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => discoverHost(project).then((result) => {
-  const expected = ["unified-plugin-framework:project-bootstrap", "project-knowledge:discover-project-knowledge", ...requiredSkills(project, input)];
+  const expected = [...new Set([...frameworkSkills(project).map(({ name }) => name), ...requiredSkills(project, input)])];
   const missingNames = result.ok ? expected.filter((name) => !result.value.some((skill) => skill.name === name)) : [];
   return !result.ok ? result : missingNames.length > 0 ? missing(`Activate the pinned skills in this host: ${missingNames.join(", ")}; then repeat fresh discovery.`)
+    : !frameworkSkillsMatch(project, result.value) ? missing("Reactivate the framework plugins so the host replaces its copy cached from an earlier install; then repeat fresh discovery.")
     : !activeSkillsMatch(project, input, result.value) ? fail("active-skill-drift", "A discovered dependency skill differs from the pinned staged source.",
       "Preserve any edited skill, reconcile the active copy with its pinned source and repeat discovery; names or ownership markers alone are insufficient.")
       : ready("Fresh host discovery found and verified the selected framework, knowledge and workflow dependency skills.");
