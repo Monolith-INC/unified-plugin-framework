@@ -63,7 +63,7 @@ Each adapter has tests that check its contract is still fulfilled by the current
 ## Plugins as dependencies
 
 1. **Declare.** The manifest lists each onboarded plugin with a version range and its source.
-2. **Pin.** Installation resolves one version per plugin and records it in the lock, with a content checksum and the adapter version.
+2. **Pin.** The lock (`plugins/unified-plugin-framework/onboarded.lock.json`) records one version per plugin, with a content checksum and the adapter mapping it was checked against. `agent-plugin upgrade-check` writes it; `adapter-check` refuses an installed plugin that differs from it.
 3. **Upgrade.** When a plugin releases a new version, run its adapter's tests against the new version. Upgrade only if they pass; otherwise adjust the mapping first or stay on the pinned version.
 4. **Replace.** To swap a plugin, add the new plugin, adjust the adapter's mapping to it, pass the adapter tests, then remove the old plugin. The adapter's contract stays the same.
 

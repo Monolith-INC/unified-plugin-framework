@@ -1,77 +1,37 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { runAdapterCheck } from "../dist/adapter-check.js";
 import { run } from "../dist/index.js";
+import {
+  capture,
+  digestOf,
+  fakeToolkit,
+  framework,
+  frameworkPinning,
+  project,
+  recordingIo,
+  repoRoot,
+  TOOLKIT_SKILLS,
+  writeJson,
+} from "./onboarded-helpers.mjs";
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-const framework = join(repoRoot, "plugins/unified-plugin-framework");
+const check = (args, root = framework) => capture(() => run(["adapter-check", "code-review", "--framework", root, ...args]));
 
-const TOOLKIT_SKILLS = ["review-task", "review-story-preflight", "review-story-postflight", "review-feature", "review-setup"];
+/** adapter-check against a toolkit the framework's lock pins. */
+const checkPinned = (toolkit, args) => check(["--plugin-root", toolkit, ...args], frameworkPinning(toolkit));
 
-const writeJson = (path, value) => {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, typeof value === "string" ? value : JSON.stringify(value));
-  return path;
-};
-
-const fakeToolkit = (skills) => {
-  const root = mkdtempSync(join(tmpdir(), "upf-toolkit-"));
-  writeJson(join(root, "plugin.json"), { name: "monolithic-code-review-toolkit", version: "0.6.0" });
-  skills.map((skill) => writeJson(join(root, "skills", skill, "SKILL.md"), `---\nname: ${skill}\ndescription: Test skill.\n---\n`));
-  return root;
-};
-
-/** `review`: a store path, `null`, "absent" (no sources.json), or { raw } for literal file text. */
-const project = ({ review = "knowledge" } = {}) => {
-  const root = mkdtempSync(join(tmpdir(), "upf-project-"));
-  mkdirSync(join(root, "knowledge"), { recursive: true });
-  writeJson(join(root, ".project-knowledge.json"), { schemaVersion: 1, knowledgeRoot: "knowledge" });
-  const sources = join(root, ".monolithic-code-review/sources.json");
-  if (review !== "absent") writeJson(sources, review?.raw ?? { knowledge: { root: review } });
-  return root;
-};
-
-/** A recording interpreter for the command's injected effects; reads go to the real temp files. */
-const recordingIo = (base) => {
-  const lines = { out: [], err: [] };
-  return {
-    lines,
-    io: { ...base, out: (line) => lines.out.push(line), err: (line) => lines.err.push(line) },
-  };
-};
-
-const capture = (action) => {
-  const original = { log: console.log, error: console.error };
-  const output = { stdout: "", stderr: "" };
-  console.log = (value) => {
-    output.stdout += `${value}\n`;
-  };
-  console.error = (value) => {
-    output.stderr += `${value}\n`;
-  };
-  try {
-    return { exitCode: action(), ...output };
-  } finally {
-    console.log = original.log;
-    console.error = original.error;
-  }
-};
-
-const check = (args) => capture(() => run(["adapter-check", "code-review", "--framework", framework, ...args]));
-
-test("adapter-check reports ready when the toolkit provides every mapped skill and shares the store", () => {
-  const result = check(["--plugin-root", fakeToolkit(TOOLKIT_SKILLS), "--project", project()]);
+test("adapter-check reports ready when the pinned toolkit provides every mapped skill and shares the store", () => {
+  const result = checkPinned(fakeToolkit(TOOLKIT_SKILLS), ["--project", project()]);
   assert.equal(result.exitCode, 0);
   assert.deepEqual(JSON.parse(result.stdout), { ok: true, workflow: "code-review", contractVersion: "1.0.0" });
 });
 
 test("adapter-check names the missing skill when the toolkit no longer provides it", () => {
-  const result = check(["--plugin-root", fakeToolkit(TOOLKIT_SKILLS.filter((skill) => skill !== "review-feature")), "--project", project()]);
+  const result = checkPinned(fakeToolkit(TOOLKIT_SKILLS.filter((skill) => skill !== "review-feature")), ["--project", project()]);
   assert.equal(result.exitCode, 1);
   const report = JSON.parse(result.stderr);
   assert.equal(report.step, "bound");
@@ -87,7 +47,7 @@ test("adapter-check fails at installed when no plugin root is given", () => {
 test("adapter-check fails at bound when the toolkit records no store or a different one", () => {
   const toolkit = fakeToolkit(TOOLKIT_SKILLS);
   [project({ review: "absent" }), project({ review: null }), project({ review: "other" })].map((root) => {
-    const result = check(["--plugin-root", toolkit, "--project", root]);
+    const result = checkPinned(toolkit, ["--project", root]);
     assert.equal(result.exitCode, 1);
     assert.equal(JSON.parse(result.stderr).step, "bound");
     const report = JSON.parse(result.stderr);
@@ -138,9 +98,38 @@ test("adapter-check writes only through its injected console", () => {
   const recorded = recordingIo({
     readJson: () => ({ kind: "absent" }),
     inspectPlugin: () => ({ manifest: { name: "unified-plugin-framework", version: "0.1.0" }, diagnostics: [] }),
+    readPlugin: () => ({ ok: false, diagnostics: [{ severity: "error", code: "unused", message: "No plugin roots are read." }] }),
   });
   const exitCode = runAdapterCheck(recorded.io, ["code-review", "--framework", "/framework"], "/cwd");
   assert.equal(exitCode, 1);
   assert.deepEqual(recorded.lines.out, []);
   assert.equal(JSON.parse(recorded.lines.err[0]).step, "declared");
+});
+
+test("adapter-check names the plugin and both checksums when the installed toolkit differs from the lock", () => {
+  const pinnedToolkit = fakeToolkit(TOOLKIT_SKILLS);
+  const changed = fakeToolkit([...TOOLKIT_SKILLS, "review-extra"]);
+  const result = check(["--plugin-root", changed, "--project", project()], frameworkPinning(pinnedToolkit));
+  assert.equal(result.exitCode, 1);
+  const report = JSON.parse(result.stderr);
+  assert.equal(report.step, "installed");
+  assert.match(report.reason, new RegExp(`monolithic-code-review-toolkit 0\\.6\\.0 \\(${digestOf(changed).slice(0, 12)}\\) is installed`));
+  assert.match(report.reason, new RegExp(`pins 0\\.6\\.0 \\(${digestOf(pinnedToolkit).slice(0, 12)}\\)`));
+});
+
+test("adapter-check reports a malformed lock as a configuration error", () => {
+  const toolkit = fakeToolkit(TOOLKIT_SKILLS);
+  const root = frameworkPinning(toolkit);
+  writeJson(join(root, "onboarded.lock.json"), { lockVersion: 1, plugins: [{ plugin: "monolithic-code-review-toolkit" }] });
+  const result = check(["--plugin-root", toolkit, "--project", project()], root);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /onboarded\.lock\.json must hold lockVersion 1/);
+});
+
+
+test("adapter-check refuses two plugin roots that provide the same plugin", () => {
+  const toolkit = fakeToolkit(TOOLKIT_SKILLS);
+  const result = check(["--plugin-root", toolkit, "--plugin-root", fakeToolkit(TOOLKIT_SKILLS), "--project", project()], frameworkPinning(toolkit));
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /More than one --plugin-root provides monolithic-code-review-toolkit/);
 });

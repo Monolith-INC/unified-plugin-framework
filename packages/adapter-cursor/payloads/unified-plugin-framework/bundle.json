@@ -11,30 +11,30 @@
       "sha256": "7078164e1b1ae97cd62228ac3af0489ef8d9a201222b719284dc1315fbcac2bd"
     },
     {
-      "bytes": 1959,
+      "bytes": 2132,
       "mode": 420,
       "path": "skills/review-feature/SKILL.md",
-      "sha256": "13aa416daf256978befd05eb022609348b4ab8fc528fd49804a42f76b833ac36"
+      "sha256": "2a891d3ed1d9a2cdb0babe81089d0228ca43e55993e4d50e92fb094bf352eee3"
     },
     {
-      "bytes": 2649,
+      "bytes": 2822,
       "mode": 420,
       "path": "skills/review-story/SKILL.md",
-      "sha256": "6331e4de0118d5753f293be08e2ba1a8dc173b431a93bfc4c2c93e35d1d9e85c"
+      "sha256": "05fc65a95f03752abbae9c87f62ff3b932a5816470baf5618dd051d1360122b7"
     },
     {
-      "bytes": 2027,
+      "bytes": 2200,
       "mode": 420,
       "path": "skills/review-task/SKILL.md",
-      "sha256": "4e1154cea9007840aae8ddc9ed7458a70cb7d671d76189ba5bfa7cfdc25ba839"
+      "sha256": "1d8044ba5dbc391557703e3f18fc8afa37910cc1a1906c5e834cb95f95be8292"
     }
   ],
-  "payloadDigest": "438819b648636e6b1121696bbc0bd9d12ce60575ef65b0ca4800725ac7e67b3c",
+  "payloadDigest": "7f6343067ed945ad26477bb230684100cf2ecb12efddd6888ffbc958739473ee",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "6a4285b45858c9d702ae5b93068e9a6b25f52326dfe6714744dfbf9057c81a3e",
+  "sourceDigest": "f97d670170208b4086354db10d5419f8166013c4fad8fd2f1ec5e17cfd7f5d7c",
   "vendor": "cursor"
 }

@@ -11,8 +11,11 @@ const template = (name) => `---\nname: ${name}\ndescription: Test.\n---\n{{gener
 
 const pluginSource = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
 
+const lock = JSON.parse(readFileSync(new URL("onboarded.lock.json", pluginSource), "utf8"));
+const EMPTY = { lockVersion: 1, plugins: [] };
+
 test("templates named after a contract operation are rendered from its adapter", () => {
-  const result = assembleSkills(new Map([["review-task", template("review-task")]]));
+  const result = assembleSkills(new Map([["review-task", template("review-task")]]), lock);
   assert.equal(result.ok, true, result.problems?.join("; "));
   const text = result.skills.get("review-task");
   assert.match(text, /monolithic-code-review-toolkit:review-task/);
@@ -21,26 +24,26 @@ test("templates named after a contract operation are rendered from its adapter",
 
 test("skills without placeholders pass through unchanged", () => {
   const plain = "---\nname: notes\ndescription: Plain skill.\n---\nNothing to fill.\n";
-  const result = assembleSkills(new Map([["notes", plain]]));
+  const result = assembleSkills(new Map([["notes", plain]]), lock);
   assert.equal(result.ok, true);
   assert.equal(result.skills.get("notes"), plain);
 });
 
 test("a template whose name is no contract operation fails", () => {
-  const result = assembleSkills(new Map([["review-everything", template("review-everything")]]));
+  const result = assembleSkills(new Map([["review-everything", template("review-everything")]]), lock);
   assert.equal(result.ok, false);
   assert.match(result.problems.join("\n"), /review-everything/);
 });
 
 test("an unknown placeholder fails, naming the skill", () => {
-  const result = assembleSkills(new Map([["review-task", "{{surprise}}"]]));
+  const result = assembleSkills(new Map([["review-task", "{{surprise}}"]]), lock);
   assert.equal(result.ok, false);
   assert.match(result.problems.join("\n"), /review-task.*surprise/);
 });
 
 test("an operation claimed by two workflows fails", () => {
   const twin = { ...reviewToolkitAdapter, workflow: "code-review" };
-  const result = assembleSkills(new Map([["review-task", template("review-task")]]), [reviewToolkitAdapter, twin]);
+  const result = assembleSkills(new Map([["review-task", template("review-task")]]), lock, [reviewToolkitAdapter, twin]);
   assert.equal(result.ok, false);
   assert.match(result.problems.join("\n"), /review-task.*more than one workflow/);
 });
@@ -66,4 +69,11 @@ test("assemblePluginSource refuses a staging directory that already exists", () 
   const result = assemblePluginSource(fileURLToPath(pluginSource), staging);
   assert.equal(result.ok, false);
   assert.equal(readFileSync(join(staging, "keep", "file.txt"), "utf8"), "keep");
+});
+
+test("a template whose plugin has no pin fails assembly; a plugin without templates needs no lock", () => {
+  const unpinned = assembleSkills(new Map([["review-task", template("review-task")]]), EMPTY);
+  assert.equal(unpinned.ok, false);
+  assert.match(unpinned.problems.join("\n"), /no pin in onboarded\.lock\.json/);
+  assert.equal(assembleSkills(new Map([["notes", "---\nname: notes\ndescription: Plain.\n---\n"]]), EMPTY).ok, true);
 });

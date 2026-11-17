@@ -130,9 +130,9 @@ Each of these is a compile error: leaving out `"review-feature"`, adding an oper
 
 ### Consequences
 - **Positive:** Missing, extra or empty operations and unknown workflow names are compile errors. The contract is a type that code review can read. Readiness and upgrade checks are unit-testable.
-- **Negative / Trade-Offs:** A new workflow needs a TypeScript change and a template per operation, not just a data file. Swapping a plugin means a new adapter object, its manifest entry, and `pnpm payloads:build` to rebuild the host bundles; verification catches a forgotten rebuild.
+- **Negative / Trade-Offs:** A new workflow needs a TypeScript change and a template per operation, not just a data file. Swapping a plugin means a new adapter object, its manifest entry, a new pin from `upgrade-check`, and `pnpm payloads:build` to rebuild the host bundles; verification catches a forgotten rebuild or re-pin.
 - **Follow-Up Actions:**
-  - [ ] [AGE-70](https://linear.app/agentical-monolithics/issue/AGE-70/pin-onboarded-plugin-versions-and-check-upgrades-against-adapter-tests): use the adapter readiness check as the upgrade gate.
+  - [x] [AGE-70](https://linear.app/agentical-monolithics/issue/AGE-70/pin-onboarded-plugin-versions-and-check-upgrades-against-adapter-tests): use the adapter readiness check as the upgrade gate. The plugin side of readiness, `checkPluginBinding`, gates `agent-plugin upgrade-check`, which pins each plugin in `onboarded.lock.json`. The assembler writes each pinned version into the assembled skills' readiness step.
   - [ ] [AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures): repair agent for failures that cannot recover automatically.
   - [ ] [AGE-95](https://linear.app/agentical-monolithics/issue/AGE-95/install-any-plugin-through-the-host-adapters-not-just-hello-world): package the framework plugin, with its generated skills, through the host adapters.
   - [ ] [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method): implement the Discovery contract with this pattern, then extract anything the two adapters share.

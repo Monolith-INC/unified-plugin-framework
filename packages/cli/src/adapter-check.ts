@@ -1,8 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, resolve } from "node:path";
-import { parseArgs } from "node:util";
+import { resolve } from "node:path";
 
-import { loadPluginRoot, type PluginInspection } from "@agent-plugins/core";
 import {
   checkAdapterReadiness,
   findWorkflow,
@@ -12,22 +9,25 @@ import {
   type WorkflowAdapter,
 } from "@agent-plugins/workflows";
 
+import {
+  configError,
+  gatherBinding,
+  NODE_PLUGIN_FACTS_IO,
+  tokenize,
+  type Gathered,
+  type JsonFile,
+  type PluginFactsIo,
+} from "./plugin-facts.js";
+
 export const ADAPTER_CHECK_USAGE = `Usage: agent-plugin adapter-check <workflow> --framework <dir> [--plugin-root <dir>]... [--project <dir>]
 
 Exit codes: 0 ready, 1 not ready (prints the failing step), 2 invalid arguments or configuration.`;
 
 /** The effects adapter-check needs, injected so the command logic is testable without a console or disk. */
-export interface AdapterCheckIo {
-  readonly readJson: (path: string) => JsonFile;
-  readonly inspectPlugin: (root: string) => PluginInspection;
+export interface AdapterCheckIo extends PluginFactsIo {
   readonly out: (line: string) => void;
   readonly err: (line: string) => void;
 }
-
-export type JsonFile =
-  | { readonly kind: "absent" }
-  | { readonly kind: "value"; readonly value: unknown }
-  | { readonly kind: "unreadable"; readonly path: string };
 
 interface CheckRequest {
   readonly adapter: WorkflowAdapter<string>;
@@ -41,23 +41,12 @@ type Parsed =
   | { readonly kind: "invalid"; readonly message: string }
   | { readonly kind: "ok"; readonly request: CheckRequest };
 
-type Gathered = { readonly kind: "facts"; readonly facts: ReadinessFacts } | { readonly kind: "config-error"; readonly problems: readonly string[] };
-
 const OPTIONS = {
   framework: { type: "string" },
   project: { type: "string" },
   "plugin-root": { type: "string", multiple: true },
   help: { type: "boolean", short: "h" },
 } as const;
-
-/** Node's parser throws on unknown or malformed options; turn that into a value at this boundary. */
-const tokenize = (argv: readonly string[]) => {
-  try {
-    return parseArgs({ args: [...argv], options: OPTIONS, allowPositionals: true, strict: true });
-  } catch (error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-};
 
 const toRequest = (
   positionals: readonly string[],
@@ -85,20 +74,13 @@ const toRequest = (
 
 /** Parses `adapter-check` arguments; `cwd` resolves relative paths. */
 export const parseAdapterCheck = (argv: readonly string[], cwd: string): Parsed => {
-  const tokens = tokenize(argv);
+  const tokens = tokenize(argv, OPTIONS);
   return typeof tokens === "string"
     ? { kind: "invalid", message: tokens }
     : tokens.values.help === true
       ? { kind: "help" }
       : toRequest(tokens.positionals, tokens.values, cwd);
 };
-
-const errorsOf = (label: string, inspection: PluginInspection): readonly string[] =>
-  inspection.manifest === undefined
-    ? [`${label} has no readable plugin manifest.`]
-    : inspection.diagnostics
-        .filter(({ severity }) => severity === "error")
-        .map(({ code, message, path }) => `${label}: ${code} ${message}${path === undefined ? "" : ` (${path})`}`);
 
 const valueAt = (file: JsonFile, key: readonly string[]): unknown =>
   key.reduce<unknown>(
@@ -115,32 +97,25 @@ const storePath = (project: string, file: JsonFile, key: readonly string[]): str
 const unreadable = (files: readonly JsonFile[]): readonly string[] =>
   files.flatMap((file) => (file.kind === "unreadable" ? [`Could not read valid JSON from ${file.path}.`] : []));
 
-/** An installed plugin's skill names: each skill's directory name. */
-const skillNames = (inspection: PluginInspection): readonly string[] =>
-  (inspection.skills ?? []).map(({ path }) => basename(dirname(path)));
-
-const gather = (io: AdapterCheckIo, { adapter, framework, project, pluginRoots }: CheckRequest): Gathered => {
-  const frameworkInspection = io.inspectPlugin(framework);
-  const plugins = pluginRoots.map((root) => [root, io.inspectPlugin(root)] as const);
+/** The binding facts plus the project's knowledge stores. */
+const gather = (io: AdapterCheckIo, { adapter, framework, project, pluginRoots }: CheckRequest): Gathered<ReadinessFacts> => {
+  const binding = gatherBinding(io, adapter, framework, pluginRoots);
   const projectFile = io.readJson(resolve(project, ".project-knowledge.json"));
   const storeFiles = adapter.knowledgeStores.map((store: PluginKnowledgeStore) => [store, io.readJson(resolve(project, store.file))] as const);
   const problems = [
-    ...errorsOf(`Framework ${framework}`, frameworkInspection),
-    ...plugins.flatMap(([root, inspection]) => errorsOf(`Plugin root ${root}`, inspection)),
+    ...(binding.kind === "config-error" ? binding.problems : []),
     ...unreadable([projectFile, ...storeFiles.map(([, file]) => file)]),
   ];
-  return problems.length > 0
-    ? { kind: "config-error", problems }
-    : {
+  return binding.kind === "facts" && problems.length === 0
+    ? {
         kind: "facts",
         facts: {
-          adapter,
-          onboarded: frameworkInspection.onboardedPlugins ?? [],
-          pluginSkills: new Map(plugins.map(([, inspection]) => [inspection.manifest?.name ?? "", skillNames(inspection)])),
+          ...binding.facts,
           projectStore: storePath(project, projectFile, ["knowledgeRoot"]),
           pluginStores: new Map(storeFiles.map(([store, file]) => [store.plugin, storePath(project, file, store.key)])),
         },
-      };
+      }
+    : { kind: "config-error", problems };
 };
 
 const report = (io: AdapterCheckIo, adapter: WorkflowAdapter<string>, readiness: Readiness): number => {
@@ -160,11 +135,6 @@ const report = (io: AdapterCheckIo, adapter: WorkflowAdapter<string>, readiness:
       );
       return 1;
   }
-};
-
-const configError = (io: AdapterCheckIo, problems: readonly string[]): number => {
-  io.err(`Configuration problems:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
-  return 2;
 };
 
 const checkRequest = (io: AdapterCheckIo, request: CheckRequest): number => {
@@ -192,19 +162,9 @@ export const runAdapterCheck = (io: AdapterCheckIo, argv: readonly string[], cwd
   }
 };
 
-const readJsonFromDisk = (path: string): JsonFile => {
-  if (!existsSync(path)) return { kind: "absent" };
-  try {
-    return { kind: "value", value: JSON.parse(readFileSync(path, "utf8")) as unknown };
-  } catch {
-    return { kind: "unreadable", path };
-  }
-};
-
 /** Edge interpreter: the real console and filesystem. */
 export const NODE_ADAPTER_CHECK_IO: AdapterCheckIo = Object.freeze({
-  readJson: readJsonFromDisk,
-  inspectPlugin: loadPluginRoot,
+  ...NODE_PLUGIN_FACTS_IO,
   out: (line: string) => console.log(line), // fp-allow: no-ambient-effect
   err: (line: string) => console.error(line), // fp-allow: no-ambient-effect
 });
