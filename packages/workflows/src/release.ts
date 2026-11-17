@@ -15,7 +15,7 @@ import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
 
 /** Plugins released with committed host payloads, by directory name under `plugins/`. */
-export const SHIPPED_PLUGINS = Object.freeze(["hello-world", "unified-plugin-framework"] as const);
+export const SHIPPED_PLUGINS = Object.freeze(["hello-world", "unified-plugin-framework", "project-knowledge"] as const);
 
 /** What `use` returned for the assembled copy, or why the plugin could not be assembled. */
 export type Staged<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly problems: readonly string[] };

@@ -48,7 +48,8 @@ Commands:
                                     Check a workflow adapter's readiness (declared, installed, bound)
   upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
-  project describe|setup|request    Use the project's configuration and tracker adapter
+  project describe|setup|request|bootstrap
+                                    Use project operations or plan/apply accepted tooling setup
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -179,7 +180,7 @@ function parseInstallArguments(argv: readonly string[], cwd: string): Result<Ins
     : { ok: true, value: { plugin: resolve(cwd, plugin), vendor: vendor.value, target } };
 }
 
-function resolveShippedBundle(pluginRoot: string, vendor: VendorId): Result<{ readonly bundle: VendorBundle; readonly adapter: VendorAdapter }> {
+export function resolveShippedBundle(pluginRoot: string, vendor: VendorId): Result<{ readonly bundle: VendorBundle; readonly adapter: VendorAdapter }> {
   const inspection = loadPluginRoot(pluginRoot);
   const errors = inspection.diagnostics.filter((entry) => entry.severity === "error");
   if (inspection.manifest === undefined || errors.length > 0) {

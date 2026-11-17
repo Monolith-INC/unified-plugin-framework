@@ -1,9 +1,11 @@
 """End-to-end protocol coverage against the built and installed wheel."""
 
 import asyncio
+import json
 from pathlib import Path
 import re
 import tempfile
+import subprocess
 import unittest
 
 from mcp import ClientSession, StdioServerParameters
@@ -15,6 +17,27 @@ class InstalledTransportTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         _, cls.executable, _ = installed_runtime()
+
+    def test_verify_checks_real_catalog_search_and_fetch(self):
+        with tempfile.TemporaryDirectory(prefix="upf knowledge verify ") as raw:
+            project = Path(raw)
+            knowledge = project / "knowledge"
+            (knowledge / "4-rules").mkdir(parents=True)
+            (project / ".project-knowledge.json").write_text(json.dumps({"schemaVersion": 1, "knowledgeRoot": "knowledge"}))
+            (knowledge / "4-rules/testing.md").write_text(
+                "---\nid: 4-rules/testing\ntier: 4\ntype: rules\narea: testing\ntitle: Testing\n"
+                "read_when: choosing verification\nprovenance: stated\nsources: [AGENTS.md]\nstatus: current\n---\n"
+                "## Summary\nTesting uses focused checks.\n")
+            (knowledge / "catalog.tsv").write_text(
+                "id\ttype\tarea\ttitle\tpath\tprovenance\tupdated\tread_when\n"
+                "4-rules/testing\trules\ttesting\tTesting\t4-rules/testing.md\tstated\t2026-11-17\tchoosing verification\n")
+            result = subprocess.run([str(self.executable), "--project", str(project), "--verify"], capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout)["verified"], ["catalog", "find", "fetch"])
+            (knowledge / "catalog.tsv").write_text("id\ttype\n")
+            failed = subprocess.run([str(self.executable), "--project", str(project), "--verify"], capture_output=True, text=True, timeout=60)
+            self.assertEqual(failed.returncode, 2)
+            self.assertEqual(json.loads(failed.stderr)["code"], "verification_failed")
 
     def test_server_protocol_contract(self):
         async def exercise(project: Path):

@@ -31,6 +31,15 @@ const locked = <A>(path: string, action: Task<A>): Task<A> => () => open(`${path
 // Atomic publication boundary; failed writes never replace the previous readable record.
 const writeJson = (path: string, value: unknown): Task<null> => () => noSymlink(path).then((safe) => safe
   ? atomicWrite(path, value) : Promise.resolve(diskFailure()));
+
+/** Setup shares the same guarded JSON and concurrent-update boundary as project operations. */
+export const nodeProjectFiles = Object.freeze({
+  read: readJson,
+  write: (path: string, value: unknown, previous: unknown): Task<null> => () => locked(path, () => readJson(path)().then((read) =>
+    flatMap(read, (current) => JSON.stringify(current) === JSON.stringify(previous)
+      ? ok(current) : fail("settings-changed", "Configuration changed during setup.", "Reload and preserve the new configuration before resuming.")))
+    .then((checked) => checked.ok ? writeJson(path, value)() : checked))(),
+});
 const atomicWrite = (path: string, value: unknown): Promise<Result<null>> => {
   const temporary = `${path}.${randomUUID()}.tmp`;
   return open(temporary, "wx", 0o600).then((file) => file.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8")

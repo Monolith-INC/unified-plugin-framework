@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, setup, type ProjectIO, type ProjectReply, type Request, type Result } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
+import { runTooling } from "./tooling-command.js";
 
 const USAGE = "agent-plugin project describe | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
 const option = (args: readonly string[], name: string): string | undefined => args[args.indexOf(name) + 1];
@@ -49,8 +50,8 @@ const validArgs = (args: readonly string[]): boolean => args.slice(1).length % 2
   && new Set(args.slice(1).filter((_, index) => index % 2 === 0)).size === args.slice(1).length / 2
   && (args[0] === "setup" || !args.includes("--resume")) && (args[0] !== "describe" || !args.includes("--input"));
 
-export const runProject = (args: readonly string[], io: CliIo): Promise<number> => validArgs(args)
-  ? runAction(args, io) : Promise.resolve(respond(io, fail("usage", USAGE, "Correct the option names and provide one value for each option.")));
+export const runProject = (args: readonly string[], io: CliIo): Promise<number> => args[0] === "bootstrap" ? runTooling(args.slice(1), io)
+  : validArgs(args) ? runAction(args, io) : Promise.resolve(respond(io, fail("usage", USAGE, "Correct the option names and provide one value for each option.")));
 const runAction = (args: readonly string[], io: CliIo): Promise<number> => {
   const root = resolve(io.cwd(), argument(args, "--project") ?? ".");
   const runtime = nodeProjectIO(root);

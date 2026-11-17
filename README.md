@@ -38,6 +38,8 @@ Project operations use a saved tracker adapter and project language. Missing cho
 
 The host skills use the framework CLI. For this source checkout, after install/build, run `pnpm agent-plugin project describe --project <target-project>`. An installed host payload needs the CLI available alongside its skills; the payload alone does not bundle Node dependencies. The skills report a missing CLI as an installation prerequisite and preserve the request.
 
+For complete Codex setup, `pnpm agent-plugin project bootstrap --input <plan.json> --project <target-project>` reports reused and missing tooling without installing. After accepting the concrete plan, add `--apply` to install the shipped framework/knowledge skills, activate pinned workflow dependencies, configure the isolated knowledge runtime and shared store, connect review settings and verify host discovery and tracker access. Missing knowledge content or provider bindings are completed through their existing skills before rerunning the accepted plan. See the [tooling bootstrap guide](docs/workflows/tooling-bootstrap.md).
+
 Requires Node.js 22 or newer and pnpm 10.14.0, as pinned in `package.json`.
 
 ```sh

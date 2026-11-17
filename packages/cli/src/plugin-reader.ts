@@ -47,6 +47,18 @@ const fileDigest = (path: string): string => {
   return Buffer.from(text, "utf8").equals(bytes) ? sha256(canonicalText(text)) : sha256(bytes);
 };
 
+/** Reuse canonical path ordering and text normalization to verify a complete active skill tree. */
+export const readContentTree = (root: string): Result<string> => {
+  try {
+    const stat = lstatSync(root);
+    return !stat.isDirectory() || stat.isSymbolicLink() ? failure(readerDiagnostic("plugin.skill.unsafe", "The active skill directory is not a regular directory.", root))
+      : success(sha256(stableJson(filesUnder(root, root).filter((path) => path !== ".upf-source")
+        .map((path) => ({ path, sha256: fileDigest(join(root, path)) })))));
+  } catch {
+    return failure(readerDiagnostic("plugin.skill.unreadable", "The active skill content cannot be verified.", root));
+  }
+};
+
 /** The skill folders under `skills/` that hold a `SKILL.md`, in name order. */
 const skillNames = (skillsDir: string): readonly string[] =>
   existsSync(skillsDir) ? sortedNames(readdirSync(skillsDir).filter((name) => existsSync(join(skillsDir, name, "SKILL.md")))) : [];

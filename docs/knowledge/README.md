@@ -13,6 +13,8 @@ Install the runtime with Python 3.12 or newer:
 python3.12 -m pip install ./runtimes/project-knowledge
 ```
 
+For a supported Codex source-checkout installation, [tooling bootstrap](../work-items/2026-11-17-age-101-tooling-bootstrap.md) coordinates the isolated runtime, shipped knowledge skills, host registration and review's shared-root setting. It plans first and installs only after acceptance; existing working capabilities are reused.
+
 Register the server explicitly with the host application's MCP configuration,
 using the absolute path to the target project:
 
@@ -30,7 +32,7 @@ using the absolute path to the target project:
 The equivalent server command is
 `upf-project-knowledge --project <absolute-project-path>`. Installation and
 registration are separate steps. The Python runtime and the skill plugin in
-`plugins/project-knowledge/` are separate deliverables in this slice; installing
+`plugins/project-knowledge/` are separate deliverables; installing
 the runtime does not install the skill plugin or register a host server.
 
 The upstream runtime currently uses `fcntl` for
@@ -42,7 +44,7 @@ release in those ranges.
 Run the command with `--project PATH` to choose the target project, or pass
 `--root PATH` for a one-run override. Relative roots are resolved from the
 project directory. Add `--check` to validate the selected root without starting
-the server; success prints its absolute path as JSON. The launcher requires an
+the server; success prints its absolute path as JSON. Use `--verify` to launch a fresh protocol client and check catalog → search → fetch against a real indexed unit. An empty store reports discovery as the next step. The launcher requires an
 existing readable directory and never creates a replacement store.
 
 The original discovery procedure is retained in the vendor tree at
