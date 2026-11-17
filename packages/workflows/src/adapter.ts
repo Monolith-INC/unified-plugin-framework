@@ -2,7 +2,7 @@ import type { OnboardedPlugin, WorkflowName } from "@agent-plugins/core";
 
 import { sha256, stableJson } from "@agent-plugins/compiler";
 
-import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
+import { LOCK_FILE, pinFor, type ContentSource, type OnboardedLock, type PluginPin } from "./lock.js";
 import { parseRange, satisfies } from "./versions.js";
 
 /** A plugin skill that carries out part of a contract operation; `use` says when to choose it among several. */
@@ -30,7 +30,17 @@ export type PluginKnowledgeStore = {
  * How an operation's plugin skills combine: `one-of` hands the work to the one that fits (each `use` says when);
  * `lead-and-layers` runs the first skill throughout and adds the others at the stages their `use` names.
  */
-export type SkillComposition = "one-of" | "lead-and-layers";
+export type SkillComposition = "one-of" | "lead-and-layers" | "content-view";
+
+/** A reviewed excerpt of a published file; the source digest gates its use on upgrades. */
+export type ContentView = {
+  readonly plugin: string;
+  readonly skill: string;
+  readonly path: string;
+  readonly heading: string;
+  readonly sourceDigest: string;
+  readonly content: string;
+};
 
 /**
  * A workflow's adapter (ADR-001): its contract version, how plugins fulfil each operation and how those skills
@@ -46,6 +56,7 @@ export type WorkflowAdapter<Operation extends string> = {
   readonly catalog: readonly PluginSkillRef[];
   readonly bareSkillPlugins: readonly string[];
   readonly knowledgeStores: readonly PluginKnowledgeStore[];
+  readonly contentViews?: readonly ContentView[];
 };
 
 /** The framework skill that creates the shared project knowledge store. */
@@ -59,6 +70,7 @@ export interface InstalledPlugin {
   readonly version: string;
   readonly checksum: string;
   readonly skills: readonly string[];
+  readonly contentSource?: ContentSource;
 }
 
 /** What the plugin side of a check needs: the adapter, the framework's declarations and lock, and each installed plugin. */
@@ -218,7 +230,12 @@ type PinProblem = { readonly kind: "unpinned" | "content-changed" | "other-versi
 
 /** Same version, different content: a release changed under its own version number. */
 const contentChanged = (pin: PluginPin, found: InstalledPlugin): boolean =>
-  pin.version === found.version && pin.checksum !== found.checksum;
+  pin.version === found.version && pin.checksum !== found.checksum && !unchangedSource(pin.contentSource, found.contentSource);
+
+/** Adding reviewed files changes coverage, not the release; every previously pinned byte still must match. */
+const unchangedSource = (before: ContentSource | undefined, after: ContentSource | undefined): boolean =>
+  before !== undefined && after !== undefined && before.checksum === after.checksum
+  && Object.entries(before.files).every(([path, digest]) => after.files[path] === digest);
 
 const contentChangedText = (plugin: string, pin: PluginPin, found: InstalledPlugin): string =>
   `${plugin} ${found.version} (${short(found.checksum)}) is installed, but ${LOCK_FILE} pins ${pin.version} (${short(pin.checksum)})`;
@@ -237,7 +254,7 @@ const pinProblem =
           ? { kind: "content-changed", text: contentChangedText(plugin, pin, found) }
           : pin.version !== found.version
             ? { kind: "other-version", text: contentChangedText(plugin, pin, found) }
-            : pin.adapter !== adapter.workflow || pin.mappingDigest !== mappingDigest(adapter)
+            : pin.checksum !== found.checksum || pin.adapter !== adapter.workflow || pin.mappingDigest !== mappingDigest(adapter)
               ? { kind: "mapping-changed", text: `the ${adapter.workflow} contract or mapping changed since ${plugin} ${pin.version} was pinned` }
               : undefined;
   };
@@ -296,6 +313,13 @@ const checkMappedSkills = ({ adapter, onboarded, installed }: BindingFacts): Rea
       );
 };
 
+const checkContentViews = ({ adapter, installed }: BindingFacts): Readiness => {
+  const changed = (adapter.contentViews ?? []).filter((view) => installed.get(view.plugin)?.contentSource?.files[view.path] !== view.sourceDigest);
+  return changed.length === 0 ? READY : notReady("bound",
+    `Published content differs from the reviewed view: ${changed.map(({ path }) => path).join(", ")}.`,
+    askUser("Use the pinned release, or rebuild and review the content selections from the new release before re-pinning. Keep the draft and resume afterwards."));
+};
+
 const storeMismatch = (pluginStores: ReadonlyMap<string, string | undefined>, project: string) => (store: PluginKnowledgeStore) =>
   pluginStores.get(store.plugin) !== project;
 
@@ -330,6 +354,7 @@ const BINDING_CHECKS: readonly ((facts: BindingFacts) => Readiness)[] = [
   checkInRange,
   checkSameVersionContent,
   checkMappedSkills,
+  checkContentViews,
 ];
 
 // Listed in full rather than appended to BINDING_CHECKS: the pin check belongs to the installed step, before bound.
@@ -340,6 +365,7 @@ const READINESS_CHECKS: readonly ((facts: ReadinessFacts) => Readiness)[] = [
   checkInRange,
   checkPinned,
   checkMappedSkills,
+  checkContentViews,
   checkKnowledge,
 ];
 

@@ -58,7 +58,8 @@ test("assemblePluginSource copies the plugin and renders its templates into stag
     assert.doesNotMatch(text, /\{\{/);
     skill.startsWith("project-")
       ? assert.equal(text, readFileSync(new URL(`skills/${skill}/SKILL.md`, pluginSource), "utf8"))
-      : assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/ : /monolithic-code-review-toolkit:/);
+      : assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
+        : skill.startsWith("track-") ? /reviewed content excerpts/ : /monolithic-code-review-toolkit:/);
     return skill;
   });
   assert.match(readFileSync(new URL("skills/review-task/SKILL.md", pluginSource), "utf8"), /\{\{delegate\}\}/);

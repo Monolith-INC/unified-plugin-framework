@@ -9,6 +9,7 @@ import {
   parseLock,
   parseRange,
   type BindingFacts,
+  type ContentSource,
   type InstalledPlugin,
   type OnboardedLock,
   type WorkflowAdapter,
@@ -26,7 +27,7 @@ export interface PluginFactsIo {
   /** The framework plugin, whose manifest declares the onboarded plugins. */
   readonly inspectPlugin: (root: string) => PluginInspection;
   /** An onboarded plugin as found at a root: a portable plugin, or a folder of skills with or without a manifest. */
-  readonly readPlugin: (root: string) => Result<PluginRead>;
+  readonly readPlugin: (root: string, publicPaths?: ReadonlyMap<string, readonly string[]>, name?: string) => Result<PluginRead>;
 }
 
 /** What a plugin root yields; a plugin without a manifest has no name or version of its own. */
@@ -35,6 +36,7 @@ export type PluginRead = {
   readonly version: string | undefined;
   readonly checksum: string;
   readonly skills: readonly string[];
+  readonly contentSource?: ContentSource;
 };
 
 /** A `--plugin-root` argument: a directory, optionally named as `name=dir` or `name@version=dir`. */
@@ -106,7 +108,7 @@ export const errorsOf = (label: string, inspection: PluginInspection): readonly 
     ? [`${label} has no readable plugin manifest.`]
     : inspection.diagnostics.filter(({ severity }) => severity === "error").map(diagnosticLine(label));
 
-type ResolveContext = { readonly onboarded: readonly OnboardedPlugin[]; readonly lock: OnboardedLock };
+type ResolveContext = { readonly onboarded: readonly OnboardedPlugin[]; readonly lock: OnboardedLock; readonly publicPaths?: ReadonlyMap<string, readonly string[]> };
 
 /** The version a declared range starts at. */
 const declaredFloor = (onboarded: readonly OnboardedPlugin[], name: string): string | undefined => {
@@ -144,7 +146,7 @@ const resolvePresent = (arg: PluginRootArg, read: PluginRead, context: ResolveCo
       ? configProblems([`Plugin root ${arg.path} has no manifest: name it as --plugin-root <plugin>@<version>=${arg.path}.`])
       : version === undefined
         ? configProblems([`Plugin root ${arg.path} has no version: give it as --plugin-root ${name}@<version>=${arg.path}.`])
-        : facts([name, { version, checksum: read.checksum, skills: read.skills }] as const);
+        : facts([name, { version, checksum: read.checksum, skills: read.skills, ...(read.contentSource === undefined ? {} : { contentSource: read.contentSource }) }] as const);
 };
 
 const resolveRead = (arg: PluginRootArg, read: Result<PluginRead>, context: ResolveContext): Gathered<readonly [string, InstalledPlugin]> =>
@@ -158,7 +160,7 @@ export const installedFrom = (
   roots: readonly PluginRootArg[],
   context: ResolveContext,
 ): Gathered<ReadonlyMap<string, InstalledPlugin>> => {
-  const resolved = roots.map((arg) => resolveRead(arg, io.readPlugin(arg.path), context));
+  const resolved = roots.map((arg) => resolveRead(arg, io.readPlugin(arg.path, context.publicPaths, arg.name), context));
   const entries = resolved.flatMap((result) => (result.kind === "facts" ? [result.facts] : []));
   const problems = [
     ...resolved.flatMap(problemsOf),
@@ -192,9 +194,22 @@ export const gatherBinding = (
   const inspection = io.inspectPlugin(framework);
   const onboarded = inspection.onboardedPlugins ?? [];
   const lock = lockFrom(io, framework);
-  const installed = installedFrom(io, roots, { onboarded, lock: lock.kind === "facts" ? lock.facts : EMPTY_LOCK });
+  const installed = installedFrom(io, roots, { onboarded, lock: lock.kind === "facts" ? lock.facts : EMPTY_LOCK,
+    publicPaths: contentPaths(adapter, lock.kind === "facts" ? lock.facts : EMPTY_LOCK) });
   const problems = [...errorsOf(`Framework ${framework}`, inspection), ...problemsOf(installed), ...problemsOf(lock)];
   return installed.kind === "facts" && lock.kind === "facts" && problems.length === 0
     ? facts({ adapter, onboarded, lock: lock.facts, installed: installed.facts })
     : configProblems(problems);
 };
+
+/** Retain previously pinned references so selection changes cannot hide altered source files. */
+const contentPaths = (adapter: WorkflowAdapter<string>, lock: OnboardedLock): ReadonlyMap<string, readonly string[]> =>
+  new Map([...new Set([
+    ...(adapter.contentViews ?? []).map(({ plugin }) => plugin),
+    ...lock.plugins.filter((pin) => pin.adapter === adapter.workflow && pin.contentSource !== undefined).map(({ plugin }) => plugin),
+  ])].map((plugin) => [plugin,
+    [...new Set([
+      ...(adapter.contentViews ?? []).filter((view) => view.plugin === plugin).map(({ path }) => path),
+      ...Object.keys(lock.plugins.find((pin) => pin.plugin === plugin)?.contentSource?.files ?? {}),
+    ])],
+  ]));

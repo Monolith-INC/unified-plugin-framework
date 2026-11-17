@@ -128,6 +128,7 @@ Each of these is a compile error: leaving out `"review-feature"`, adding an oper
 9. Every readiness failure carries a recovery action: run a skill and continue, or ask the user for the one thing only they can do. No failure stops the work without a recovery path.
 10. Share code between adapters only once two adapters exist and show what they have in common. Discovery's needs moved three fields into the shared shape: `composition`, `catalog` and `bareSkillPlugins`. Code review uses the defaults (`one-of`, no catalog, no bare plugins). The mapping digest covers the whole adapter, so a new field can't be left out of it.
 11. Every plugin an operation or the catalog uses is required: readiness is never partial, and a missing plugin is a readiness failure, not a reduced contract.
+12. When native conductors cross the project's responsibility boundary, `content-view` reuses reviewed public excerpts instead of invoking them. Its optional `contentViews` field carries contributing plugin/skill, source path, full source digest and selected content. The mapping digest covers these fields; binding additionally checks every consumed source file, including shared references and attribution. The current use is [project tracking](../workflows/project-tracking.md). Provider actions remain behind project operations.
 
 ### Consequences
 - **Positive:** Missing, extra or empty operations and unknown workflow names are compile errors. The contract is a type that code review can read. Readiness and upgrade checks are unit-testable.

@@ -63,14 +63,56 @@
       "mode": 420,
       "path": "skills/review-task/SKILL.md",
       "sha256": "96c629162a6c27a8493692b91f7f4b40508a5c6edd10a631c42b21dfd7d2bb20"
+    },
+    {
+      "bytes": 7132,
+      "mode": 420,
+      "path": "skills/track-amend/SKILL.md",
+      "sha256": "91c119931e031bf217fc0e4f622c4b5fccb290060027ec5210b922b40019e488"
+    },
+    {
+      "bytes": 7812,
+      "mode": 420,
+      "path": "skills/track-breakdown/SKILL.md",
+      "sha256": "700aba8ffeca7bcf60566717f5fe70386c3419204868da427d53e8fca8625e11"
+    },
+    {
+      "bytes": 8041,
+      "mode": 420,
+      "path": "skills/track-decompose/SKILL.md",
+      "sha256": "43efeb18f6d7f53991c50886b638b48d765097afde85217800caa3b3633434b5"
+    },
+    {
+      "bytes": 7802,
+      "mode": 420,
+      "path": "skills/track-enrich/SKILL.md",
+      "sha256": "17fdd21192f0073ffd68f8008ebc3fb512149938e35ec187f10a9d0490c3dd5e"
+    },
+    {
+      "bytes": 7850,
+      "mode": 420,
+      "path": "skills/track-from-design/SKILL.md",
+      "sha256": "cb587e5e530187fc4daf8723e92ef6b49a23ec4186c04c6448416f7ca9c3db7f"
+    },
+    {
+      "bytes": 10578,
+      "mode": 420,
+      "path": "skills/track-split/SKILL.md",
+      "sha256": "b636227b8826ee08abd0f011be73b35bef787ca2b2c9d8520306a7b0ee0a54ac"
+    },
+    {
+      "bytes": 7743,
+      "mode": 420,
+      "path": "skills/track-validate/SKILL.md",
+      "sha256": "5089bcd5479885a4a348a49692fff62d51c821934c475ed2d2e13b4622a2f62b"
     }
   ],
-  "payloadDigest": "10d6fc5dfa292514518afa40a0fa41552851cc4b24c2abd3f81bb237a21da268",
+  "payloadDigest": "cc0f14bdc2c281b412ddd6d073e39e086bae724ff72abd765d7da81444ea07f8",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "04962509bbb448f3eba1d3a4a9280ce40bc89c15345a0f8ecd02fd9ade6b2502",
+  "sourceDigest": "a5be74d149d32078f00d524c97ee18ee6ccd46ec7ba2490a190b8ead90668ca1",
   "vendor": "claude"
 }

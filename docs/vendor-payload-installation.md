@@ -134,8 +134,8 @@ The installer accepts an upgrade or reinstall only when the bundle validates aga
 | Claude | `packages/adapter-claude/payloads/hello-world/bundle.json` | `claude-code-plugins-2026-08-10` | `8d4aae916cbc30a068b9618e159c3bf12c611dd313200057d662729f5d79deb4` |
 | Cursor | `packages/adapter-cursor/payloads/hello-world/bundle.json` | `cursor-plugins-2026-08-10` | `75649714dfda40f7c158d5712f19411a9bedfcaf72ee5c31f92a991521d2202e` |
 | Codex | `packages/adapter-codex/payloads/hello-world/bundle.json` | `codex-plugins-2026-08-10` | `47b9c9a3f30240a8d90da1ff31e791b33179b7ac49c68283d1ad8f0605109ea3` |
-| Claude | `packages/adapter-claude/payloads/unified-plugin-framework/bundle.json` | `claude-code-plugins-2026-08-10` | `10d6fc5dfa292514518afa40a0fa41552851cc4b24c2abd3f81bb237a21da268` |
-| Cursor | `packages/adapter-cursor/payloads/unified-plugin-framework/bundle.json` | `cursor-plugins-2026-08-10` | `7993344dc5c68a615c29d77d793d3b9315f8134488c3ea6f60d96fd1eda272a0` |
-| Codex | `packages/adapter-codex/payloads/unified-plugin-framework/bundle.json` | `codex-plugins-2026-08-10` | `d2ce3f6f3977f2ddce5d80997f7adb22a0e27e1e5edcf50f8d3d7b8ba32c5f4d` |
+| Claude | `packages/adapter-claude/payloads/unified-plugin-framework/bundle.json` | `claude-code-plugins-2026-08-10` | `cc0f14bdc2c281b412ddd6d073e39e086bae724ff72abd765d7da81444ea07f8` |
+| Cursor | `packages/adapter-cursor/payloads/unified-plugin-framework/bundle.json` | `cursor-plugins-2026-08-10` | `ae9d655ef83961a63132e7409c7adb21301fd58ccabc913df16bec788101bf88` |
+| Codex | `packages/adapter-codex/payloads/unified-plugin-framework/bundle.json` | `codex-plugins-2026-08-10` | `bebe378057594abd00e36bfc7d1e0799a04bc7f0ee2a16a9963f5758257e7c62` |
 
 Every shipped payload is verified by `pnpm payloads:verify`, CI, and the release-evidence test suite.

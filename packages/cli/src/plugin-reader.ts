@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 
 import {
   canonicalText,
@@ -96,12 +96,24 @@ const readPortablePlugin = (root: string): Result<PluginRead> => {
 };
 
 /** Reads a plugin root by the layout found there; a filesystem error is a diagnostic, not a crash. */
-const readPluginFromDisk = (root: string): Result<PluginRead> => {
+const readPluginFromDisk = (root: string, publicPaths: ReadonlyMap<string, readonly string[]> = new Map(), name?: string): Result<PluginRead> => {
   try {
-    return existsSync(join(root, "plugin.json")) ? readPortablePlugin(root) : readSkillsPlugin(root);
+    const read = existsSync(join(root, "plugin.json")) ? readPortablePlugin(root) : readSkillsPlugin(root);
+    const paths = read.ok ? publicPaths.get(read.value.name ?? name ?? "") ?? [] : [];
+    return read.ok && paths.length > 0 ? withPublicFiles(root, read.value, paths) : read;
   } catch (error) {
     return failure(readerDiagnostic("plugin.root.unreadable", error instanceof Error ? error.message : String(error), root));
   }
+};
+
+const safePublicFile = (root: string, path: string): boolean => !path.includes("\\") && !path.split("/").includes("..")
+  && relative(resolve(root), resolve(root, path)).split("\\").join("/") === path
+  && path.split("/").every((_, index, parts) => !lstatSync(join(root, ...parts.slice(0, index + 1))).isSymbolicLink());
+const withPublicFiles = (root: string, plugin: PluginRead, paths: readonly string[]): Result<PluginRead> => {
+  const safe = paths.every((path) => safePublicFile(root, path));
+  const publicFiles = safe ? Object.fromEntries(paths.map((path) => [path, fileDigest(join(root, path))])) : {};
+  return safe ? success({ ...plugin, contentSource: { checksum: plugin.checksum, files: publicFiles }, checksum: sha256(stableJson({ sourceChecksum: plugin.checksum, publicFiles })) })
+    : failure(readerDiagnostic("plugin.reference.unsafe", "A published content reference leaves the plugin or follows a symbolic link.", root));
 };
 
 export const NODE_PLUGIN_FACTS_IO: PluginFactsIo = Object.freeze({

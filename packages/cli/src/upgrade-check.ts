@@ -85,13 +85,14 @@ export const parseUpgradeCheck = (argv: readonly string[], cwd: string): Parsed 
       : toRequest(tokens.positionals, tokens.values, cwd);
 };
 
-const pinOf = (adapter: WorkflowAdapter<string>, plugin: string, { version, checksum }: InstalledPlugin): PluginPin => ({
+const pinOf = (adapter: WorkflowAdapter<string>, plugin: string, { version, checksum, contentSource }: InstalledPlugin): PluginPin => ({
   plugin,
   version,
   checksum,
   adapter: adapter.workflow,
   contractVersion: adapter.contractVersion,
   mappingDigest: mappingDigest(adapter),
+  ...(contentSource === undefined ? {} : { contentSource }),
 });
 
 /** The pins a passing check produces: one per plugin the adapter references, all of them installed by then. */

@@ -4,6 +4,10 @@ import type { WorkflowName } from "@agent-plugins/core";
 import type { WorkflowAdapter } from "./adapter.js";
 import type { OnboardedLock } from "./lock.js";
 import { reviewToolkitAdapter } from "./code-review.js";
+import { backlogTrackingAdapter } from "./project-tracking.js";
+
+export { backlogTrackingAdapter, TRACKING_OPERATIONS, TRACKING_CONTRACT_VERSION, type TrackingAdapter, type TrackingOperation } from "./project-tracking.js";
+export { selectContent, providerLeak, type ContentSelection } from "./content-view.js";
 
 export {
   brainstormingDiscoveryAdapter,
@@ -32,6 +36,7 @@ export {
   type Recovery,
   type ReadinessStep,
   type SkillComposition,
+  type ContentView,
   type WorkflowAdapter,
 } from "./adapter.js";
 
@@ -47,6 +52,7 @@ export {
   type OnboardedLock,
   type ParsedLock,
   type PluginPin,
+  type ContentSource,
 } from "./lock.js";
 
 export { parseRange, parseVersion, satisfies, type Version, type VersionRange } from "./versions.js";
@@ -67,6 +73,7 @@ export {
 export const WORKFLOWS: Readonly<Record<WorkflowName, WorkflowAdapter<string>>> = Object.freeze({
   "code-review": reviewToolkitAdapter,
   discovery: brainstormingDiscoveryAdapter,
+  "project-tracking": backlogTrackingAdapter,
 });
 
 const WORKFLOW_LOOKUP: ReadonlyMap<string, WorkflowAdapter<string>> = new Map(Object.entries(WORKFLOWS));
