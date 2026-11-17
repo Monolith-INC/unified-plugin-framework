@@ -36,9 +36,11 @@ Planning and delivery are tracked in [Unified Plugin Framework on Linear](https:
 
 Project operations use a saved tracker adapter and project language. Missing choices are collected once by `project-bootstrap`, which resumes the operation; subsequent requests use the adapter directly. See [project setup and tracker adapters](docs/user-journey.md#project-setup-and-tracker-adapters).
 
-The host skills use the framework CLI. For this source checkout, after install/build, run `pnpm agent-plugin project describe --project <target-project>`. An installed host payload needs the CLI available alongside its skills; the payload alone does not bundle Node dependencies. The skills report a missing CLI as an installation prerequisite and preserve the request.
+The complete release distribution supplies the framework CLI, its production Node dependencies, the knowledge runtime source, and all five pinned workflow plugins with their supporting files and licenses. Install it using the [release installation instructions](docs/vendor-payload-installation.md#complete-framework-installation). No framework checkout, pnpm build or plugin repository downloads are needed on the consuming project. Node.js 22+, Python 3.12+ and, for remote release downloads, GitHub CLI are prerequisites. The knowledge runtime's Python packages are installed by its existing isolated runtime setup.
 
-For complete Codex setup, `pnpm agent-plugin project bootstrap --input <plan.json> --project <target-project>` reports reused and missing tooling without installing. After accepting the concrete plan, add `--apply` to install the shipped framework/knowledge skills, activate pinned workflow dependencies, configure the isolated knowledge runtime and shared store, connect review settings and verify host discovery and tracker access. Missing knowledge content or provider bindings are completed through their existing skills before rerunning the accepted plan. See the [tooling bootstrap guide](docs/workflows/tooling-bootstrap.md).
+Individual host payload assets remain available for developers and partial installations; they do not replace the complete distribution. For a development source checkout, run `pnpm agent-plugin project describe --project <target-project>` after install/build.
+
+For complete Codex setup, `pnpm agent-plugin project bootstrap --input <plan.json> --project <target-project>` reports reused and missing tooling without installing. After accepting the concrete plan, add `--apply` to install the shipped framework/knowledge skills, activate bundled pinned workflow dependencies, configure the isolated knowledge runtime and shared store, connect review settings and verify host discovery and tracker access. Missing knowledge content or provider bindings are completed through their existing skills before rerunning the accepted plan. See the [tooling bootstrap guide](docs/workflows/tooling-bootstrap.md).
 
 Requires Node.js 22 or newer and pnpm 10.14.0, as pinned in `package.json`.
 
@@ -256,6 +258,7 @@ pnpm build:cli
 pnpm build:testing
 pnpm payloads:build     # generate host payloads into the git-ignored packages/adapter-*/payloads/
 pnpm payloads:verify    # generate twice and compare: deterministic and valid for each host
+pnpm release:distribution # complete archive, installer and checksums (fetches pins at build time)
 pnpm release:assets     # build every plugin for every host and pack release-assets/ with SHA256SUMS
 pnpm typecheck
 pnpm test

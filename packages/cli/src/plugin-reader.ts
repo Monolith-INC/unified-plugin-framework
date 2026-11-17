@@ -29,7 +29,7 @@ export const readJsonFromDisk = (path: string): JsonFile => {
 const readerDiagnostic = (code: string, message: string, path: string): Diagnostic => ({ severity: "error", code, message, path });
 
 /** Names in code-point order, built without sorting in place. */
-const sortedNames = (names: readonly string[]): readonly string[] =>
+export const sortedNames = (names: readonly string[]): readonly string[] =>
   names.reduce<readonly string[]>((sorted, name) => [...sorted.filter((x) => x < name), name, ...sorted.filter((x) => x >= name)], []);
 
 /** Every regular file under `dir`, by path relative to `base`; symbolic links are not followed. */

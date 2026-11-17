@@ -6,7 +6,7 @@ import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, readToml, setupFailure } from "./tooling-files.js";
 import { activeSkillsMatch, discoverHost, expectedDependencySkills, installHostPlugins, marketplaceRoot, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
-import { configureKnowledge, configureReview, installKnowledge, installSkills, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
+import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
 const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "missing", recovery });
@@ -24,7 +24,7 @@ export const nodeToolingIO = (project: string, input: BootstrapInput): ToolingIO
 const inspect = async (project: string, input: BootstrapInput, resolved: BootstrapInput, step: ToolingStep): Promise<Result<ToolingObservation>> => {
   switch (step) {
     case "settings": return inspectSettings(project, input);
-    case "cli": return command(process.execPath, [join(toolsRoot(project), "bin/agent-plugin"), "--help"], project)
+    case "cli": return installedCli(project).then((current) => current ? command(process.execPath, [join(toolsRoot(project), "bin/agent-plugin"), "--help"], project) : Promise.resolve(setupFailure("The CLI launcher does not point at this release.")))
       .then((result) => checked(result, "Project CLI runs the shared command entry point.", "Expose the existing framework CLI from the supported installation."));
     case "skills": return inspectSkills(project);
     case "dependencies": return inspectDependencies(project, input, resolved);

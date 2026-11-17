@@ -95,10 +95,21 @@ const configureReviewFile = async (project: string, input: BootstrapInput, path:
         mcp_server: "project-knowledge", committed: knowledge.committed ?? false } }, raw.value)().then((written) => written.ok ? ok(path) : written);
 };
 
-export const wireCli = async (project: string): Promise<Result<string>> => {
-  const path = join(toolsRoot(project), "bin/agent-plugin");
-  const old = await readText(path);
-  const content = `#!/usr/bin/env node\nimport(${JSON.stringify(new URL("./index.js", import.meta.url).href)}).then(m => Promise.resolve(m.run(process.argv.slice(2))).then(code => { process.exitCode = code; }));\n`; // fp-allow: no-field-write, no-ambient-effect -- generated external CLI edge sets its process exit status
-  return !old.ok ? old : old.value !== null && old.value !== content ? setupFailure("Existing project CLI differs; preserve it and select the supported runtime explicitly.")
-    : writeText(project, path, content, old.value);
+const cliContent = (entry: URL): string => `#!/usr/bin/env node\nimport(${JSON.stringify(entry.href)}).then(m => Promise.resolve(m.run(process.argv.slice(2))).then(code => { process.exitCode = code; }));\n`; // fp-allow: no-field-write, no-ambient-effect -- generated external CLI boundary sets its process exit status
+const cliPath = (project: string): string => join(toolsRoot(project), "bin/agent-plugin");
+/** The launcher must point at this release, rather than merely run an older CLI successfully. */
+export const installedCli = async (project: string, entry = new URL("./index.js", import.meta.url)): Promise<boolean> => {
+  const current = await readText(cliPath(project));
+  return current.ok && current.value === cliContent(entry);
+};
+/** A digest receipt permits replacing only a previously owned, unmodified CLI launcher. */
+export const wireCli = async (project: string, entry = new URL("./index.js", import.meta.url)): Promise<Result<string>> => {
+  const path = cliPath(project);
+  const [old, receipt] = await Promise.all([readText(path), readText(`${path}.sha256`)]);
+  const content = cliContent(entry);
+  return !old.ok ? old : !receipt.ok ? receipt
+    : old.value !== null && old.value !== content && receipt.value !== sha256(old.value) ? setupFailure("Existing project CLI is unmanaged or modified; preserve it and reconcile its ownership before upgrading.")
+      : old.value === null && receipt.value !== null ? setupFailure("A CLI receipt exists without its launcher; reconcile the interrupted installation.")
+        : writeText(project, path, content, old.value).then((written) => written.ok
+          ? writeText(project, `${path}.sha256`, sha256(content), receipt.value).then((saved) => saved.ok ? ok(path) : saved) : written);
 };

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Complete release distributions now include the working CLI with production Node dependencies, all five pinned dependency repositories and licenses, canonical plugin sources/lock and the knowledge runtime. `install.mjs` installs a verified archive and invokes existing bootstrap from it ([AGE-107](https://linear.app/agentical-monolithics/issue/AGE-107)). Installed distributions resolve dependencies locally and fail on missing/modified bundled content without fetching plugin repositories. Development checkouts retain their existing fetch capability.
+
 - Host payloads are no longer committed. The repository keeps one copy of each plugin, its source under `plugins/`; `packages/adapter-*/payloads/` is git-ignored build output ([AGE-104](https://linear.app/agentical-monolithics/issue/AGE-104)).
 - Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds every shipped plugin for Claude, Cursor and Codex and attaches `<plugin>-<host>.bundle.json.gz` assets plus `SHA256SUMS` to the GitHub release; tags with a suffix such as `-rc.1` publish pre-releases.
 - `agent-plugin install <plugin> --version <version> --vendor <host> --target <dir>` downloads the release asset over HTTPS (with a timeout), checks it against `SHA256SUMS` and every digest inside it, then installs it. `install --source <plugin-directory>` builds the payload from a source directory for development. Each release asset carries a build provenance attestation.

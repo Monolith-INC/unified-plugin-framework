@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
 import {safePath,writeText} from '../dist/tooling-files.js';
-import {configureReview,reviewBindingsValid} from '../dist/tooling-runtime.js';
+import {configureReview,reviewBindingsValid,wireCli,installedCli} from '../dist/tooling-runtime.js';
 import {nodeToolingIO} from '../dist/tooling-node.js';
 import {stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
@@ -94,4 +94,17 @@ test('bootstrap holds a saved request while incomplete and applies it once after
   const applied=JSON.parse(execFileSync(process.execPath,[...argv,'--apply'],{encoding:'utf8'}));
   assert.equal(applied.value.resumed.status,'completed');
   assert.equal(JSON.parse(await readFile(join(project,'.unified-plugin-framework','items.json'),'utf8')).length,1);
+});
+
+test('owned CLI can move to a new release while unmanaged or edited launchers are preserved',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-cli-upgrade-'));
+  const first=new URL('file:///first-release/index.js');const second=new URL('file:///second-release/index.js');
+  assert.equal((await wireCli(project,first)).ok,true);
+  assert.equal(await installedCli(project,first),true);
+  assert.equal(await installedCli(project,second),false);
+  assert.equal((await wireCli(project,second)).ok,true);
+  assert.equal(await installedCli(project,second),true);
+  const path=join(project,'.upf-tools/bin/agent-plugin');await writeFile(path,'unmanaged');
+  assert.equal((await wireCli(project,first)).ok,false);
+  assert.equal(await readFile(path,'utf8'),'unmanaged');
 });

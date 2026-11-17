@@ -7,6 +7,7 @@ import { fail, nodeProjectFiles, object, ok, type Result } from "@agent-plugins/
 import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinMatches, type BindingFacts } from "@agent-plugins/workflows";
 import { rootArg, rootPluginName, selectedPlugins, sourcesFor, verifySource, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
 import { fetchSources, GIT_FETCHER, unfetched, type FetchContext } from "./dependency-fetch.js";
+import { bundledRoots } from "./distribution.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
 import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
@@ -30,20 +31,31 @@ export const dependencySources = (project: string, input: BootstrapInput): Resul
 };
 /** Explicit roots as given, plus the cached checkout for every plugin bootstrap fetches; both pass one binding gate.
  * A plan that cannot be made leaves the input as given: the dependencies step reports why. */
-export const resolvedInput = (project: string, input: BootstrapInput): BootstrapInput => {
+const includedRoots = (project: string, input: BootstrapInput, mode: "verify" | "resolve" = "verify"): Result<readonly PluginRootArg[]> | null => {
   const sources = dependencySources(project, input);
-  return sources.ok ? { ...input, pluginRoots: [...input.pluginRoots, ...sources.value.map((source) => rootArg(sourcesRoot(project), source))] } : input;
+  return sources.ok ? bundledRoots(FRAMEWORK_ROOT, sources.value, mode) : sources;
 };
-/** Sources still to fetch, so a fresh project's dependencies are missing rather than misconfigured. */
-export const pendingSources = (project: string, input: BootstrapInput): Promise<Result<readonly DependencySource[]>> => {
+export const resolvedInput = (project: string, input: BootstrapInput): BootstrapInput => {
+  const included = includedRoots(project, input, "resolve");
   const sources = dependencySources(project, input);
-  return sources.ok ? unfetched(fetchContext(project, input, GIT_FETCHER), sources.value).then(ok) : Promise.resolve(sources);
+  return included !== null ? included.ok ? { ...input, pluginRoots: [...input.pluginRoots,
+    ...included.value.map(({ name, version, path }) => `${name}@${version}=${path}`)] } : input
+    : sources.ok ? { ...input, pluginRoots: [...input.pluginRoots, ...sources.value.map((source) => rootArg(sourcesRoot(project), source))] } : input;
+};
+/** Installed distributions verify local content and never enter the development fetch path. */
+export const pendingSources = (project: string, input: BootstrapInput): Promise<Result<readonly DependencySource[]>> => {
+  const included = includedRoots(project, input);
+  const sources = dependencySources(project, input);
+  return included !== null ? Promise.resolve(included.ok ? ok([]) : included)
+    : sources.ok ? unfetched(fetchContext(project, input, GIT_FETCHER), sources.value).then(ok) : Promise.resolve(sources);
 };
 const fetchContext = (project: string, input: BootstrapInput, fetcher: SourceFetcher): FetchContext => ({ project, cache: sourcesRoot(project),
   verify: verifySource(NODE_PLUGIN_FACTS_IO, FRAMEWORK_PLUGIN, input.workflows), fetcher });
 const fetchDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher): Promise<Result<string>> => {
+  const included = includedRoots(project, input);
   const sources = dependencySources(project, input);
-  return sources.ok ? fetchSources(fetchContext(project, input, fetcher), sources.value) : Promise.resolve(sources);
+  return included !== null ? Promise.resolve(included.ok ? ok("Bundled dependency sources verified.") : included)
+    : sources.ok ? fetchSources(fetchContext(project, input, fetcher), sources.value) : Promise.resolve(sources);
 };
 
 export const pluginBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => {
@@ -95,7 +107,10 @@ const stageResolved = (project: string, input: BootstrapInput): Promise<Result<s
   const bindings = pluginBindings(project, input);
   const roots = parseRootArgs(project, input.pluginRoots);
   return !bindings.ok ? Promise.resolve(bindings) : !roots.ok ? Promise.resolve(setupFailure(roots.message))
-    : sequence(pluginNames(input), (name) => stageNamed(project, roots.roots, name), "Pinned dependencies staged.");
+    : sequence(pluginNames(input), (name) => stageNamed(project, roots.roots, name), "Pinned dependencies staged.").then((staged) => {
+      const checked = staged.ok ? stagedBindings(project, input) : staged;
+      return checked.ok ? staged : checked;
+    });
 };
 
 /** Installed wrappers are checked against the same binding gate, rather than trusting a marker alone. */
@@ -111,8 +126,14 @@ export const stageDependency = async (project: string, name: string, source: str
   const marker = await readText(join(target, "upf-source.json"));
   const manifest = JSON.stringify({ source: resolve(source), version: pinnedVersion(name) }, null, 2);
   return !marker.ok ? marker : marker.value !== null ? marker.value === manifest || markerMatches(marker.value, source) ? ok(target)
-    : setupFailure(`An existing ${name} wrapper has different source settings. Preserve it and reconcile its recorded source.`)
+    : identicalSource(target, source) ? writeText(project, join(target, "upf-source.json"), manifest, marker.value).then((saved) => saved.ok ? ok(target) : saved)
+      : setupFailure(`An existing ${name} wrapper has different source settings. Preserve it and reconcile its recorded source.`)
     : directory(project, dirname(target)).then((dir) => dir.ok ? copySource(project, target, source, name, manifest) : dir);
+};
+const identicalSource = (target: string, source: string): boolean => {
+  const staged = readContentTree(join(target, "source"));
+  const expected = readContentTree(source);
+  return staged.ok && expected.ok && staged.value === expected.value;
 };
 const markerMatches = (raw: string, source: string): boolean => {
   try { const marker: unknown = JSON.parse(raw); return object(marker) && marker.source === resolve(source); }
@@ -124,7 +145,7 @@ const copySource = async (project: string, target: string, source: string, name:
   const manifest = await readText(join(target, ".codex-plugin/plugin.json"));
   const safe = await safePath(project, target);
   return !manifest.ok ? manifest : !safe || manifest.value !== null ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
-    : directory(project, staged).then((created) => created.ok ? cp(source, sourceTree, { recursive: true, dereference: false, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
+    : directory(project, staged).then((created) => created.ok ? cp(source, sourceTree, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
       .then(() => writeText(project, join(staged, ".codex-plugin/plugin.json"), JSON.stringify({ name,
         version: pinnedVersion(name), skills: "./source/skills/" }, null, 2), null))
       .then((written) => written.ok ? writeText(project, join(staged, "upf-source.json"), marker, null) : written)
