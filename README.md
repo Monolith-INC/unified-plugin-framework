@@ -34,6 +34,10 @@ Planning and delivery are tracked in [Unified Plugin Framework on Linear](https:
 
 ## Development setup
 
+Project operations use a saved tracker adapter and project language. Missing choices are collected once by `project-bootstrap`, which resumes the operation; subsequent requests use the adapter directly. See [project setup and tracker adapters](docs/user-journey.md#project-setup-and-tracker-adapters).
+
+The host skills use the framework CLI. For this source checkout, after install/build, run `pnpm agent-plugin project describe --project <target-project>`. An installed host payload needs the CLI available alongside its skills; the payload alone does not bundle Node dependencies. The skills report a missing CLI as an installation prerequisite and preserve the request.
+
 Requires Node.js 22 or newer and pnpm 10.14.0, as pinned in `package.json`.
 
 ```sh

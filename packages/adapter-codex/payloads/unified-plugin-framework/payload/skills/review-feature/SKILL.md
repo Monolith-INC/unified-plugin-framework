@@ -10,6 +10,8 @@ Review a complete feature against what it said it would do, its definition of do
 
 ## Check readiness and recover
 
+Use the project's saved language for communication, documentation and other prose. Work-item actions go through `project-operations`, which uses the configured project adapter and runs `project-bootstrap` only when setup is missing. Do not choose a tracker or call its native tools from this workflow.
+
 Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message.
 
 1. **Available:** `monolithic-code-review-toolkit:review-feature` is available in this session. If not, ask the user to install and enable `monolithic-code-review-toolkit` for this host, then continue once it is. This workflow is tested with `monolithic-code-review-toolkit` 0.6.0. If the session shows another version installed, mention it to the user once, in one line, and continue.

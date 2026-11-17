@@ -2,6 +2,16 @@
 
 The paths a user can take through Unified Plugin Framework: the workflows in the order work flows through them, the readiness checks every workflow skill runs first, and the choices inside each workflow. The design behind it is in the [workflow adapter architecture](work-items/2026-11-15-workflow-adapter-architecture.md) and [ADR-001](adr/ADR-001-workflow-adapter-interface.md).
 
+## Project setup and tracker adapters
+
+Planned in [AGE-100](https://linear.app/agentical-monolithics/issue/AGE-100/project-bootstrap-and-tracker-adapters), before the project tracking workflow.
+
+When a skill needs a project operation, it uses the configured adapter. If setup is missing, bootstrap asks for the tracker, its project settings, the project's language and necessary document/knowledge locations, then resumes the original request. Later calls use the adapter directly. Skills do not repeat setup checks or choose a tracker.
+
+The project language applies to communication, documentation and other generated prose. The tracker adapter translates neutral actions such as creating or updating a work item into the selected tracker's operations. Provider details stay in that adapter; workflow skills use the same actions whichever tracker the project selects.
+
+See [Project bootstrap and tracker adapters](work-items/2026-11-17-project-bootstrap-and-tracker-adapters.md) for the responsibility boundaries and delivery scope.
+
 ## The journey
 
 A session starts or resumes with Continuity, then moves through Discovery, project tracking, implementation and code review. Every workflow reads and writes the same project knowledge store.
@@ -32,7 +42,7 @@ flowchart TD
 | Workflow | Plugin behind it | Status |
 | --- | --- | --- |
 | Continuity | Agent Continuity | Planned: [AGE-97](https://linear.app/agentical-monolithics/issue/AGE-97/continuity-workflow-adapter-agent-continuity) |
-| Discovery | Superpowers and BMad Method | In review: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
+| Discovery | Superpowers and BMad Method | Shipped: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
 | Project tracking | Agile Backlog Toolkit | Planned: [AGE-98](https://linear.app/agentical-monolithics/issue/AGE-98/project-tracking-workflow-adapter-agile-backlog-toolkit) |
 | Implementation | Not chosen | No workflow or ticket yet |
 | Code review | Monolithic Code Review Toolkit | Shipped: [code review workflow](workflows/code-review.md) |

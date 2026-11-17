@@ -1,0 +1,14 @@
+{
+  "name": "@agent-plugins/project",
+  "version": "0.1.0",
+  "description": "Project configuration, bootstrap and tracker operations.",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json",
+    "test": "tsc -b tsconfig.json && node --test test/**/*.test.mjs"
+  },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.32.2" }
+}
