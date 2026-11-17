@@ -9,7 +9,7 @@ import {
   type VendorAdapter,
   type VerificationResult,
 } from "@agent-plugins/compiler";
-import type { Diagnostic } from "@agent-plugins/core";
+import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plugins/core";
 
 import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
@@ -64,13 +64,46 @@ export const withAssembledSource = <A>(
   }
 };
 
+/**
+ * Install finds a payload by the unscoped part of the plugin's manifest name, so a shipped plugin's directory must be
+ * named after it. An unreadable manifest passes here and is left to the compiler to report.
+ */
+const nameMismatch = (plugin: string, root: string): CompileResult | undefined => {
+  const name = loadPluginRoot(root).manifest?.name;
+  const expected = name === undefined ? plugin : pluginDirectoryName(name);
+  return expected === plugin
+    ? undefined
+    : failed(
+        "release.plugin.name_mismatch",
+        [`Rename plugins/${plugin} to plugins/${expected}: install looks payloads up by the manifest name ${name ?? ""}.`],
+        plugin,
+      );
+};
+
+/** One shipped plugin: its name, its source directory, and where its payload is shipped. */
+interface ShippedPlugin {
+  readonly plugin: string;
+  readonly root: string;
+  readonly shipped: string;
+}
+
+const releaseStaged =
+  (step: PayloadStep, adapter: VendorAdapter, adapters: readonly WorkflowAdapter<string>[]) =>
+  ({ plugin, root, shipped }: ShippedPlugin): CompileResult | VerificationResult => {
+    const staged = withAssembledSource(root, adapters, (source) => step(source, shipped, adapter));
+    return staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, plugin);
+  };
+
 const releaseOne =
   (step: PayloadStep, adapter: VendorAdapter, layout: ReleaseLayout, adapters: readonly WorkflowAdapter<string>[]) =>
   (plugin: string): PayloadReport => {
-    const staged = withAssembledSource(join(layout.pluginsRoot, plugin), adapters, (source) =>
-      step(source, join(layout.payloadsRoot, plugin), adapter),
-    );
-    return { plugin, result: staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, plugin) };
+    const root = join(layout.pluginsRoot, plugin);
+    return {
+      plugin,
+      result:
+        nameMismatch(plugin, root) ??
+        releaseStaged(step, adapter, adapters)({ plugin, root, shipped: join(layout.payloadsRoot, plugin) }),
+    };
   };
 
 /** Builds (`build`) or checks (`verify`) one host's payload for every shipped plugin, each from its assembled source. */

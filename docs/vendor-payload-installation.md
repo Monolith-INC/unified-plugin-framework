@@ -39,7 +39,7 @@ pnpm payloads:build
 pnpm payloads:verify
 ```
 
-To ship another plugin, add its directory name to `SHIPPED_PLUGINS`, run `pnpm payloads:build`, and commit the new `payloads/<plugin>` directories.
+To ship another plugin, add its directory name to `SHIPPED_PLUGINS`, run `pnpm payloads:build`, and commit the new `payloads/<plugin>` directories. The directory must be named after the unscoped part of the plugin's manifest name (`foo` for `@scope/foo`), because install looks payloads up by that name; the release refuses a plugin whose names differ.
 
 ## Adapter Guide
 
