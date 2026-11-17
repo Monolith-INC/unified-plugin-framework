@@ -1,6 +1,6 @@
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
-import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
+import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, probeProjectRead, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
 import { CODEX_TOOLING, codexToolingRegistration } from "@agent-plugins/adapter-codex";
 import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
@@ -35,9 +35,10 @@ const inspect = async (project: string, input: BootstrapInput, resolved: Bootstr
     case "knowledge-server": return inspectServer(project, input);
     case "review": return inspectReview(project, input);
     case "host-discovery": return inspectDiscovery(project, resolved);
-    case "tracker": return input.trackerRef === undefined ? missing("Provide trackerRef for an existing scoped item to verify a read without publishing test work.")
+    case "tracker": return input.trackerRef === undefined ? probeProjectRead(project)().then((result) => result.ok ? ready(result.value) : result)
       : operate(nodeProjectIO(project), { operation: "get_work_item", ref: input.trackerRef })().then((result) => result.ok && result.value.status === "completed"
-        ? ready("Selected adapter read an existing project-scoped item.") : result.ok ? missing("Complete project settings and retry the scoped read.") : result);
+        ? ready("Selected adapter read an existing project-scoped item.")
+        : result.ok ? missing("Complete project settings and retry the scoped read.") : result);
   }
 };
 const inspectSettings = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {

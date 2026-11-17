@@ -25,53 +25,50 @@ Discovery, tracking, implementation, review and continuity skills belong to `uni
 
 The complete release contains the framework CLI, its production Node dependencies, the five workflow plugins and the project-knowledge runtime source. You do not need a framework development checkout, pnpm or separate plugin downloads to use that distribution.
 
-### Requirements
+### One command
 
-- **Codex on Linux** for the complete automated setup verified with v0.2.1.
-- **Node.js 22 or newer** and **Python 3.12 or newer** on your machine.
-- **GitHub CLI (`gh`)** and network access to download the release. The knowledge runtime's isolated Python setup also installs packages from the package index.
-
-Claude, Cursor and Codex each have individual host payloads in the release. Their availability does not mean complete setup is automated or qualified on every host and operating system. macOS qualification is deferred; see the [release notes](https://github.com/Monolith-INC/unified-plugin-framework/releases/tag/v0.2.1) for the verification scope.
-
-### 1. Prepare your setup plan
-
-The installer reads a JSON plan; it is not an interactive setup wizard. Use the [tooling setup guide](docs/workflows/tooling-bootstrap.md) to prepare `upf-plan.json` with your agent before running it.
-
-Choose the workflows you need, the Python executable, and where project knowledge and documents will live. Reuse existing project settings, or supply the accepted tracker, language and planning-document choices described in the guide. Remote tracker verification also needs an existing work-item reference and the selected adapter's credentials.
-
-Leave `pluginRoots` empty to use the plugins included in the release. The installed framework verifies those bundled sources against its dependency lock.
-
-### 2. Run the release installer
-
-From the root of the project where you want to use UPF:
+Run this in a terminal from the project where you want to use UPF:
 
 ```sh
-gh release download v0.2.1 \
-  --repo Monolith-INC/unified-plugin-framework \
-  --pattern install.mjs \
-  --output install.mjs
-
-node install.mjs \
-  --version 0.2.1 \
-  --project "$PWD" \
-  --input ./upf-plan.json
+bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/releases/latest/download/install.sh)
 ```
 
-The installer downloads the complete archive, verifies its checksum and extracts it into a versioned directory under your project's `.upf-tools/`. It then runs the existing setup process to install the selected tooling and check its readiness. Keep that distribution available: the project CLI uses it.
+The interactive installer will:
 
-For installation from downloaded local files, checksum and provenance details, or individual host payloads, use the [installation guide](docs/vendor-payload-installation.md).
+1. Confirm your project folder, using the current directory as its default.
+2. Confirm the supported host and ask which workflows you want.
+3. Reuse existing project settings and ask for missing tracker, language and document locations.
+4. Show the selected setup and ask for confirmation.
+5. Install the complete distribution, configure the selected tooling and verify its readiness.
 
-### 3. Complete any reported setup actions
+The installer creates its setup plan internally. You do not need to write JSON or clone UPF. All five dependency plugins are included in the release; installation does not download their repositories separately.
 
-Read the setup report. Missing credentials, review-provider bindings, project knowledge content or host activation require the recovery action it names. The installer exits unsuccessfully while required setup remains incomplete and preserves completed steps so you can rerun the same plan.
+**Release availability:** this interactive installer is being added after v0.2.1. Use the command once a release lists `install.sh`; v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
 
-Project knowledge must be derived from your repository and decisions; installation does not invent that content. Your current agent chat may also need a reload before newly installed skills and tools become available.
+### Requirements and current support
 
-Once the CLI setup step is complete, inspect saved project choices with:
+- **Codex on Linux** for complete automated setup. Other hosts are not offered as working wizard choices.
+- **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. The wizard lets you choose the Python executable.
+- Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
+- Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
+
+The supported project trackers are repository-local files and Linear. For a new Linear setup, enter the team and project names or URLs; the connector resolves their identifiers. Your existing choices are reused on subsequent runs.
+
+Individual payloads are also published for Claude, Cursor and Codex. Their availability does not mean complete setup is automated on every host and operating system. macOS qualification remains deferred.
+
+### After installation
+
+Read the verification report. Missing authentication, review-provider bindings or project knowledge content appear as actions to complete, not a successful full setup. Completed steps are preserved when you rerun the installer.
+
+Project knowledge must come from your repository and recorded decisions; installation does not invent it. Restart the agent session when instructed so newly registered skills and tools can load.
+
+The project CLI lives under `.upf-tools/`:
 
 ```sh
 ./.upf-tools/bin/agent-plugin project describe --project "$PWD"
 ```
+
+For a pinned release, set `UPF_VERSION` in the environment before running the installer. For unattended setup, use the explicit `--input` plan-file option. Local archives and advanced recovery are covered in the [installation guide](docs/vendor-payload-installation.md).
 
 ## Work with your agent
 

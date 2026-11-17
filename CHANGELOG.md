@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Installation now offers a one-command shell launcher and terminal wizard that collects missing choices, reuses saved settings, confirms the proposed changes and builds its setup plan internally. Explicit plan-file input remains available for automation; all setup uses the existing bootstrap. Release assets include `install.sh` and its checksum. Empty local trackers can be verified without creating a test item. New Linear selections resolve names through the existing connector ([AGE-108](https://linear.app/agentical-monolithics/issue/AGE-108)).
+
 - Complete release distributions now include the working CLI with production Node dependencies, all five pinned dependency repositories and licenses, canonical plugin sources/lock and the knowledge runtime. `install.mjs` installs a verified archive and invokes existing bootstrap from it ([AGE-107](https://linear.app/agentical-monolithics/issue/AGE-107)). Installed distributions resolve dependencies locally and fail on missing/modified bundled content without fetching plugin repositories. Development checkouts retain their existing fetch capability.
 
 - Host payloads are no longer committed. The repository keeps one copy of each plugin, its source under `plugins/`; `packages/adapter-*/payloads/` is git-ignored build output ([AGE-104](https://linear.app/agentical-monolithics/issue/AGE-104)).
