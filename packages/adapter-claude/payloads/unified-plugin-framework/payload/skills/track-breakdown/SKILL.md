@@ -33,7 +33,7 @@ Record every successful ref immediately in the saved change set. On resume, get 
 
 ## Plan implementation
 
-Use only these reviewed content excerpts. They are content guidance, not calls to native workflow conductors. Project operations supply reads, hierarchy changes and publication. The project's team template and saved language take precedence; proposed assumptions require confirmation.
+Use only these reviewed content excerpts under this workflow's contract. They are content guidance, not calls to native workflow conductors or their follow-up skills/scripts. The project's saved choices and authorization govern execution.
 
 ### Plan coverage
 

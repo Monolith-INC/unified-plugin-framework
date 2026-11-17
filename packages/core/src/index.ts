@@ -19,6 +19,7 @@ export {
   WORKFLOW_ADAPTERS,
   WORKFLOW_NAMES,
   readOnboardedPlugins,
+  declaredWorkflows,
   type OnboardedPlugin,
   type OnboardedPluginsRead,
   type WorkflowName,

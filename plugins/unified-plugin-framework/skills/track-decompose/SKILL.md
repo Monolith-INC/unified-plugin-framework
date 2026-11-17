@@ -8,7 +8,7 @@ description: Derive correctly parented features or stories from an approved larg
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Derive deliverable children
 

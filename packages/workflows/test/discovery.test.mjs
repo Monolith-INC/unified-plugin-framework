@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { loadPluginRoot } from "@agent-plugins/core";
+import { declaredWorkflows, loadPluginRoot } from "@agent-plugins/core";
 
 import {
   adapterPlugins,
@@ -12,6 +12,7 @@ import {
   DISCOVERY_OPERATIONS,
   findWorkflow,
   renderSkill,
+  pinFor,
 } from "../dist/index.js";
 
 const framework = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
@@ -40,8 +41,8 @@ test("every mode is led by the same brainstorming flow; modes differ only in the
 test("the framework manifest declares and the lock pins every plugin the adapter needs", () => {
   const declared = loadPluginRoot(fileURLToPath(framework)).onboardedPlugins ?? [];
   adapterPlugins(brainstormingDiscoveryAdapter).map((plugin) => {
-    assert.ok(declared.some(({ name, adapter }) => name === plugin && adapter === "discovery"), `${plugin} is declared for discovery`);
-    assert.ok(lock.plugins.some((pin) => pin.plugin === plugin && pin.adapter === "discovery"), `${plugin} is pinned`);
+    assert.ok(declared.some((entry) => entry.name === plugin && declaredWorkflows(entry).includes("discovery")), `${plugin} is declared for discovery`);
+    assert.ok(pinFor(lock, plugin, "discovery"), `${plugin} is pinned`);
     return plugin;
   });
 });
@@ -65,9 +66,10 @@ test("Discovery readiness is all or nothing: a missing plugin fails it, naming t
     [...Object.values(brainstormingDiscoveryAdapter.fulfil).flat(), ...brainstormingDiscoveryAdapter.catalog]
       .filter((ref) => ref.plugin === plugin)
       .map(({ skill }) => skill);
-  const pinOf = (plugin) => lock.plugins.find((pin) => pin.plugin === plugin);
+  const pinOf = (plugin) => pinFor(lock, plugin, "implementation") ?? pinFor(lock, plugin, "discovery");
   const installed = (plugins) =>
-    new Map(plugins.map((plugin) => [plugin, { version: pinOf(plugin).version, checksum: pinOf(plugin).checksum, skills: skills(plugin) }]));
+    new Map(plugins.map((plugin) => [plugin, { version: pinOf(plugin).version, checksum: pinOf(plugin).checksum,
+      contentSource: pinOf(plugin).contentSource, skills: skills(plugin) }]));
   const facts = {
     adapter: brainstormingDiscoveryAdapter,
     onboarded: loadPluginRoot(fileURLToPath(framework)).onboardedPlugins,

@@ -1,6 +1,7 @@
 import type { VendorAdapter } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
 import { agentContinuityAdapter } from "./continuity.js";
+import { superpowersImplementationAdapter } from "./implementation.js";
 
 import type { WorkflowAdapter } from "./adapter.js";
 import type { OnboardedLock } from "./lock.js";
@@ -26,6 +27,7 @@ export {
   mappingDigest,
   firstFailure,
   PROJECT_KNOWLEDGE_SETUP,
+  sourceMatches,
   type Monoid,
   type NonEmpty,
   type BindingFacts,
@@ -49,6 +51,8 @@ export {
   lockText,
   parseLock,
   pinFor,
+  bindingPins,
+  pluginSourceChecksum,
   withPin,
   type OnboardedLock,
   type ParsedLock,
@@ -76,7 +80,10 @@ export const WORKFLOWS: Readonly<Record<WorkflowName, WorkflowAdapter<string>>> 
   discovery: brainstormingDiscoveryAdapter,
   "project-tracking": backlogTrackingAdapter,
   continuity: agentContinuityAdapter,
+  implementation: superpowersImplementationAdapter,
 });
+
+export { IMPLEMENTATION_OPERATIONS, IMPLEMENTATION_CONTRACT_VERSION, superpowersImplementationAdapter, type ImplementationAdapter, type ImplementationOperation } from "./implementation.js";
 
 export { CONTINUITY_OPERATIONS, CONTINUITY_CONTRACT_VERSION, agentContinuityAdapter, type ContinuityAdapter, type ContinuityOperation } from "./continuity.js";
 

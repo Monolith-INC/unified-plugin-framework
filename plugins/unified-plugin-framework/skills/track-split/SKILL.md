@@ -8,7 +8,7 @@ description: Split an oversized story into deliverable stories while retaining i
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Preserve scope in smaller deliveries
 

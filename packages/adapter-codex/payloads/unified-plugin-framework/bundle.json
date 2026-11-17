@@ -53,6 +53,18 @@
       "sha256": "bbd959485fb83f6e86cdbc83a896f5068e3406faf05925d870dcb45cef3bf0c3"
     },
     {
+      "bytes": 5969,
+      "mode": 420,
+      "path": "skills/implement-verify/SKILL.md",
+      "sha256": "0bbc716021131cf4b204a95486901e40d316d381e1566f77f8c9233d378601de"
+    },
+    {
+      "bytes": 9574,
+      "mode": 420,
+      "path": "skills/implement-work/SKILL.md",
+      "sha256": "083eb231c0bac02640e1e3d3e63bba0eb6b5b37540126434b093c3c91a72530a"
+    },
+    {
       "bytes": 5157,
       "mode": 420,
       "path": "skills/project-bootstrap/SKILL.md",
@@ -83,54 +95,54 @@
       "sha256": "96c629162a6c27a8493692b91f7f4b40508a5c6edd10a631c42b21dfd7d2bb20"
     },
     {
-      "bytes": 7132,
+      "bytes": 7086,
       "mode": 420,
       "path": "skills/track-amend/SKILL.md",
-      "sha256": "91c119931e031bf217fc0e4f622c4b5fccb290060027ec5210b922b40019e488"
+      "sha256": "fadd5cd97ce94f2c0f49045a1d4002aca7eab953714de1a0227bd2a774b7ee74"
     },
     {
-      "bytes": 7812,
+      "bytes": 7766,
       "mode": 420,
       "path": "skills/track-breakdown/SKILL.md",
-      "sha256": "700aba8ffeca7bcf60566717f5fe70386c3419204868da427d53e8fca8625e11"
+      "sha256": "3bb3b856941347a431a6414c60cfdc0dae6dc8d168dd8f02a5abe314d4ecea50"
     },
     {
-      "bytes": 8041,
+      "bytes": 7995,
       "mode": 420,
       "path": "skills/track-decompose/SKILL.md",
-      "sha256": "43efeb18f6d7f53991c50886b638b48d765097afde85217800caa3b3633434b5"
+      "sha256": "a354d50a3a361e278272ce6f8f44c2c8b5552fc623a6b7190cca66c097031ff9"
     },
     {
-      "bytes": 7802,
+      "bytes": 7756,
       "mode": 420,
       "path": "skills/track-enrich/SKILL.md",
-      "sha256": "17fdd21192f0073ffd68f8008ebc3fb512149938e35ec187f10a9d0490c3dd5e"
+      "sha256": "8c42dbe5a196555056a0bf0d0cf563e3e888264c2aeaeb76915aa0516bf52dc7"
     },
     {
-      "bytes": 7850,
+      "bytes": 7804,
       "mode": 420,
       "path": "skills/track-from-design/SKILL.md",
-      "sha256": "cb587e5e530187fc4daf8723e92ef6b49a23ec4186c04c6448416f7ca9c3db7f"
+      "sha256": "e8cd57260c91693f3c39c9612da98ce3f33b33ce09c020d12d10ec1dafdb6568"
     },
     {
-      "bytes": 10578,
+      "bytes": 10532,
       "mode": 420,
       "path": "skills/track-split/SKILL.md",
-      "sha256": "b636227b8826ee08abd0f011be73b35bef787ca2b2c9d8520306a7b0ee0a54ac"
+      "sha256": "794170ba5acb6a8ac6cd4fd60ae651decc28a5947426aad513496ac1185162ee"
     },
     {
-      "bytes": 7743,
+      "bytes": 7697,
       "mode": 420,
       "path": "skills/track-validate/SKILL.md",
-      "sha256": "5089bcd5479885a4a348a49692fff62d51c821934c475ed2d2e13b4622a2f62b"
+      "sha256": "3ef6a97995025128750331776c6a0e597cb2b0ee73e7c69d404ebb4749a81b78"
     }
   ],
-  "payloadDigest": "1128cecc54a2ca7a86d8e7d863fbefb7ae9bfc1fa6f3155a1008fed2a3aa5e22",
+  "payloadDigest": "8fd161b30366c47fafe568e6ea800d9103cd77b0e78f1f4ba6ec096ba40c8687",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "b083feef7e4cc80e987ffac027a5b4e8621e2274281f426ecd56ddaa6f36450f",
+  "sourceDigest": "2adbbc9b9b54b961517888ffb5823aff983bfda1928e5fb232a4da52ddcb63fa",
   "vendor": "codex"
 }

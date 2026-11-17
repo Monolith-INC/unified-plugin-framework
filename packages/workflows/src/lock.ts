@@ -1,4 +1,4 @@
-import { stableJson } from "@agent-plugins/compiler";
+import { sha256, stableJson } from "@agent-plugins/compiler";
 import { WORKFLOW_ADAPTERS, type WorkflowName } from "@agent-plugins/core";
 
 /** The lock beside the framework manifest: one pin per onboarded plugin, like `package-lock.json` beside `package.json`. */
@@ -24,9 +24,21 @@ export type PluginPin = {
   readonly contentSource?: ContentSource;
 };
 
+/** One source identity, with independently checked workflow mappings. */
+export type WorkflowPin = Pick<PluginPin, "adapter" | "contractVersion" | "mappingDigest"> & {
+  readonly files?: Readonly<Record<string, string>>;
+};
+export type SharedPluginPin = Pick<PluginPin, "plugin" | "version" | "checksum"> & {
+  readonly bindings: readonly WorkflowPin[];
+};
+export type LockedPlugin = PluginPin | SharedPluginPin;
+
+/** Canonical source identity is independent of a workflow's public-content selection. */
+export const pluginSourceChecksum = (pin: LockedPlugin): string => "bindings" in pin ? pin.checksum : pin.contentSource?.checksum ?? pin.checksum;
+
 export type OnboardedLock = {
-  readonly lockVersion: 1;
-  readonly plugins: readonly PluginPin[];
+  readonly lockVersion: 1 | 2;
+  readonly plugins: readonly LockedPlugin[];
 };
 
 export const EMPTY_LOCK: OnboardedLock = Object.freeze({ lockVersion: 1, plugins: Object.freeze([]) });
@@ -64,30 +76,73 @@ const isPin = (value: unknown): value is PluginPin =>
 const isPinList = (value: unknown): value is readonly PluginPin[] =>
   Array.isArray(value) && value.every(isPin) && new Set(value.map(({ plugin }: PluginPin) => plugin)).size === value.length;
 
+const isFiles = (value: unknown): value is Readonly<Record<string, string>> => isRecord(value)
+  && Object.entries(value).every(([path, digest]) => path.length > 0 && typeof digest === "string" && isDigest(digest));
+const isBinding = (value: unknown): value is WorkflowPin => isRecord(value)
+  && Object.keys(value).every((key) => ["adapter", "contractVersion", "mappingDigest", "files"].includes(key))
+  && WORKFLOW_ADAPTERS.has(field(value, "adapter") ?? "") && field(value, "contractVersion") !== undefined
+  && isDigest(field(value, "mappingDigest")) && (value.files === undefined || isFiles(value.files));
+const consistentFiles = (bindings: readonly WorkflowPin[]): boolean => bindings.every((binding) =>
+  Object.entries(binding.files ?? {}).every(([path, digest]) => bindings.every((other) => other.files?.[path] === undefined || other.files[path] === digest)));
+const isSharedPin = (value: unknown): value is SharedPluginPin => isRecord(value)
+  && Object.keys(value).every((key) => ["plugin", "version", "checksum", "bindings"].includes(key))
+  && field(value, "plugin") !== undefined && field(value, "version") !== undefined && isDigest(field(value, "checksum"))
+  && Array.isArray(value.bindings) && value.bindings.length > 0 && value.bindings.every(isBinding)
+  && new Set(value.bindings.map((binding) => binding.adapter)).size === value.bindings.length && consistentFiles(value.bindings);
+const isSharedList = (value: unknown): value is readonly SharedPluginPin[] => Array.isArray(value) && value.every(isSharedPin)
+  && new Set(value.map((pin) => pin.plugin)).size === value.length;
+
 /** Parses lock file JSON; an absent file is the empty lock, decided by the caller. */
 export const parseLock = (value: unknown): ParsedLock => {
-  const plugins = isRecord(value) && value["lockVersion"] === 1 ? value["plugins"] : undefined;
-  return isPinList(plugins)
-    ? { ok: true, lock: { lockVersion: 1, plugins } }
-    : { ok: false, message: `${LOCK_FILE} must hold lockVersion 1 and one complete pin per plugin.` };
+  switch (true) {
+    case isRecord(value) && value.lockVersion === 1 && isPinList(value.plugins):
+      return { ok: true, lock: { lockVersion: 1, plugins: (value as { readonly plugins: readonly PluginPin[] }).plugins } };
+    case isRecord(value) && value.lockVersion === 2 && isSharedList(value.plugins):
+      return { ok: true, lock: { lockVersion: 2, plugins: (value as { readonly plugins: readonly SharedPluginPin[] }).plugins } };
+    default:
+      return { ok: false, message: `${LOCK_FILE} requires complete unique pins: legacy lockVersion 1 or shared-binding lockVersion 2. Preserve the file and use a compatible framework or re-pin to migrate.` };
+  }
 };
 
-/** The pin for a plugin, if the lock has one. */
-export const pinFor = (lock: OnboardedLock, plugin: string): PluginPin | undefined =>
-  lock.plugins.find((pin) => pin.plugin === plugin);
+const boundPin = (source: SharedPluginPin, binding: WorkflowPin): PluginPin => ({
+  plugin: source.plugin, version: source.version, adapter: binding.adapter, contractVersion: binding.contractVersion, mappingDigest: binding.mappingDigest,
+  checksum: binding.files === undefined ? source.checksum : sha256(stableJson({ sourceChecksum: source.checksum, publicFiles: binding.files })),
+  ...(binding.files === undefined ? {} : { contentSource: { checksum: source.checksum, files: binding.files } }),
+});
+
+/** Workflow views preserve the legacy API without duplicating a shared source identity on disk. */
+export const bindingPins = (pin: LockedPlugin): readonly PluginPin[] => "bindings" in pin ? pin.bindings.map((binding) => boundPin(pin, binding)) : [pin];
+export const pinFor = (lock: OnboardedLock, plugin: string, workflow?: WorkflowName): PluginPin | undefined =>
+  lock.plugins.filter((pin) => pin.plugin === plugin).flatMap(bindingPins).find((pin) => workflow === undefined || pin.adapter === workflow);
+
+const workflowPin = (pin: PluginPin): WorkflowPin => ({ adapter: pin.adapter, contractVersion: pin.contractVersion, mappingDigest: pin.mappingDigest,
+  ...(pin.contentSource === undefined ? {} : { files: pin.contentSource.files }) });
+const sharedPin = (pin: LockedPlugin): SharedPluginPin => "bindings" in pin ? pin : ({ plugin: pin.plugin, version: pin.version,
+  checksum: pluginSourceChecksum(pin), bindings: [workflowPin(pin)] });
 
 /** Inserts a pin into a list sorted by plugin name; plugin names in a lock are unique. */
-const insertByPlugin = (sorted: readonly PluginPin[], pin: PluginPin): readonly PluginPin[] => [
+const insertByPlugin = (sorted: readonly LockedPlugin[], pin: LockedPlugin): readonly LockedPlugin[] => [
   ...sorted.filter(({ plugin }) => plugin < pin.plugin),
   pin,
   ...sorted.filter(({ plugin }) => plugin > pin.plugin),
 ];
 
 /** The lock with `pin` replacing any pin for the same plugin, kept sorted by plugin name. Pure. */
-export const withPin = (lock: OnboardedLock, pin: PluginPin): OnboardedLock => ({
-  lockVersion: 1,
-  plugins: [...lock.plugins.filter(({ plugin }) => plugin !== pin.plugin), pin].reduce<readonly PluginPin[]>(insertByPlugin, []),
-});
+export const withPin = (lock: OnboardedLock, pin: PluginPin): OnboardedLock => {
+  const previous = lock.plugins.find((entry) => entry.plugin === pin.plugin);
+  const shared = lock.lockVersion === 2 || previous !== undefined && bindingPins(previous).some((binding) => binding.adapter !== pin.adapter);
+  return { lockVersion: shared ? 2 : 1, plugins: [...lock.plugins.filter(({ plugin }) => plugin !== pin.plugin),
+    shared ? mergeBinding(previous, pin) : pin].map((entry) => shared ? sharedPin(entry) : entry).reduce<readonly LockedPlugin[]>(insertByPlugin, []) };
+};
+
+/** A replacement source drops old mappings; they must be checked again rather than silently inherited. */
+const mergeBinding = (previous: LockedPlugin | undefined, pin: PluginPin): SharedPluginPin => {
+  const next = sharedPin(pin);
+  const old = previous === undefined ? undefined : sharedPin(previous);
+  const retained = old?.version === next.version && old.checksum === next.checksum ? old.bindings.filter((binding) => binding.adapter !== pin.adapter) : [];
+  return { ...next, bindings: [...retained, workflowPin(pin)].reduce<readonly WorkflowPin[]>((sorted, entry) =>
+    [...sorted.filter((b) => b.adapter < entry.adapter), entry, ...sorted.filter((b) => b.adapter > entry.adapter)], []) };
+};
 
 /** The lock file's text: stable key order, so an unchanged lock is byte-identical. */
 export const lockText = (lock: OnboardedLock): string => stableJson(lock);

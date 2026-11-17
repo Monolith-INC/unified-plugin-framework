@@ -1,8 +1,8 @@
-import type { OnboardedPlugin, WorkflowName } from "@agent-plugins/core";
+import { declaredWorkflows, type OnboardedPlugin, type WorkflowName } from "@agent-plugins/core";
 
 import { sha256, stableJson } from "@agent-plugins/compiler";
 
-import { LOCK_FILE, pinFor, type ContentSource, type OnboardedLock, type PluginPin } from "./lock.js";
+import { LOCK_FILE, bindingPins, pinFor, type ContentSource, type OnboardedLock, type PluginPin } from "./lock.js";
 import { parseRange, satisfies } from "./versions.js";
 
 /** A plugin skill that carries out part of a contract operation; `use` says when to choose it among several. */
@@ -57,6 +57,7 @@ export type WorkflowAdapter<Operation extends string> = {
   readonly bareSkillPlugins: readonly string[];
   readonly knowledgeStores: readonly PluginKnowledgeStore[];
   readonly contentViews?: readonly ContentView[];
+  readonly protocol?: string;
 };
 
 /** The framework skill that creates the shared project knowledge store. */
@@ -154,7 +155,7 @@ const describePlugins = (plugins: readonly string[], onboarded: readonly Onboard
     .join("; ");
 
 const declaration = (adapter: WorkflowAdapter<string>, onboarded: readonly OnboardedPlugin[], plugin: string) =>
-  onboarded.find(({ name, adapter: served }) => name === plugin && served === adapter.workflow);
+  onboarded.find((entry) => entry.name === plugin && declaredWorkflows(entry).includes(adapter.workflow));
 
 /** A digest of the whole adapter, so any change to its contract or mapping invalidates the pins made against it. */
 export const mappingDigest = (adapter: WorkflowAdapter<string>): string => sha256(stableJson(adapter));
@@ -237,6 +238,11 @@ const unchangedSource = (before: ContentSource | undefined, after: ContentSource
   before !== undefined && after !== undefined && before.checksum === after.checksum
   && Object.entries(before.files).every(([path, digest]) => after.files[path] === digest);
 
+/** Selection growth is independent of source identity; all previously reviewed files must still agree. */
+export const sourceMatches = (pin: PluginPin, found: InstalledPlugin): boolean => pin.version === found.version
+  && (pin.checksum === found.checksum || unchangedSource(pin.contentSource, found.contentSource)
+    || pin.contentSource === undefined && found.contentSource?.checksum === pin.checksum);
+
 const contentChangedText = (plugin: string, pin: PluginPin, found: InstalledPlugin): string =>
   `${plugin} ${found.version} (${short(found.checksum)}) is installed, but ${LOCK_FILE} pins ${pin.version} (${short(pin.checksum)})`;
 
@@ -244,17 +250,17 @@ const contentChangedText = (plugin: string, pin: PluginPin, found: InstalledPlug
 const pinProblem =
   ({ adapter, installed, lock }: BindingFacts) =>
   (plugin: string): PinProblem | undefined => {
-    const pin = pinFor(lock, plugin);
+    const pin = pinFor(lock, plugin, adapter.workflow);
     const found = installed.get(plugin);
     return found === undefined
       ? undefined
       : pin === undefined
         ? { kind: "unpinned", text: `${plugin} is not pinned in ${LOCK_FILE}` }
-        : contentChanged(pin, found)
+        : contentChanged(pin, found) && !sourceMatches(pin, found)
           ? { kind: "content-changed", text: contentChangedText(plugin, pin, found) }
           : pin.version !== found.version
             ? { kind: "other-version", text: contentChangedText(plugin, pin, found) }
-            : pin.checksum !== found.checksum || pin.adapter !== adapter.workflow || pin.mappingDigest !== mappingDigest(adapter)
+            : !sourceMatches(pin, found) || pin.mappingDigest !== mappingDigest(adapter) || pin.contractVersion !== adapter.contractVersion
               ? { kind: "mapping-changed", text: `the ${adapter.workflow} contract or mapping changed since ${plugin} ${pin.version} was pinned` }
               : undefined;
   };
@@ -285,9 +291,9 @@ const checkPinned = (facts: BindingFacts): Readiness => {
 /** The upgrade gate refuses a candidate whose content changed under the version the lock already pins. */
 const checkSameVersionContent = (facts: BindingFacts): Readiness => {
   const changed = adapterPlugins(facts.adapter).flatMap((plugin) => {
-    const pin = pinFor(facts.lock, plugin);
     const found = facts.installed.get(plugin);
-    return pin === undefined || found === undefined || !contentChanged(pin, found) ? [] : [contentChangedText(plugin, pin, found)];
+    return found === undefined ? [] : facts.lock.plugins.filter((pin) => pin.plugin === plugin).flatMap(bindingPins)
+      .filter((pin) => contentChanged(pin, found) && !sourceMatches(pin, found)).map((pin) => contentChangedText(plugin, pin, found));
   });
   return changed.length === 0
     ? READY

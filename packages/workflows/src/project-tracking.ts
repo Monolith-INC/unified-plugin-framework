@@ -1,5 +1,6 @@
 import type { PluginSkillRef, WorkflowAdapter } from "./adapter.js";
 import { TRACKING_CONTENT, TRACKING_LICENSE } from "./tracking-content.js";
+import { TRACKING_PROTOCOL } from "./tracking-protocol.js";
 
 /** Project-tracking contract v1: approved designs become traceable, implementable work. */
 export const TRACKING_OPERATIONS = Object.freeze([
@@ -30,4 +31,5 @@ export const backlogTrackingAdapter: TrackingAdapter = Object.freeze({
   bareSkillPlugins: Object.freeze([]),
   knowledgeStores: Object.freeze([]),
   contentViews: Object.freeze([...TRACKING_CONTENT, TRACKING_LICENSE]),
+  protocol: TRACKING_PROTOCOL,
 });

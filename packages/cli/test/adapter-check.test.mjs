@@ -123,7 +123,7 @@ test("adapter-check reports a malformed lock as a configuration error", () => {
   writeJson(join(root, "onboarded.lock.json"), { lockVersion: 1, plugins: [{ plugin: "monolithic-code-review-toolkit" }] });
   const result = check(["--plugin-root", toolkit, "--project", project()], root);
   assert.equal(result.exitCode, 2);
-  assert.match(result.stderr, /onboarded\.lock\.json must hold lockVersion 1/);
+  assert.match(result.stderr, /onboarded\.lock\.json requires complete unique pins/);
 });
 
 

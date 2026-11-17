@@ -6,7 +6,6 @@ import {
   type WorkflowAdapter,
 } from "./adapter.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
-import { TRACKING_PROTOCOL } from "./tracking-protocol.js";
 
 /** A rendered skill file, or why it could not be rendered. */
 export type Rendered = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string };
@@ -55,7 +54,7 @@ const delegate = (adapter: WorkflowAdapter<string>, qualify: Qualify, served: No
 };
 
 const contentView = (adapter: WorkflowAdapter<string>, served: NonEmpty<PluginSkillRef>): string => [
-  "Use only these reviewed content excerpts. They are content guidance, not calls to native workflow conductors. Project operations supply reads, hierarchy changes and publication. The project's team template and saved language take precedence; proposed assumptions require confirmation.",
+  "Use only these reviewed content excerpts under this workflow's contract. They are content guidance, not calls to native workflow conductors or their follow-up skills/scripts. The project's saved choices and authorization govern execution.",
   ...(adapter.contentViews ?? []).filter((view) => served.some(({ plugin, skill }) => plugin === view.plugin && (view.skill === "*" || skill === view.skill)))
     .map((view) => `### ${view.heading}\n\nSource: ${view.plugin}, \`${view.path}\` (reviewed source ${view.sourceDigest}).\n\n${view.content}`),
 ].join("\n\n");
@@ -135,7 +134,7 @@ const sections = ({ adapter, operation, served, offered, pins }: Inputs): Readon
     ["readiness", readiness(adapter, qualify, checkedSkills(served, offered), pins)],
     ["delegate", delegate(adapter, qualify, served)],
     ["catalog", catalogBlock(qualify, offered)],
-    ...(adapter.composition === "content-view" ? [["tracking", TRACKING_PROTOCOL] as const] : []),
+    ...(adapter.protocol === undefined ? [] : [["protocol", adapter.protocol] as const]),
   ]);
 };
 
@@ -160,8 +159,8 @@ const templateProblem = (template: string, inputs: Inputs, known: ReadonlyMap<st
         ? `${unpinned.join(", ")} has no pin in ${LOCK_FILE}: pin it with agent-plugin upgrade-check before release.`
         : missingView
           ? `The ${inputs.operation} content view is incomplete; review and rebuild its published content selections.`
-          : inputs.adapter.composition === "content-view" && !present.includes("tracking")
-            ? `The ${inputs.operation} template is missing placeholders: {{tracking}}.`
+          : inputs.adapter.protocol !== undefined && !present.includes("protocol")
+            ? `The ${inputs.operation} template is missing placeholders: {{protocol}}.`
             : undefined;
 };
 
@@ -171,8 +170,8 @@ export const renderSkill = (template: string, adapter: WorkflowAdapter<string>, 
   const offered = served === undefined ? [] : offeredCatalog(adapter, served);
   // Every plugin a session may use is required: the operation's and the catalog's, each installed and pinned.
   const required = served === undefined ? [] : uniquePlugins([...served, ...offered]);
-  const pins = required.flatMap((plugin) => pinFor(lock, plugin) ?? []);
-  const unpinned = required.filter((plugin) => pinFor(lock, plugin) === undefined);
+  const pins = required.flatMap((plugin) => pinFor(lock, plugin, adapter.workflow) ?? []);
+  const unpinned = required.filter((plugin) => pinFor(lock, plugin, adapter.workflow) === undefined);
   const inputs = served === undefined ? undefined : { adapter, operation, served, offered, pins };
   const known = inputs === undefined ? undefined : sections(inputs);
   const problem = inputs === undefined || known === undefined ? undefined : templateProblem(template, inputs, known, unpinned);

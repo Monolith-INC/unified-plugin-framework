@@ -193,9 +193,11 @@ test("a skills folder hashes the same with either line ending, and needs a name"
 });
 
 test("a Claude Code plugin outside its declared range fails the upgrade gate, leaving the lock unchanged", () => {
-  const root = frameworkCopy();
+  const root = frameworkCopy({ unpinned: true });
+  const bmad = skillsFolder();
+  assert.equal(upgradeDiscovery(root, [claudePlugin(), `bmad-method=${bmad}`]).exitCode, 0);
   const before = lockAt(root);
-  const result = upgradeDiscovery(root, [claudePlugin("8.0.0"), `bmad-method=${skillsFolder()}`]);
+  const result = upgradeDiscovery(root, [claudePlugin("8.0.0"), `bmad-method=${bmad}`]);
   assert.equal(result.exitCode, 1);
   assert.match(JSON.parse(result.stderr).reason, /superpowers 8\.0\.0 \(declared \^7\.0\.0\)/);
   assert.equal(lockAt(root), before);

@@ -8,7 +8,7 @@ description: Apply an agreed correction across affected items, plans and tasks w
 
 {{readiness}}
 
-{{tracking}}
+{{protocol}}
 
 ## Apply the agreed correction
 

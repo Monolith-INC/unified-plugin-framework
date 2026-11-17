@@ -6,6 +6,8 @@ import type { Diagnostic, OnboardedPlugin, PluginInspection } from "@agent-plugi
 import {
   EMPTY_LOCK,
   LOCK_FILE,
+  bindingPins,
+  pluginSourceChecksum,
   parseLock,
   parseRange,
   type BindingFacts,
@@ -123,7 +125,7 @@ const declaredFloor = (onboarded: readonly OnboardedPlugin[], name: string): str
 const versionOf = (arg: PluginRootArg, read: PluginRead, name: string, context: ResolveContext): string | undefined =>
   read.version ??
   arg.version ??
-  context.lock.plugins.find((pin) => pin.plugin === name && pin.checksum === read.checksum)?.version ??
+  context.lock.plugins.find((pin) => pin.plugin === name && pluginSourceChecksum(pin) === (read.contentSource?.checksum ?? read.checksum))?.version ??
   declaredFloor(context.onboarded, name);
 
 /** A name or version given on the command line must agree with the plugin's own manifest. */
@@ -206,10 +208,10 @@ export const gatherBinding = (
 const contentPaths = (adapter: WorkflowAdapter<string>, lock: OnboardedLock): ReadonlyMap<string, readonly string[]> =>
   new Map([...new Set([
     ...(adapter.contentViews ?? []).map(({ plugin }) => plugin),
-    ...lock.plugins.filter((pin) => pin.adapter === adapter.workflow && pin.contentSource !== undefined).map(({ plugin }) => plugin),
+    ...lock.plugins.filter((pin) => bindingPins(pin).some((binding) => binding.contentSource !== undefined)).map(({ plugin }) => plugin),
   ])].map((plugin) => [plugin,
     [...new Set([
       ...(adapter.contentViews ?? []).filter((view) => view.plugin === plugin).map(({ path }) => path),
-      ...Object.keys(lock.plugins.find((pin) => pin.plugin === plugin)?.contentSource?.files ?? {}),
+      ...lock.plugins.filter((pin) => pin.plugin === plugin).flatMap(bindingPins).flatMap((pin) => Object.keys(pin.contentSource?.files ?? {})),
     ])],
   ]));
