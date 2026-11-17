@@ -1,6 +1,0 @@
-{
-  "description": "Minimum valid Agent Plugins reference plugin.",
-  "name": "hello-world",
-  "skills": "./skills/",
-  "version": "1.0.0"
-}

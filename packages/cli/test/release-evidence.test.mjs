@@ -8,21 +8,19 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
-import { codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
-import { cursorAdapter, cursorShippedBundle } from "@agent-plugins/adapter-cursor";
+import { claudeAdapter } from "@agent-plugins/adapter-claude";
+import { codexAdapter } from "@agent-plugins/adapter-codex";
+import { cursorAdapter } from "@agent-plugins/adapter-cursor";
 import {
   finalizeVendorBundle,
   normalizeCanonicalPlugin,
-  readVendorBundle,
   sha256,
 } from "@agent-plugins/compiler";
 import { createVendorInstaller, installVendorBundle } from "@agent-plugins/installer";
-import { SHIPPED_PLUGINS } from "@agent-plugins/workflows";
+import { SHIPPED_PLUGINS, buildVendorBundle } from "@agent-plugins/workflows";
 import { runInstallCommand } from "../dist/index.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -32,19 +30,16 @@ const vendors = [
     adapter: claudeAdapter,
     manifestPath: ".claude-plugin/plugin.json",
     packageRoot: "packages/adapter-claude",
-    shippedBundle: claudeShippedBundle,
   },
   {
     adapter: codexAdapter,
     manifestPath: ".codex-plugin/plugin.json",
     packageRoot: "packages/adapter-codex",
-    shippedBundle: codexShippedBundle,
   },
   {
     adapter: cursorAdapter,
     manifestPath: ".cursor-plugin/plugin.json",
     packageRoot: "packages/adapter-cursor",
-    shippedBundle: cursorShippedBundle,
   },
 ];
 
@@ -71,15 +66,17 @@ function compiledBundle(adapter, canonical, version) {
   return bundle.value;
 }
 
-function capture(operation) {
+async function capture(operation) {
   const stdout = [];
   const stderr = [];
   const priorLog = console.log;
   const priorError = console.error;
   console.log = (value) => stdout.push(String(value));
   console.error = (value) => stderr.push(String(value));
-  try { return { code: operation(), stdout: stdout.join("\n"), stderr: stderr.join("\n") }; }
-  finally { console.log = priorLog; console.error = priorError; }
+  try {
+    const code = await operation();
+    return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+  } finally { console.log = priorLog; console.error = priorError; }
 }
 
 function markdownFiles(root) {
@@ -91,11 +88,6 @@ function markdownFiles(root) {
   });
 }
 
-// Documentation writes repository paths with "/", whatever the platform separator is.
-function relativeRepositoryPath(path) {
-  return relative(repositoryRoot, path).split(sep).join("/");
-}
-
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -104,8 +96,8 @@ test("every vendor supports install, unchanged reinstall, upgrade, compatible ol
   const canonical = normalizeCanonicalPlugin(helloWorldRoot);
   assert.equal(canonical.ok, true);
 
-  for (const { adapter, shippedBundle } of vendors) {
-    const loaded = readVendorBundle(fileURLToPath(shippedBundle("hello-world")));
+  for (const { adapter } of vendors) {
+    const loaded = buildVendorBundle(helloWorldRoot, adapter);
     assert.equal(loaded.ok, true);
     const target = mkdtempSync(join(tmpdir(), `release-${adapter.vendor}-`));
     writeFileSync(join(target, "unrelated.txt"), "preserve me\n");
@@ -148,22 +140,26 @@ test("every vendor supports install, unchanged reinstall, upgrade, compatible ol
   }
 });
 
-test("the installation path has no compilation, execution, elevation, or network call path", () => {
-  const sources = [
-    readFileSync(join(repositoryRoot, "packages", "installer", "src", "index.ts"), "utf8"),
-    readFileSync(join(repositoryRoot, "packages", "cli", "src", "index.ts"), "utf8"),
-  ].join("\n");
+test("the release install path has no compilation, execution or elevation, and its one network read is the asset download", () => {
+  const source = (...path) => readFileSync(join(repositoryRoot, "packages", ...path), "utf8");
+  const installer = source("installer", "src", "index.ts");
+  const command = source("cli", "src", "index.ts");
+  const download = source("cli", "src", "release-download.ts");
+  const asset = source("cli", "src", "release-asset.ts");
   const forbidden = [
     /\b(?:compilePlugin|compileVendorPayload|normalizeCanonicalPlugin|verifyShippedPayload)\s*\(/u,
-    /\b(?:fetch|request|connect|createConnection)\s*\(/u,
     /node:(?:child_process|http|https|net|tls|dns)/u,
     /\b(?:spawn|spawnSync|execFile|execFileSync|eval|setuid|setgid|chown|chownSync)\s*\(/u,
     /\b(?:sudo|doas)\b/u,
   ];
-  for (const pattern of forbidden) assert.doesNotMatch(sources, pattern);
+  const network = /\b(?:fetch|request|connect|createConnection)\s*\(/gu;
+  for (const pattern of forbidden) [installer, command, download, asset].map((text) => assert.doesNotMatch(text, pattern));
+  assert.doesNotMatch(`${installer}\n${command}\n${asset}`, network);
+  assert.equal([...download.matchAll(network)].length, 1, "the release download makes exactly one kind of request: an HTTPS GET");
+  assert.match(download, /DEFAULT_RELEASE_URL = "https:\/\/github\.com\//u);
 });
 
-test("release documentation is backed by shipped payloads and exercised install commands", () => {
+test("release documentation describes release-asset installs and exercises the source install commands", async () => {
   const documentedFiles = [
     join(repositoryRoot, "README.md"),
     join(repositoryRoot, "CHANGELOG.md"),
@@ -178,7 +174,7 @@ test("release documentation is backed by shipped payloads and exercised install 
   ];
   for (const pattern of forbiddenDocumentationModels) assert.doesNotMatch(documentation, pattern);
 
-  const commandPattern = /pnpm --filter @agent-plugins\/cli exec agent-plugin install (?<plugin>plugins\/[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
+  const commandPattern = /pnpm agent-plugin install --source (?<plugin>plugins\/[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
   const commands = [...documentation.matchAll(commandPattern)].map((match) => match.groups);
   SHIPPED_PLUGINS.map((plugin) =>
     assert.deepEqual(
@@ -190,7 +186,8 @@ test("release documentation is backed by shipped payloads and exercised install 
 
   for (const command of commands) {
     const target = mkdtempSync(join(tmpdir(), `docs-${command.vendor}-`));
-    const result = capture(() => runInstallCommand([
+    const result = await capture(() => runInstallCommand([
+      "--source",
       join(repositoryRoot, command.plugin),
       "--vendor",
       command.vendor,
@@ -201,23 +198,30 @@ test("release documentation is backed by shipped payloads and exercised install 
     assert.equal(JSON.parse(result.stdout).vendor, command.vendor);
   }
 
+  const releaseCommand = /agent-plugin install (?<plugin>[a-z0-9-]+) --version <version> --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
+  const released = [...documentation.matchAll(releaseCommand)].map((match) => match.groups);
+  SHIPPED_PLUGINS.map((plugin) =>
+    assert.deepEqual(
+      new Set(released.filter((command) => command.plugin === plugin).map((command) => command.vendor)),
+      new Set(["claude", "codex", "cursor"]),
+      `every host's release install command is documented for ${plugin}`,
+    ),
+  );
+  assert.doesNotMatch(documentation, /packages\/adapter-[a-z]+\/payloads\/[a-z0-9-]+\/bundle\.json/u, "no document points at committed payloads");
+  assert.match(readFileSync(join(repositoryRoot, ".gitignore"), "utf8"), /^packages\/adapter-\*\/payloads\/$/mu);
+
   for (const { adapter, packageRoot } of vendors) {
     const packageManifest = readJson(join(repositoryRoot, packageRoot, "package.json"));
-    assert.ok(packageManifest.files.includes("payloads"), `${adapter.vendor} package publishes payloads`);
+    assert.ok(!packageManifest.files.includes("payloads"), `${adapter.vendor} package publishes no generated payloads`);
     assert.ok(packageManifest.files.includes("schema"), `${adapter.vendor} package publishes schema evidence`);
   }
 
-  const shippedBundles = vendors.flatMap((vendor) => SHIPPED_PLUGINS.map((plugin) => ({ ...vendor, plugin })));
-  for (const { manifestPath, plugin, shippedBundle } of shippedBundles) {
-    const shipped = fileURLToPath(shippedBundle(plugin));
-    const bundlePath = join(shipped, "bundle.json");
-    const bundle = readJson(bundlePath);
-    const documentedPath = relativeRepositoryPath(bundlePath);
-    assert.match(documentation, new RegExp(documentedPath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"));
-    assert.match(documentation, new RegExp(bundle.payloadDigest, "u"));
-    assert.match(documentation, new RegExp(bundle.adapter.vendorSchemaVersion, "u"));
-
-    const vendorManifest = readJson(join(shipped, "payload", manifestPath));
+  const builtBundles = vendors.flatMap((vendor) => SHIPPED_PLUGINS.map((plugin) => ({ ...vendor, plugin })));
+  for (const { adapter, manifestPath, plugin } of builtBundles) {
+    const bundle = buildVendorBundle(join(repositoryRoot, "plugins", plugin), adapter);
+    assert.equal(bundle.ok, true, `${plugin} builds for ${adapter.vendor}`);
+    assert.match(documentation, new RegExp(bundle.value.manifest.adapter.vendorSchemaVersion, "u"));
+    const vendorManifest = JSON.parse(Buffer.from(bundle.value.files.find((file) => file.path === manifestPath).content).toString("utf8"));
     assert.equal(vendorManifest.sourceDigest, undefined);
     assert.equal(vendorManifest.payloadDigest, undefined);
     assert.equal(vendorManifest.adapter, undefined);

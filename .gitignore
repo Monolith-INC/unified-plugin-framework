@@ -15,3 +15,7 @@ _bmad-output/
 !/.codex/hooks.json
 !/.codex/hooks/
 __pycache__/
+
+# Host payloads are built in CI and attached to GitHub releases (AGE-104)
+packages/adapter-*/payloads/
+release-assets/

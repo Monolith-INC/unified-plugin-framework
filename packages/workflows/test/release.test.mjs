@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { releasePayloads, SHIPPED_PLUGINS, withAssembledSource } from "../dist/index.js";
+import { buildVendorBundle, releasePayloads, SHIPPED_PLUGINS, withAssembledSource } from "../dist/index.js";
 
 const framework = fileURLToPath(new URL("../../../plugins/unified-plugin-framework/", import.meta.url));
 
@@ -23,6 +23,13 @@ test("withAssembledSource hands over an assembled copy and removes it afterwards
   assert.equal(staged.ok, true);
   assert.match(staged.value.text, /monolithic-code-review-toolkit:review-task/);
   assert.equal(existsSync(staged.value.root), false);
+});
+
+test("building from a source directory that does not exist is reported, not thrown", () => {
+  const missing = join(mkdtempSync(join(tmpdir(), "upf-release-missing-")), "no-such-plugin");
+  const built = buildVendorBundle(missing, unusedAdapter);
+  assert.equal(built.ok, false);
+  assert.deepEqual(built.diagnostics.map(({ code }) => code), ["release.source.unreadable"]);
 });
 
 test("an unknown release operation is reported, not thrown", () => {

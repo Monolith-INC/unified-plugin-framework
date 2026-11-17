@@ -7,7 +7,7 @@ import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
 import { FRAMEWORK_ROOT, pluginTarget, toolsRoot } from "./tooling-host.js";
-import { resolveShippedBundle } from "./index.js";
+import { resolveSourceBundle } from "./bundle-source.js";
 
 export const pythonRuntime = (project: string): string => join(project, ".project-knowledge/runtime", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 export const knowledgeExecutable = (project: string): string => join(project, ".project-knowledge/runtime/bin/upf-project-knowledge");
@@ -15,20 +15,20 @@ export const knowledgeExecutable = (project: string): string => join(project, ".
 export const installSkills = (project: string): Promise<Result<string>> => installPlugin(project, "unified-plugin-framework")
   .then((installed) => installed.ok ? installPlugin(project, "project-knowledge") : installed);
 
-/** Validate observed installed bytes against the same shipped bundle the installer uses. */
+/** Validate observed installed bytes against the bundle built from the framework source, as the installer builds it. */
 export const installedSkills = async (project: string): Promise<boolean> => {
   const checked = await Promise.all(["unified-plugin-framework", "project-knowledge"].map((name) => installedPlugin(project, name)));
   return checked.every(Boolean);
 };
 const installedPlugin = async (project: string, name: string): Promise<boolean> => {
-  const shipped = resolveShippedBundle(join(FRAMEWORK_ROOT, "plugins", name), "codex");
+  const shipped = resolveSourceBundle(join(FRAMEWORK_ROOT, "plugins", name), "codex");
   return !shipped.ok ? false : Promise.all(shipped.value.bundle.manifest.files.map(async (file) => {
     const read = await readFile(join(pluginTarget(project, name), file.path)).catch(() => null);
     return read !== null && sha256(read) === file.sha256;
   })).then((files) => files.every(Boolean));
 };
 const installPlugin = (project: string, name: string): Promise<Result<string>> => directory(project, pluginTarget(project, name)).then((created) => {
-  const distribution = resolveShippedBundle(join(FRAMEWORK_ROOT, "plugins", name), "codex");
+  const distribution = resolveSourceBundle(join(FRAMEWORK_ROOT, "plugins", name), "codex");
   const installed = created.ok && distribution.ok ? installVendorBundle({ ...distribution.value, target: { root: created.value } }) : undefined;
   return !created.ok ? created : !distribution.ok ? setupFailure(distribution.diagnostics.map((d) => d.message).join(" "))
     : installed?.kind === "installed" || installed?.kind === "unchanged" ? ok(name) : setupFailure(`Could not install ${name}; preserve the installer diagnostics and resolve its target conflict.`);
