@@ -1,6 +1,0 @@
-{
-  "description": "Standalone project knowledge setup and discovery guidance.",
-  "name": "project-knowledge",
-  "skills": "./skills/",
-  "version": "0.1.0"
-}

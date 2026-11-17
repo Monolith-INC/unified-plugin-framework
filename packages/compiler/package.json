@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./railway": {
+      "types": "./dist/railway.d.ts",
+      "default": "./dist/railway.js"
     }
   },
   "files": [
