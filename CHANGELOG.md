@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The one-command installer requests GitHub release metadata as JSON, fixing the HTTP 415 failure when resolving the latest release ([AGE-109](https://linear.app/agentical-monolithics/issue/AGE-109)).
+
 ### Changed
 
 - Installation now offers a one-command shell launcher and terminal wizard that collects missing choices, reuses saved settings, confirms the proposed changes and builds its setup plan internally. Explicit plan-file input remains available for automation; all setup uses the existing bootstrap. Release assets include `install.sh` and its checksum. Empty local trackers can be verified without creating a test item. New Linear selections resolve names through the existing connector ([AGE-108](https://linear.app/agentical-monolithics/issue/AGE-108)).

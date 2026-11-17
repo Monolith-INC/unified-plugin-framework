@@ -27,11 +27,11 @@ const checkedAncestors=(project,target)=>{
   return stat===undefined || stat.isDirectory() && !stat.isSymbolicLink();
  });
 };
-const get=async url=>{
- const response=await fetch(url,{signal:AbortSignal.timeout(60_000),headers:{Accept:'application/octet-stream'}});
+const get=async(url,accept='application/octet-stream')=>{
+ const response=await fetch(url,{signal:AbortSignal.timeout(60_000),headers:{Accept:accept}});
  return response.ok ? Buffer.from(await response.arrayBuffer()) : stop(`Could not download ${url} (HTTP ${response.status}); nothing installed.`);
 };
-const latest=()=>get('https://api.github.com/repos/'+repo+'/releases/latest').then(bytes=>JSON.parse(bytes.toString('utf8')).tag_name);
+const latest=()=>get('https://api.github.com/repos/'+repo+'/releases/latest','application/vnd.github+json').then(bytes=>JSON.parse(bytes.toString('utf8')).tag_name);
 const download=async(version,scratch)=>{
  const base=`https://github.com/${repo}/releases/download/v${version}`;
  const archive=join(scratch,`unified-plugin-framework-${version}.tar.gz`);
