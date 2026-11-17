@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -91,8 +91,9 @@ function markdownFiles(root) {
   });
 }
 
+// Documentation writes repository paths with "/", whatever the platform separator is.
 function relativeRepositoryPath(path) {
-  return path.slice(repositoryRoot.length + 1);
+  return relative(repositoryRoot, path).split(sep).join("/");
 }
 
 function readJson(path) {
