@@ -100,3 +100,16 @@ test('both adapters expose the same listing and publication contract', () => {
   const publish = {operation: 'publish_artifact', ref: 'AGE-100', artifact};
   assert.deepEqual(applyLocal(stored.items, publish, '').value.reply, linearReply(tracker, publish, {}).value);
 });
+
+test('an unavailable local storage directory returns a recovery without throwing or overwriting it', async () => {
+  const {mkdtemp, writeFile, readFile} = await import('node:fs/promises');
+  const {tmpdir} = await import('node:os');
+  const {join} = await import('node:path');
+  const {nodeProjectIO} = await import('../dist/index.js');
+  const root = await mkdtemp(join(tmpdir(), 'upf-storage-conflict-'));
+  const path = join(root, '.unified-plugin-framework');
+  await writeFile(path, 'preserve this existing file');
+  const result = await nodeProjectIO(root).local(create)();
+  assert.equal(result.error.code, 'storage-error');
+  assert.equal(await readFile(path, 'utf8'), 'preserve this existing file');
+});

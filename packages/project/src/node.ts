@@ -48,7 +48,7 @@ const localTransaction = (path: string, request: Request): Task<TrackerReply> =>
 const localRequest = (repo: string, request: Request): Task<TrackerReply> => () => {
   const directory = join(repo, ".unified-plugin-framework");
   const path = join(directory, "items.json");
-  return isWrite(request) ? safeDirectory(directory).then((safe) => safe ? locked(path, localTransaction(path, request))() : diskFailure())
+  return isWrite(request) ? safeDirectory(directory).then((safe) => safe ? locked(path, localTransaction(path, request))() : diskFailure()).catch(diskFailure)
     : localTransaction(path, request)();
 };
 
