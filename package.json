@@ -12,6 +12,7 @@
     "build:testing": "pnpm --filter @agent-plugins/testing build",
     "payloads:build": "pnpm -r --workspace-concurrency=1 --if-present run payload:build",
     "payloads:verify": "pnpm -r --workspace-concurrency=1 --if-present run payload:verify",
+    "release:assets": "node packages/cli/scripts/release-assets.mjs",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "test": "pnpm -r --no-bail --filter \"./packages/*\" test"
   },

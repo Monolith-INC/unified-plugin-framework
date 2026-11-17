@@ -5,7 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - M4 Vendor Payload Compiler & Transactional Installer
+## [Unreleased]
+
+### Changed
+
+- Host payloads are no longer committed. The repository keeps one copy of each plugin, its source under `plugins/`; `packages/adapter-*/payloads/` is git-ignored build output ([AGE-104](https://linear.app/agentical-monolithics/issue/AGE-104)).
+- Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds every shipped plugin for Claude, Cursor and Codex and attaches `<plugin>-<host>.bundle.json.gz` assets plus `SHA256SUMS` to the GitHub release; tags with a suffix such as `-rc.1` publish pre-releases.
+- `agent-plugin install <plugin> --vendor <host> --target <dir> --version <version>` downloads the release asset, checks it against `SHA256SUMS` and every digest inside it, then installs it. Without `--version`, `install <plugin-directory>` builds the payload from a source checkout for development.
+- `pnpm payloads:verify` now generates the payloads and checks the build is deterministic and valid instead of comparing against committed copies; `pnpm release:assets` packs and round-trips the release assets. CI runs both on every pull request. The `cli.payload.missing` and `cli.payload.drift` install errors are gone, and payload digests are no longer pinned in the documentation.
+
+## M4 Vendor Payload Compiler & Transactional Installer
 
 ### Added
 

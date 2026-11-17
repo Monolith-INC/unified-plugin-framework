@@ -1,0 +1,60 @@
+name: Release
+
+# Builds every shipped plugin's payload for every host from the tagged source and attaches them to the
+# GitHub release, with SHA256SUMS. `agent-plugin install --version` downloads these assets.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish host payloads
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Generate and verify host payloads
+        run: pnpm payloads:verify
+
+      - name: Pack release assets
+        run: pnpm release:assets
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            *-*) prerelease="--prerelease" ;;
+            *) prerelease="" ;;
+          esac
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            gh release create "$TAG" release-assets/* --verify-tag --title "$TAG" --generate-notes $prerelease
+          fi

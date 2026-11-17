@@ -25,9 +25,6 @@ export const CODEX_SCHEMA_EVIDENCE = Object.freeze([
   "https://developers.openai.com/plugins/build/plugins",
   "https://learn.chatgpt.com/docs/hooks",
 ] as const);
-/** Where this adapter's committed payload for the plugin directory `name` lives; callers check that it exists. */
-export const codexShippedBundle = (name: string): URL => new URL(`../payloads/${name}`, import.meta.url);
-export const CODEX_SHIPPED_HELLO_WORLD = codexShippedBundle("hello-world");
 
 const MANIFEST_PATH = ".codex-plugin/plugin.json";
 const HOOKS_PATH = "hooks/hooks.json";

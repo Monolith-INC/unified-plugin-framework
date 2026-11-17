@@ -4,9 +4,12 @@ import { basename, join } from "node:path";
 
 import {
   compileVendorPayload,
+  readVendorBundle,
   verifyVendorPayload,
   type CompileResult,
+  type Result,
   type VendorAdapter,
+  type VendorBundle,
   type VerificationResult,
 } from "@agent-plugins/compiler";
 import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plugins/core";
@@ -14,13 +17,13 @@ import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plu
 import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
 
-/** Plugins released with committed host payloads, by directory name under `plugins/`. */
+/** Plugins whose host payloads CI builds and attaches to each GitHub release, by directory name under `plugins/`. */
 export const SHIPPED_PLUGINS = Object.freeze(["hello-world", "unified-plugin-framework", "project-knowledge"] as const);
 
 /** What `use` returned for the assembled copy, or why the plugin could not be assembled. */
 export type Staged<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly problems: readonly string[] };
 
-/** Where the repository's plugins live and where one host adapter keeps its shipped payloads. */
+/** Where the repository's plugins live and where one host adapter writes its generated, git-ignored payloads. */
 export interface ReleaseLayout {
   readonly pluginsRoot: string;
   readonly payloadsRoot: string;
@@ -47,7 +50,7 @@ const failed = (code: string, messages: readonly string[], path: string): Compil
 // Effect boundary: stages an assembled copy in a temporary directory and always removes it.
 /**
  * Assembles the plugin at `sourceRoot` into a temporary directory, hands that directory to `use`, then removes it.
- * Nothing assembled outlives the call, so the plugin source stays the only thing committed besides shipped payloads.
+ * Nothing assembled outlives the call, so the plugin source stays the only copy in the repository.
  */
 export const withAssembledSource = <A>(
   sourceRoot: string,
@@ -117,4 +120,31 @@ export const releasePayloads = (
   return step === undefined
     ? [{ plugin: "*", result: failed("release.operation.unknown", ["Expected build or verify."], operation) }]
     : SHIPPED_PLUGINS.map(releaseOne(step, adapter, layout, adapters));
+};
+
+const asResult = (diagnostics: readonly Diagnostic[], path: string): Result<never> => {
+  const [first, ...rest] = diagnostics;
+  return { ok: false, diagnostics: [first ?? { severity: "error", code: "release.build.failed", message: "Plugin could not be built.", path }, ...rest] };
+};
+
+const readCompiled = (result: CompileResult, output: string): Result<VendorBundle> =>
+  result.ok ? readVendorBundle(output) : asResult(result.diagnostics, output);
+
+// Effect boundary: compiles into a temporary directory, reads the bundle into memory, and always removes the directory.
+/** Builds one host's bundle from a plugin source checkout the way the release build does; nothing written outlives the call. */
+export const buildVendorBundle = (
+  sourceRoot: string,
+  adapter: VendorAdapter,
+  adapters: readonly WorkflowAdapter<string>[],
+): Result<VendorBundle> => {
+  const scratch = mkdtempSync(join(tmpdir(), "upf-bundle-"));
+  try {
+    const output = join(scratch, "bundle");
+    const staged = withAssembledSource(sourceRoot, adapters, (source) =>
+      readCompiled(compileVendorPayload({ source, vendor: adapter.vendor, output }, adapter), output),
+    );
+    return staged.ok ? staged.value : asResult(staged.problems.map((message): Diagnostic => ({ severity: "error", code: "release.assembly.failed", message, path: sourceRoot })), sourceRoot);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 };

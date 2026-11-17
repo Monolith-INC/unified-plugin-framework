@@ -6,6 +6,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  compileVendorPayload,
   finalizeVendorBundle,
   normalizeCanonicalPlugin,
   readVendorBundle,
@@ -145,8 +146,10 @@ test("Cursor adapter passes the shared pure conformance harness", () => {
   assertAdapterModuleHasNoFilesystemEffects(source, "Cursor adapter");
 });
 
-test("shipped hello-world Cursor payload is valid and complete", () => {
-  const shipped = readVendorBundle(join(packageRoot, "payloads", "hello-world"));
+test("hello-world builds a valid, complete Cursor payload", () => {
+  const output = join(mkdtempSync(join(tmpdir(), "cursor-hello-world-")), "bundle");
+  assert.equal(compileVendorPayload({ source: helloWorldRoot, vendor: "cursor", output }, cursorAdapter).ok, true);
+  const shipped = readVendorBundle(output);
   assert.equal(shipped.ok, true);
   assert.deepEqual(validateCursorBundle(shipped.value), []);
 });

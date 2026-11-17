@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
+import { compileVendorPayload, finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
 import { assertAdapterModuleHasNoFilesystemEffects, assertVendorAdapterConformance } from "@agent-plugins/testing";
 import {
   CLAUDE_ADAPTER_VERSION,
@@ -120,8 +120,10 @@ test("Claude adapter passes the shared pure conformance harness", () => {
   assertAdapterModuleHasNoFilesystemEffects(readFileSync(join(packageRoot, "src", "index.ts"), "utf8"), "Claude adapter");
 });
 
-test("shipped hello-world Claude payload is valid and complete", () => {
-  const shipped = readVendorBundle(join(packageRoot, "payloads", "hello-world"));
+test("hello-world builds a valid, complete Claude payload", () => {
+  const output = join(mkdtempSync(join(tmpdir(), "claude-hello-world-")), "bundle");
+  assert.equal(compileVendorPayload({ source: helloWorldRoot, vendor: "claude", output }, claudeAdapter).ok, true);
+  const shipped = readVendorBundle(output);
   assert.equal(shipped.ok, true);
   assert.deepEqual(validateClaudeBundle(shipped.value), []);
 });

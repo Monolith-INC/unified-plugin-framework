@@ -3,10 +3,9 @@ import { chmodSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { CURSOR_SHIPPED_HELLO_WORLD, cursorAdapter } from "@agent-plugins/adapter-cursor";
-import { readVendorBundle } from "@agent-plugins/compiler";
+import { cursorAdapter } from "@agent-plugins/adapter-cursor";
+import { buildVendorBundle } from "@agent-plugins/workflows";
 import { runInstallCommand } from "../dist/index.js";
 
 const repo = resolve(import.meta.dirname, "../../..");
@@ -23,7 +22,7 @@ function capture(operation) {
   finally { console.log = priorLog; console.error = priorError; }
 }
 
-test("single install command installs each shipped vendor payload", () => {
+test("install without --version builds each host payload from the source checkout and installs it", () => {
   const expected = {
     claude: ".claude-plugin/plugin.json",
     codex: ".codex-plugin/plugin.json",
@@ -67,7 +66,7 @@ test("install help is the only non-installing zero-exit path", () => {
 });
 
 test("CLI maps every transaction failure variant to the stable envelope and exit code", () => {
-  const loaded = readVendorBundle(fileURLToPath(CURSOR_SHIPPED_HELLO_WORLD));
+  const loaded = buildVendorBundle(plugin, cursorAdapter);
   assert.equal(loaded.ok, true);
   const record = {
     schemaVersion: "1.0.0",

@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
+import { compileVendorPayload, finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
 import { assertAdapterModuleHasNoFilesystemEffects, assertVendorAdapterConformance } from "@agent-plugins/testing";
 import {
   CODEX_ADAPTER_VERSION,
@@ -122,8 +122,10 @@ test("Codex adapter passes the shared pure conformance harness", () => {
   assertAdapterModuleHasNoFilesystemEffects(readFileSync(join(packageRoot, "src", "index.ts"), "utf8"), "Codex adapter");
 });
 
-test("shipped hello-world Codex payload is valid and complete", () => {
-  const shipped = readVendorBundle(join(packageRoot, "payloads", "hello-world"));
+test("hello-world builds a valid, complete Codex payload", () => {
+  const output = join(mkdtempSync(join(tmpdir(), "codex-hello-world-")), "bundle");
+  assert.equal(compileVendorPayload({ source: helloWorldRoot, vendor: "codex", output }, codexAdapter).ok, true);
+  const shipped = readVendorBundle(output);
   assert.equal(shipped.ok, true);
   assert.deepEqual(validateCodexBundle(shipped.value), []);
 });

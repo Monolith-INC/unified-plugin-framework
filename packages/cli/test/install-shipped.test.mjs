@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, cpSync, mkdtempSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -72,24 +72,24 @@ test("the framework plugin installs each host's assembled skills, naming the onb
   });
 });
 
-test("a plugin without shipped payloads writes nothing and says how to ship it", () => {
-  const { target, code, stderr } = install(join(repo, "plugins", "translation"), "claude");
-  assert.equal(code, 3);
-  assert.deepEqual(diagnosticCodes(stderr), ["cli.payload.missing"]);
-  assert.match(stderr, /SHIPPED_PLUGINS.*pnpm payloads:build/);
-  assert.deepEqual(readdirSync(target), []);
-});
-
-test("a template edited after the payloads were built writes nothing and asks for a rebuild", () => {
-  const source = join(mkdtempSync(join(tmpdir(), "cli-drift-")), "unified-plugin-framework");
+test("a source install builds from the checkout as it is, so an edited template is installed as edited", () => {
+  const source = join(mkdtempSync(join(tmpdir(), "cli-edit-")), "unified-plugin-framework");
   cpSync(framework, source, { recursive: true });
-  appendFileSync(join(source, "skills", "review-task", "SKILL.md"), "\nAn edit the payloads have not seen.\n");
+  appendFileSync(join(source, "skills", "review-task", "SKILL.md"), "\nAn edit made after the last release.\n");
   VENDORS.map((vendor) => {
     const { target, code, stderr } = install(source, vendor);
-    assert.equal(code, 3);
-    assert.deepEqual(diagnosticCodes(stderr), ["cli.payload.drift"]);
-    assert.match(stderr, /pnpm payloads:build/);
-    assert.deepEqual(readdirSync(target), []);
+    assert.equal(code, 0, stderr);
+    assert.match(readFileSync(join(target, "skills", "review-task", "SKILL.md"), "utf8"), /An edit made after the last release\./);
     return vendor;
   });
 });
+
+test("a directory that is not a plugin writes nothing and reports the plugin as invalid", () => {
+  const empty = mkdtempSync(join(tmpdir(), "cli-not-a-plugin-"));
+  writeFileSync(join(empty, "README.md"), "Not a plugin.\n");
+  const { target, code, stderr } = install(empty, "claude");
+  assert.equal(code, 3);
+  assert.ok(diagnosticCodes(stderr).length > 0);
+  assert.deepEqual(readdirSync(target), []);
+});
+

@@ -73,17 +73,17 @@ The following reference describes the existing toolkit behavior.
 
 Reference implementation and CLI for the Agent Plugins v1.0.0 portable architecture.
 
-The toolkit loads plugin roots, validates portable manifests, discovers immediate Skills, inspects MCP configuration **without executing** plugin scripts or starting MCP servers, and ships verified vendor payloads through one transactional install command.
+The toolkit loads plugin roots, validates portable manifests, discovers immediate Skills, inspects MCP configuration **without executing** plugin scripts or starting MCP servers, and installs verified host payloads through one transactional install command. The repository holds only canonical plugin sources; CI builds each host's payloads and attaches them to the GitHub release.
 
 ## Packages
 
 | Package | Role |
 |---|---|
 | `@agent-plugins/core` | Portable types, diagnostics, and `loadPluginRoot` / `inspectPlugin` primitives |
-| `@agent-plugins/compiler` | Canonical plugin normalization, deterministic vendor bundle contracts, build, and drift verification |
-| `@agent-plugins/adapter-claude` | Claude Code adapter plus verified `hello-world` payload |
-| `@agent-plugins/adapter-cursor` | Cursor adapter plus verified `hello-world` payload |
-| `@agent-plugins/adapter-codex` | Codex adapter plus verified `hello-world` payload |
+| `@agent-plugins/compiler` | Canonical plugin normalization, deterministic vendor bundle contracts, build, and determinism verification |
+| `@agent-plugins/adapter-claude` | Claude Code adapter and its payload build script |
+| `@agent-plugins/adapter-cursor` | Cursor adapter and its payload build script |
+| `@agent-plugins/adapter-codex` | Codex adapter and its payload build script |
 | `@agent-plugins/installer` | Transactional payload installer with locking, journaling, rollback, and installed-record verification |
 | `@agent-plugins/cli` | `agent-plugin` CLI (`validate`, `inspect`, `install`, `create`, `add skill`, `adapter-check`) |
 | `@agent-plugins/workflows` | Workflow contracts and their adapters; see [ADR-001](docs/adr/ADR-001-workflow-adapter-interface.md) and the [code review workflow](docs/workflows/code-review.md) |
@@ -112,32 +112,38 @@ pnpm build
 pnpm --filter @agent-plugins/cli exec agent-plugin --help
 ```
 
-### `install <plugin> --vendor <claude|cursor|codex> --target <directory>`
+### `install <plugin> --vendor <claude|cursor|codex> --target <directory> [--version <version>]`
 
-Install exactly one verified, adapter-owned shipped payload. Build first so the `agent-plugin` bin points at compiled output.
+Install one plugin's payload for one host.
 
 ```text
-plugins/<plugin>            (hello-world, unified-plugin-framework)
+plugins/<plugin>            (hello-world, unified-plugin-framework, project-knowledge) -- the only copy in git
   plugin.json
   skills/<skill>/SKILL.md
         |
-        v
-release-time assembly (@agent-plugins/workflows) -> @agent-plugins/compiler
-        |
-        +-- @agent-plugins/adapter-claude -> packages/adapter-claude/payloads/<plugin>
-        +-- @agent-plugins/adapter-cursor -> packages/adapter-cursor/payloads/<plugin>
-        +-- @agent-plugins/adapter-codex  -> packages/adapter-codex/payloads/<plugin>
+        v  tag v<version>  ->  .github/workflows/release.yml
+release-time assembly (@agent-plugins/workflows) -> @agent-plugins/compiler -> adapter-claude | adapter-cursor | adapter-codex
         |
         v
-agent-plugin install -> @agent-plugins/installer -> target directory
+GitHub release assets: <plugin>-<host>.bundle.json.gz for every plugin and host, plus SHA256SUMS
+        |
+        v
+agent-plugin install --version -> download + digest checks -> @agent-plugins/installer -> target directory
 ```
+
+With `--version`, the command downloads the plugin's asset for the host from that release, checks it against the release's `SHA256SUMS` and every file digest inside it, then installs it:
+
+```sh
+agent-plugin install unified-plugin-framework --vendor claude --target <target-directory> --version <version>
+```
+
+Without `--version`, it takes a plugin source directory and builds the payload from the checkout instead, for development:
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor claude --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor codex --target <target-directory>
 ```
 
-The command reads a shipped bundle from the selected adapter package, validates the bundle identity and file digests, plans writes through that adapter, then commits the transaction under a target lock. Installer provenance lives in `.agent-plugins/installed/*.json`; vendor manifests remain closed to each vendor schema.
+Either way the installer plans writes through the host's adapter and commits the transaction under a target lock. Installer provenance lives in `.agent-plugins/installed/*.json`; vendor manifests remain closed to each vendor schema. The [installation guide](docs/vendor-payload-installation.md) lists every plugin and host, the release process and the failure codes.
 
 ### `validate [path]`
 
@@ -248,8 +254,9 @@ pnpm build
 pnpm build:core
 pnpm build:cli
 pnpm build:testing
-pnpm payloads:build
-pnpm payloads:verify
+pnpm payloads:build     # generate host payloads into the git-ignored packages/adapter-*/payloads/
+pnpm payloads:verify    # generate twice and compare: deterministic and valid for each host
+pnpm release:assets     # pack the generated payloads into release-assets/ with SHA256SUMS
 pnpm typecheck
 pnpm test
 ```

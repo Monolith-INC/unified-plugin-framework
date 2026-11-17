@@ -1,4 +1,4 @@
-import type { VendorAdapter } from "@agent-plugins/compiler";
+import type { Result, VendorAdapter, VendorBundle } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
 import { agentContinuityAdapter } from "./continuity.js";
 import { superpowersImplementationAdapter } from "./implementation.js";
@@ -105,9 +105,27 @@ export const assembleSkills = (
 export const assemblePluginSource = (sourceRoot: string, stagingRoot: string): Assembled =>
   assembleSource(sourceRoot, stagingRoot, ACTIVE_ADAPTERS);
 
-import { releasePayloads as releaseWith, withAssembledSource as stageWith, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+import {
+  buildVendorBundle as buildWith,
+  releasePayloads as releaseWith,
+  withAssembledSource as stageWith,
+  type PayloadReport,
+  type ReleaseLayout,
+  type Staged,
+} from "./release.js";
 
 export { SHIPPED_PLUGINS, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+export {
+  CHECKSUMS_ASSET,
+  RELEASE_ASSET_FORMAT,
+  packReleaseAsset,
+  parseChecksums,
+  releaseAssetName,
+  releaseTag,
+  renderChecksums,
+  unpackReleaseAsset,
+  type ReleaseAsset,
+} from "./release-asset.js";
 
 /** Runs `use` on a temporary, assembled copy of the plugin at `sourceRoot`, then removes the copy. */
 export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: string) => A): Staged<A> =>
@@ -116,3 +134,7 @@ export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: 
 /** Builds or verifies one host's payloads for every shipped plugin, assembled with the active adapters. */
 export const releasePayloads = (operation: string, adapter: VendorAdapter, layout: ReleaseLayout): readonly PayloadReport[] =>
   releaseWith(operation, adapter, layout, ACTIVE_ADAPTERS);
+
+/** Builds one host's bundle in memory from a plugin source checkout, assembled with the active adapters. */
+export const buildVendorBundle = (sourceRoot: string, adapter: VendorAdapter): Result<VendorBundle> =>
+  buildWith(sourceRoot, adapter, ACTIVE_ADAPTERS);

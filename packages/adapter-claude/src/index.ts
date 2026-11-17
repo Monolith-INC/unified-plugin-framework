@@ -24,9 +24,6 @@ export const CLAUDE_SCHEMA_EVIDENCE = Object.freeze([
   "https://code.claude.com/docs/en/plugins-reference",
   "https://code.claude.com/docs/en/hooks",
 ] as const);
-/** Where this adapter's committed payload for the plugin directory `name` lives; callers check that it exists. */
-export const claudeShippedBundle = (name: string): URL => new URL(`../payloads/${name}`, import.meta.url);
-export const CLAUDE_SHIPPED_HELLO_WORLD = claudeShippedBundle("hello-world");
 
 const MANIFEST_PATH = ".claude-plugin/plugin.json";
 const HOOKS_PATH = "hooks/hooks.json";

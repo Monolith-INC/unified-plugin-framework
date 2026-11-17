@@ -94,8 +94,11 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Verify shipped payloads
+      - name: Generate and verify host payloads
         run: pnpm payloads:verify
+
+      - name: Pack release assets
+        run: pnpm release:assets
 
       - name: Upload test logs on failure
         if: failure()
