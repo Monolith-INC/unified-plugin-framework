@@ -13,7 +13,7 @@ const templates = new Map(
   CODE_REVIEW_OPERATIONS.map((operation) => [operation, readFileSync(new URL(`skills/${operation}/SKILL.md`, frameworkRoot), "utf8")]),
 );
 
-const assembled = assembleSkills(templates);
+const assembled = assembleSkills(templates, JSON.parse(readFileSync(new URL("onboarded.lock.json", frameworkRoot), "utf8")));
 
 const skillText = (operation) => (assembled.ok ? assembled.skills.get(operation) : assert.fail(assembled.problems.join("; ")));
 

@@ -2,6 +2,7 @@ import type { VendorAdapter } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
 
 import type { WorkflowAdapter } from "./adapter.js";
+import type { OnboardedLock } from "./lock.js";
 import { reviewToolkitAdapter } from "./code-review.js";
 
 export {
@@ -64,11 +65,12 @@ export const findWorkflow = (name: string): WorkflowAdapter<string> | undefined 
 
 const ACTIVE_ADAPTERS: readonly WorkflowAdapter<string>[] = Object.freeze(Object.values(WORKFLOWS));
 
-/** Renders template skills from the active adapters (or the given ones); other skills pass through. Pure. */
+/** Renders template skills from the active adapters (or the given ones) and the framework's lock; others pass through. Pure. */
 export const assembleSkills = (
   skills: ReadonlyMap<string, string>,
+  lock: OnboardedLock,
   adapters: readonly WorkflowAdapter<string>[] = ACTIVE_ADAPTERS,
-): Assembled => assembleWith(skills, adapters);
+): Assembled => assembleWith(skills, adapters, lock);
 
 /** Copies a plugin source into a fresh staging directory with its template skills assembled. Release-time only. */
 export const assemblePluginSource = (sourceRoot: string, stagingRoot: string): Assembled =>

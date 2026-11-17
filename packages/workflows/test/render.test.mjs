@@ -7,7 +7,11 @@ import { CODE_REVIEW_OPERATIONS, renderSkill, reviewToolkitAdapter } from "../di
 const templateText = (operation) =>
   readFileSync(new URL(`../../../plugins/unified-plugin-framework/skills/${operation}/SKILL.md`, import.meta.url), "utf8");
 
-const rendered = (operation) => renderSkill(templateText(operation), reviewToolkitAdapter, operation);
+const committedLock = JSON.parse(
+  readFileSync(new URL("../../../plugins/unified-plugin-framework/onboarded.lock.json", import.meta.url), "utf8"),
+);
+
+const rendered = (operation) => renderSkill(templateText(operation), reviewToolkitAdapter, operation, committedLock);
 
 test("templates never name a plugin; only the adapter does", () => {
   CODE_REVIEW_OPERATIONS.map((operation) => {
@@ -36,6 +40,18 @@ test("skills with several plugin skills list when to use each", () => {
 });
 
 test("rendering rejects unknown placeholders and unknown operations", () => {
-  assert.equal(renderSkill("{{surprise}}", reviewToolkitAdapter, "review-task").ok, false);
-  assert.equal(renderSkill("{{delegate}}", reviewToolkitAdapter, "review-everything").ok, false);
+  assert.equal(renderSkill("{{surprise}}", reviewToolkitAdapter, "review-task", committedLock).ok, false);
+  assert.equal(renderSkill("{{delegate}}", reviewToolkitAdapter, "review-everything", committedLock).ok, false);
+});
+
+test("the readiness step names the pinned toolkit version as a one-line heads-up, not a stop", () => {
+  const text = rendered("review-task").text;
+  assert.match(text, /This workflow is tested with `monolithic-code-review-toolkit` 0\.6\.0\./);
+  assert.match(text, /mention it to the user once, in one line, and continue/);
+});
+
+test("rendering fails when a served plugin has no pin, naming the plugin and the fix", () => {
+  const result = renderSkill(templateText("review-task"), reviewToolkitAdapter, "review-task", { lockVersion: 1, plugins: [] });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /monolithic-code-review-toolkit has no pin in onboarded\.lock\.json: pin it with agent-plugin upgrade-check/);
 });

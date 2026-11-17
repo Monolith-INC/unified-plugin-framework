@@ -12,7 +12,7 @@ What users and agents rely on. It changes only by a deliberate contract version 
 | `review-story` | `skills/review-story` | A user story is finished: pre-flight before the pull request, post-flight once it is open |
 | `review-feature` | `skills/review-feature` | A whole feature is complete |
 
-The skills in `plugins/unified-plugin-framework` are templates: they hold the contract and name no plugin. The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`. When the plugin is packaged, the assembler fills each template from the adapter below; the assembled skills ship in the host bundles.
+The skills in `plugins/unified-plugin-framework` are templates: they hold the contract and name no plugin. The assembled skills also name the toolkit version pinned in `onboarded.lock.json`, so a user running a different version hears about it once; assembly fails if a mapped plugin has no pin. The contract type is `CodeReviewOperation` in `packages/workflows/src/code-review.ts`. When the plugin is packaged, the assembler fills each template from the adapter below; the assembled skills ship in the host bundles.
 
 ## Current adapter
 
