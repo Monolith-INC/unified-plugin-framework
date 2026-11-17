@@ -19,27 +19,27 @@
 
 Files: `packages/cli/src/distribution.ts`, `tooling-host.ts`; `packages/cli/test/distribution.test.mjs`.
 
-- [ ] Test selection of all pinned local roots, explicit roots, absent/corrupt distribution metadata and missing/drifted bundled content.
-- [ ] Add a typed manifest parser/local-source selector. Existing source checkouts keep their development fetching flow. A distribution must resolve all selected dependencies locally and verify through the current pin gate, with no fetching fallback.
-- [ ] Reuse shared bootstrap staging and verify focused regressions.
+- [x] Test selection of all pinned local roots, explicit roots, absent/corrupt distribution metadata and missing/drifted bundled content.
+- [x] Add a typed manifest parser/local-source selector. Existing source checkouts keep their development fetching flow. A distribution must resolve all selected dependencies locally and verify through the current pin gate, with no fetching fallback.
+- [x] Reuse shared bootstrap staging and verify focused regressions.
 
 ## Task 2: Complete build and installer
 
 Files: `packages/cli/scripts/release-distribution.mjs`, `scripts/install-release.sh`, `package.json`, `.github/workflows/release.yml`, `.github/workflows/ci.yml`; artifact integration test/script.
 
-- [ ] Build the production CLI via `pnpm deploy --legacy --prod`, including Node dependencies. Copy framework/knowledge sources, runtime source and licenses. Fetch all five sources at build time using existing capabilities; verify before archiving.
-- [ ] Record exact included versions, source locations and file digests. Generate archive/installer SHA-256 entries alongside existing assets; reject incomplete builds before publication.
-- [ ] Provide one installer with version, project, accepted plan and local archive modes. Verify checksum and archive safety, preserve unmanaged paths and install into an owned versioned location. Invoke existing bootstrap from that location.
-- [ ] Verify an extracted artifact relocated outside the checkout: CLI runs, payloads install, all five dependencies stage using local sources, no git/plugin network call occurs, re-entry succeeds and drift is refused.
+- [x] Build the production CLI via `pnpm deploy --legacy --prod`, including Node dependencies. Copy framework/knowledge sources, runtime source and licenses. Fetch all five sources at build time using existing capabilities; verify before archiving.
+- [x] Record exact included versions, source locations and file digests. Generate archive/installer SHA-256 entries alongside existing assets; reject incomplete builds before publication.
+- [x] Provide one installer with version, project, accepted plan and local archive modes. Verify checksum and archive safety, preserve unmanaged paths and install into an owned versioned location. Invoke existing bootstrap from that location.
+- [x] Verify an extracted artifact relocated outside the checkout: CLI runs, payloads install, all five dependencies stage using local sources, no git/plugin network call occurs, re-entry succeeds and drift is refused.
 
 ## Task 3: Delivery integration and verification
 
 Files: README, installation/bootstrap guides, CHANGELOG and this plan.
 
-- [ ] Document one-command installation, bundle contents, user-selected plan, runtime prerequisites, platform limits and development-only fetching.
-- [ ] CI builds and smoke-tests complete archive before release publication. Asset attestations cover the new archive and installer.
-- [ ] Run one thermos review and fix actionable findings once. Run required install/build/typecheck/test/payload/hook checks once in a clean clone of final changes before push approval.
-- [ ] Report local evidence and remaining real-host trial/publication steps accurately.
+- [x] Document one-command installation, bundle contents, user-selected plan, runtime prerequisites, platform limits and development-only fetching.
+- [x] CI builds and smoke-tests complete archive before release publication. Asset attestations cover the new archive and installer.
+- [x] Run one thermos review and fix actionable findings once. Run required install/build/typecheck/test/payload/hook checks once in a clean clone of final changes before push approval.
+- [x] Report local evidence and remaining real-host trial/publication steps accurately.
 
 ## Review focus
 
@@ -48,3 +48,15 @@ Files: README, installation/bootstrap guides, CHANGELOG and this plan.
 3. Existing unmanaged/symlink target: preserve it, refuse unsafe writes.
 4. Corrupt archive or checksum: refuse before extracting or activating.
 5. Licenses and referenced support files: include upstream trees, preserve their contents.
+
+## Verification evidence (2026-11-17)
+
+Implementation commit: `4210516` on `feature/AGE-107-complete-release` (subsequent documentation-only evidence update).
+
+A clean clone of that commit passed `pnpm install --frozen-lockfile`, build, typecheck, test, payload verification, Claude hook tests and Codex hook tests. Python 3.12 isolated checks passed 22 owned/installed-wheel tests and 60 inherited tests. That clone also built all host assets and the complete `0.2.1-rc.1` archive and passed the artifact-only installation script outside the checkout. All eleven release files matched SHA256SUMS. The knowledge runtime was also installed from the extracted distribution into an isolated environment and imported successfully as version 0.1.1.
+
+Artifact verification exercised the real installer, running CLI, both framework/knowledge payloads, staging all five bundled dependencies with fetching denied, repeat installation, relocation/owned CLI replacement, preserved error output and refusal of source/staged drift or missing metadata. The archive is approximately 7.1 MiB. This local version label is a test build, not a published release.
+
+One thermos pass identified cross-filesystem publication and repeated whole-tree hashing in unrelated setup steps. Publication now uses a temporary sibling of the final directory; inventory checks run at dependency boundaries while path resolution stays independent. Installer setup-error stdout is preserved. Focused regressions and the final artifact check passed after the fixes. No review findings remain deferred.
+
+The two pre-existing local hook configuration edits were excluded from the implementation commit. No push, PR, release publication or real-project host trial has occurred. Requirements review on an open PR and a real-project Codex trial remain subsequent delivery steps; macOS remains deferred by owner decision.
