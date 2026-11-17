@@ -10,7 +10,7 @@ A session starts or resumes with Continuity, then moves through Discovery, proje
 flowchart TD
     C["Start or resume a session<br/><small>Continuity · AGE-97, planned</small>"]
     D["Discovery<br/><small>Four modes · AGE-93</small>"]
-    T["Project tracking<br/><small>Work items · AGE-98, planned</small>"]
+    T["Project tracking<br/><small>Design to work items · AGE-98, planned</small>"]
     I["Implementation<br/><small>No workflow yet</small>"]
     R["Code review<br/><small>Task, story, feature · shipped</small>"]
     K[("Project knowledge<br/>one shared store")]
@@ -97,6 +97,44 @@ flowchart LR
 | `discover-research` | Decisions depend on facts the user does not have yet |
 
 See the [Discovery workflow](workflows/discovery.md) for which skill is added at each stage.
+
+### Project tracking: from design to work items
+
+Between Discovery and implementation, the approved design becomes work items. The scope of the mapped-out work decides the top-level item; each item is then enriched to the team's format, validated, and broken down until every piece is implementable. Planned in [AGE-98](https://linear.app/agentical-monolithics/issue/AGE-98/project-tracking-workflow-adapter-agile-backlog-toolkit), on the Agile Backlog Toolkit.
+
+```mermaid
+flowchart TD
+    D["Approved written design<br/><small>from Discovery</small>"] --> S{"Size of the work?"}
+    S -- "several capabilities" --> E["Epic"]
+    S -- "one capability" --> F["Feature"]
+    S -- "one deliverable" --> U["User story"]
+    E --> G["Generate the work item<br/><small>requirements, acceptance criteria</small>"]
+    F --> G
+    U --> G
+    G --> N["Enrich<br/><small>team format, sizing drivers</small>"]
+    N --> V{"Valid?"}
+    V -- no --> AF["Auto-fix, then re-validate"]
+    AF -.-> V
+    V -- yes --> B{"Implementable yet?"}
+    B -- "epic or feature" --> DB["Decompose<br/><small>into features or stories</small>"]
+    DB -.-> N
+    B -- "story too large" --> SP["Split the story"]
+    SP -.-> N
+    B -- "story fits a sprint" --> T["Break down into tasks<br/><small>implementation plan</small>"]
+    T --> P["Publish to the tracker"] --> I["Implementation"]
+```
+
+| Step | What it does | Toolkit skill |
+| --- | --- | --- |
+| Generate | Turns the design into an epic, feature or story with requirements and acceptance criteria | `generate-work-item` |
+| Enrich | Brings an item into the team's structured format | `enrich-work-item` |
+| Validate | Checks an item against the rule set, fixing what it can | `validate-artifact`, `auto-fix-artifact` |
+| Decompose | Breaks an epic or feature into parented, audited children | `decompose-backlog` |
+| Split | Splits a story too large for one sprint | `split-story` |
+| Break down | Writes a story's implementation plan and its tasks | `generate-breakdown-work-items` |
+| Amend | Applies later corrections consistently across the whole tree | `amend-workitems` |
+
+As with every workflow, the framework's own tracking skills will name no plugin; the adapter maps them onto these toolkit skills.
 
 ### Code review: choose by where you are
 
