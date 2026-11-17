@@ -43,7 +43,7 @@ The interactive installer will:
 
 The installer creates its setup plan internally. You do not need to write JSON or clone UPF. All five dependency plugins are included in the release; installation does not download their repositories separately.
 
-**Release availability:** this interactive installer is being added after v0.2.1. Use the command once a release lists `install.sh`; v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
+**Release availability:** interactive installation starts with v0.2.2, whose release assets include `install.sh`. v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
 
 ### Requirements and current support
 

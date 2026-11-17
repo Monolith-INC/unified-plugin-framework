@@ -6,7 +6,7 @@ Artifact tests exercise the distribution and Codex staging on Linux; a real-proj
 
 ## Interactive installation
 
-The release's `install.sh` launcher starts a terminal wizard that collects these choices and creates the plan internally. It uses the same bootstrap described below, preserving saved project settings and reporting remaining setup actions. No user-written JSON is required for this interactive path. The launcher is added after v0.2.1; see the [installation guide](../vendor-payload-installation.md#complete-framework-installation) for release availability and automation.
+The release's `install.sh` launcher starts a terminal wizard that collects these choices and creates the plan internally. It uses the same bootstrap described below, preserving saved project settings and reporting remaining setup actions. No user-written JSON is required for this interactive path. The launcher starts with v0.2.2; see the [installation guide](../vendor-payload-installation.md#complete-framework-installation) for release availability and automation.
 
 ## Prepare and accept one plan (automation or agent-driven setup)
 

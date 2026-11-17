@@ -30,7 +30,7 @@ transactional installer
 
 ## Complete framework installation
 
-Use the complete distribution for a new project. The interactive entry point is added after v0.2.1; choose a release listing `install.sh`. Earlier releases retain their documented `install.mjs --input` mode.
+Use the complete distribution for a new project. The interactive entry point starts with v0.2.2; choose a release listing `install.sh`. Earlier releases retain their documented `install.mjs --input` mode.
 
 ### Interactive installation
 
