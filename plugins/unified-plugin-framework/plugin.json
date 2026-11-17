@@ -21,7 +21,7 @@
         {
           "name": "monolithic-code-review-toolkit",
           "version": "^0.6.0",
-          "source": "github:Monolith-INC/monolithic-code-review-toolkit",
+          "source": "github:Monolith-INC/monolithic-code-review-toolkit/plugins/monolithic-code-review-toolkit",
           "adapter": "code-review"
         },
         {
@@ -36,7 +36,7 @@
         {
           "name": "bmad-method",
           "version": "^6.12.0",
-          "source": "github:bmad-code-org/BMAD-METHOD",
+          "source": "github:bmad-code-org/BMAD-METHOD#1cbcfa272fe65787c06a1fa164a901f46117cca7",
           "adapter": "discovery"
         }
       ]

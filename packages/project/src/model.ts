@@ -17,6 +17,9 @@ export const flatMap = <A, B>(result: Result<A>, next: (value: A) => Result<B>):
     case false: return result;
   }
 };
+/** Every value, or the first failure: `flatMap` folded over the list from `ok([])`. */
+export const collect = <A>(results: readonly Result<A>[]): Result<readonly A[]> =>
+  results.reduce<Result<readonly A[]>>((all, next) => flatMap(all, (values) => flatMap(next, (value) => ok([...values, value]))), ok([]));
 export const object = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
 export const text = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 export const parseJson = (raw: string): Result<unknown> => {

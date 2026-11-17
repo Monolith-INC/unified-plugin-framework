@@ -243,6 +243,12 @@ export const sourceMatches = (pin: PluginPin, found: InstalledPlugin): boolean =
   && (pin.checksum === found.checksum || unchangedSource(pin.contentSource, found.contentSource)
     || pin.contentSource === undefined && found.contentSource?.checksum === pin.checksum);
 
+/** Whether `found` is the source `lock` pins for `plugin` under `workflow`; absence on either side is a mismatch. */
+export const pinMatches = (lock: OnboardedLock, workflow: WorkflowName, plugin: string, found: InstalledPlugin | undefined): boolean => {
+  const pin = pinFor(lock, plugin, workflow);
+  return pin !== undefined && found !== undefined && sourceMatches(pin, found);
+};
+
 const contentChangedText = (plugin: string, pin: PluginPin, found: InstalledPlugin): string =>
   `${plugin} ${found.version} (${short(found.checksum)}) is installed, but ${LOCK_FILE} pins ${pin.version} (${short(pin.checksum)})`;
 

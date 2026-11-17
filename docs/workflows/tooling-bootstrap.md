@@ -6,7 +6,17 @@ The current automated host is Codex on Linux/macOS, from a built framework sourc
 
 ## Prepare and accept one plan
 
-Run `project describe` to reuse project choices. Collect only missing tracker/language/document choices through project-bootstrap. Obtain clean published roots matching the framework's dependency pins; use the same `[plugin[@version]=]directory` syntax as `adapter-check`. Download/install authorization applies to the concrete plan, including its selected host, source roots and isolated runtime.
+Run `project describe` to reuse project choices. Collect only missing tracker/language/document choices through project-bootstrap. Download/install authorization applies to the concrete plan, including its selected host, the dependency sources it fetches and the isolated runtime.
+
+## Dependency plugins are fetched
+
+The selected workflows' onboarded plugins are dependencies: the framework manifest declares each one's `source`, and `onboarded.lock.json` pins its exact version and content. The `dependencies` step fetches every selected plugin that `pluginRoots` does not provide, so a fresh project needs no manual clones.
+
+A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit whose content the lock pins. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root. The declarations in `plugins/unified-plugin-framework/plugin.json` and the pins in its `onboarded.lock.json` are the only record of what is fetched.
+
+Each source is fetched as a shallow git checkout into a private directory and checked against the lock for every selected workflow it serves. Only a matching tree is kept, as `.upf-tools/sources/<plugin>@<version>`; later runs reuse it while it still matches, and fetch it again otherwise. A tree that differs from its pin fails with `dependency-fetch-mismatch`: the copy is discarded and nothing is staged. A failed fetch reports `dependency-fetch`. Until the sources are fetched, the `dependencies` capability reports as missing rather than misconfigured.
+
+To use a local copy instead, give its root in `pluginRoots`, with the same `[plugin[@version]=]directory` syntax as `adapter-check`. An explicit root replaces fetching for that plugin and passes the same lock check.
 
 Example structure (replace the illustrative choices with accepted project choices):
 
@@ -15,7 +25,7 @@ Example structure (replace the illustrative choices with accepted project choice
   "host": "codex",
   "python": "python3.12",
   "workflows": ["project-tracking"],
-  "pluginRoots": ["/absolute/published-toolkit-root"],
+  "pluginRoots": [],
   "knowledge": {
     "knowledgeRoot": ".project-knowledge/knowledge",
     "documentMode": "shared",
@@ -40,7 +50,7 @@ Use `--resume request.json` for a saved neutral project request. Resume runs onc
 
 Project settings remain in `.unified-plugin-framework.json`; knowledge/document settings remain in `.project-knowledge.json`. The isolated Python environment is `.project-knowledge/runtime`; CLI and staged host distributions live in `.upf-tools/`. Keep these machine-local paths out of commits according to the consuming project's policy.
 
-The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
+The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
 
 The knowledge runtime is installed from a private source copy into an isolated environment. It uses the runtime's own configuration selection and a fresh protocol client for catalog/search/fetch verification. Populate an empty store with discover-project-knowledge; bootstrap does not invent its content. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
 
