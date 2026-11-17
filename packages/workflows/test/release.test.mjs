@@ -48,3 +48,24 @@ test("a shipped plugin that cannot be assembled is reported per plugin and nothi
   });
   assert.deepEqual(readdirSync(payloadsRoot), []);
 });
+
+test("a shipped plugin whose directory and manifest names differ is reported and nothing is built", () => {
+  const pluginsRoot = mkdtempSync(join(tmpdir(), "upf-release-names-"));
+  const payloadsRoot = mkdtempSync(join(tmpdir(), "upf-release-names-payloads-"));
+  SHIPPED_PLUGINS.map((plugin) => {
+    mkdirSync(join(pluginsRoot, plugin), { recursive: true });
+    writeFileSync(
+      join(pluginsRoot, plugin, "plugin.json"),
+      JSON.stringify({ name: `renamed-${plugin}`, version: "1.0.0", description: "Renamed.", schemaVersion: "1.0.0" }),
+    );
+    return plugin;
+  });
+  const reports = releasePayloads("build", unusedAdapter, { pluginsRoot, payloadsRoot });
+  reports.map(({ plugin, result }) => {
+    assert.equal(result.ok, false);
+    assert.equal(result.diagnostics[0].code, "release.plugin.name_mismatch");
+    assert.match(result.diagnostics[0].message, new RegExp(`renamed-${plugin}`));
+    return plugin;
+  });
+  assert.deepEqual(readdirSync(payloadsRoot), []);
+});

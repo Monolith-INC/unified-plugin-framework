@@ -9,7 +9,7 @@ import {
   type VendorAdapter,
   type VerificationResult,
 } from "@agent-plugins/compiler";
-import type { Diagnostic } from "@agent-plugins/core";
+import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plugins/core";
 
 import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
@@ -64,13 +64,37 @@ export const withAssembledSource = <A>(
   }
 };
 
+/** Install finds a payload by the plugin's manifest name, so a shipped plugin's directory must carry that name. */
+const nameMismatch = (plugin: string, root: string): string | undefined => {
+  const name = loadPluginRoot(root).manifest?.name;
+  return name === undefined || pluginDirectoryName(name) === plugin
+    ? undefined
+    : `Plugin directory ${plugin} must be named after its manifest name ${name}: install looks payloads up by manifest name.`;
+};
+
+const releaseStaged = (
+  step: PayloadStep,
+  adapter: VendorAdapter,
+  adapters: readonly WorkflowAdapter<string>[],
+  root: string,
+  shipped: string,
+): CompileResult | VerificationResult => {
+  const staged = withAssembledSource(root, adapters, (source) => step(source, shipped, adapter));
+  return staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, root);
+};
+
 const releaseOne =
   (step: PayloadStep, adapter: VendorAdapter, layout: ReleaseLayout, adapters: readonly WorkflowAdapter<string>[]) =>
   (plugin: string): PayloadReport => {
-    const staged = withAssembledSource(join(layout.pluginsRoot, plugin), adapters, (source) =>
-      step(source, join(layout.payloadsRoot, plugin), adapter),
-    );
-    return { plugin, result: staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, plugin) };
+    const root = join(layout.pluginsRoot, plugin);
+    const mismatch = nameMismatch(plugin, root);
+    return {
+      plugin,
+      result:
+        mismatch === undefined
+          ? releaseStaged(step, adapter, adapters, root, join(layout.payloadsRoot, plugin))
+          : failed("release.plugin.name_mismatch", [mismatch], plugin),
+    };
   };
 
 /** Builds (`build`) or checks (`verify`) one host's payload for every shipped plugin, each from its assembled source. */

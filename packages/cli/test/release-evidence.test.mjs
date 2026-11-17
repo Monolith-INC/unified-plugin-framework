@@ -12,9 +12,9 @@ import { join, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { CLAUDE_SHIPPED_HELLO_WORLD, claudeAdapter } from "@agent-plugins/adapter-claude";
-import { CODEX_SHIPPED_HELLO_WORLD, codexAdapter } from "@agent-plugins/adapter-codex";
-import { CURSOR_SHIPPED_HELLO_WORLD, cursorAdapter } from "@agent-plugins/adapter-cursor";
+import { CLAUDE_SHIPPED_HELLO_WORLD, claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
+import { CODEX_SHIPPED_HELLO_WORLD, codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
+import { CURSOR_SHIPPED_HELLO_WORLD, cursorAdapter, cursorShippedBundle } from "@agent-plugins/adapter-cursor";
 import {
   finalizeVendorBundle,
   normalizeCanonicalPlugin,
@@ -33,18 +33,21 @@ const vendors = [
     manifestPath: ".claude-plugin/plugin.json",
     packageRoot: "packages/adapter-claude",
     shipped: CLAUDE_SHIPPED_HELLO_WORLD,
+    shippedBundle: claudeShippedBundle,
   },
   {
     adapter: codexAdapter,
     manifestPath: ".codex-plugin/plugin.json",
     packageRoot: "packages/adapter-codex",
     shipped: CODEX_SHIPPED_HELLO_WORLD,
+    shippedBundle: codexShippedBundle,
   },
   {
     adapter: cursorAdapter,
     manifestPath: ".cursor-plugin/plugin.json",
     packageRoot: "packages/adapter-cursor",
     shipped: CURSOR_SHIPPED_HELLO_WORLD,
+    shippedBundle: cursorShippedBundle,
   },
 ];
 
@@ -201,7 +204,10 @@ test("release documentation is backed by shipped payloads and exercised install 
     assert.equal(JSON.parse(result.stdout).vendor, command.vendor);
   }
 
-  for (const { adapter, manifestPath, packageRoot, shipped } of vendors) {
+  const shippedBundles = vendors.flatMap((vendor) =>
+    SHIPPED_PLUGINS.map((plugin) => ({ ...vendor, shipped: vendor.shippedBundle(plugin) })),
+  );
+  for (const { adapter, manifestPath, packageRoot, shipped } of shippedBundles) {
     const bundlePath = join(fileURLToPath(shipped), "bundle.json");
     const bundle = readJson(bundlePath);
     const documentedPath = relativeRepositoryPath(bundlePath);
