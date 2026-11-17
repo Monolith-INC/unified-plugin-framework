@@ -3,6 +3,7 @@ import {mkdtemp,writeFile,readFile,mkdir,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
 import {safePath,writeText} from '../dist/tooling-files.js';
@@ -12,7 +13,7 @@ import {stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
 
 const choices={host:'codex',python:'python3.12',workflows:[],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'},steps:['settings','knowledge-settings'],answers:{language:'en',artifactsPath:'docs/work-items',tracker:{adapter:'local',values:{}}}};
-const cli=new URL('../dist/index.js',import.meta.url);
+const cli=fileURLToPath(new URL('../dist/index.js',import.meta.url));
 test('bootstrap parses supported choices and rejects escaping roots, unknown workflows and hosts',()=>{
   assert.equal(parseBootstrap(choices).ok,true);
   [ {...choices,host:'unsupported'}, {...choices,workflows:['invented']}, {...choices,knowledge:{...choices.knowledge,knowledgeRoot:'../outside'}}, {...choices,steps:['unknown']} ].map(value=>assert.equal(parseBootstrap(value).ok,false));
@@ -20,7 +21,7 @@ test('bootstrap parses supported choices and rejects escaping roots, unknown wor
 test('CLI plan is read-only; apply configures missing accepted choices and re-entry preserves them',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-bootstrap-'));
   const input=join(project,'plan.json');await writeFile(input,JSON.stringify(choices));
-  const run=(apply=false)=>JSON.parse(execFileSync(process.execPath,[cli.pathname,'project','bootstrap','--input',input,'--project',project,...(apply?['--apply']:[])],{encoding:'utf8'}));
+  const run=(apply=false)=>JSON.parse(execFileSync(process.execPath,[cli,'project','bootstrap','--input',input,'--project',project,...(apply?['--apply']:[])],{encoding:'utf8'}));
   assert.equal(run().value.tooling.status,'action-required');
   await assert.rejects(readFile(join(project,'.unified-plugin-framework.json')));
   assert.equal(run(true).value.tooling.status,'ready');
@@ -86,7 +87,7 @@ test('bootstrap holds a saved request while incomplete and applies it once after
   const project=await mkdtemp(join(tmpdir(),'upf-bootstrap-resume-'));
   const input=join(project,'plan.json');await writeFile(input,JSON.stringify(choices));
   const request=join(project,'request.json');await writeFile(request,JSON.stringify({operation:'create_work_item',kind:'user_story',title:'Resume this saved request',description:'One accepted create.'}));
-  const argv=[cli.pathname,'project','bootstrap','--input',input,'--resume',request,'--project',project];
+  const argv=[cli,'project','bootstrap','--input',input,'--resume',request,'--project',project];
   const planned=JSON.parse(execFileSync(process.execPath,argv,{encoding:'utf8'}));
   assert.equal(planned.value.request.title,'Resume this saved request');
   await assert.rejects(readFile(join(project,'.unified-plugin-framework','items.json')));
