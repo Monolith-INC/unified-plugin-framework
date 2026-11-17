@@ -11,6 +11,24 @@
       "sha256": "7078164e1b1ae97cd62228ac3af0489ef8d9a201222b719284dc1315fbcac2bd"
     },
     {
+      "bytes": 2632,
+      "mode": 420,
+      "path": "skills/continuity-checkpoint/SKILL.md",
+      "sha256": "2a0f9dcb5afa7cda227f8ea11759ac9f65a15cfb4cfd3c49ed12bc26ac84822b"
+    },
+    {
+      "bytes": 3563,
+      "mode": 420,
+      "path": "skills/continuity-continue/SKILL.md",
+      "sha256": "1b91f12b09f3671e8a7480388191b773652a29f8179ebb4b00dc082e456645f4"
+    },
+    {
+      "bytes": 2328,
+      "mode": 420,
+      "path": "skills/continuity-recover/SKILL.md",
+      "sha256": "fd19774d93a5e64b084336ea270c962b8691f7ca19ee3fdc6326bd44dc1459c9"
+    },
+    {
       "bytes": 3803,
       "mode": 420,
       "path": "skills/discover-comprehensive/SKILL.md",
@@ -35,10 +53,10 @@
       "sha256": "bbd959485fb83f6e86cdbc83a896f5068e3406faf05925d870dcb45cef3bf0c3"
     },
     {
-      "bytes": 4479,
+      "bytes": 5157,
       "mode": 420,
       "path": "skills/project-bootstrap/SKILL.md",
-      "sha256": "706125c165d9969cee4b1a6d97bea9782a933093abbb3736956c0074d28f933e"
+      "sha256": "cce0740c63ade226f907a8586e24dbf6ca641ef9b4163c0c2bb196353e4f0f9a"
     },
     {
       "bytes": 2442,
@@ -107,12 +125,12 @@
       "sha256": "5089bcd5479885a4a348a49692fff62d51c821934c475ed2d2e13b4622a2f62b"
     }
   ],
-  "payloadDigest": "f32b085caabeac2aaca47c0eae492744f354fdac8be50f2485e3075c18e43562",
+  "payloadDigest": "0f76678046ca41041a49a9f5501a56e97b4e88354bbdac124ffc1e32a9440056",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "b38fb2a3ab71d84375ffc115dcf3f72e292599fcd17e9ccc99af2b16eff48255",
+  "sourceDigest": "b083feef7e4cc80e987ffac027a5b4e8621e2274281f426ecd56ddaa6f36450f",
   "vendor": "cursor"
 }

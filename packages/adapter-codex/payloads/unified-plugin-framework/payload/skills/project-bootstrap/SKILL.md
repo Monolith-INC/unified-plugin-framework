@@ -13,6 +13,8 @@ The returned choices describe the available adapters and the settings each needs
 
 Collect the missing questions together. Preserve the original operation while waiting. Use the existing project knowledge setup when its knowledge/document locations need configuring; keep its authoritative settings in place rather than copying them into a second configuration. Do not install plugins, change providers or save credentials as a side effect of setup.
 
+When Continuity is selected, reuse `continuity.journalRoot` in the project settings. If absent, include its location in the same missing-choice question, proposing `<artifactsPath>/sessions`. Preserve all existing `continuity` fields in the answers object and add the accepted project-relative `journalRoot`; the existing setup service patches that nested object as a whole. Save through `agent-plugin project setup --project <project-directory> --input <answers-file>` and preserve existing journals. Local continuity does not require a live tracker connection. Missing workflow dependencies use the tooling setup below, limited to the capabilities the pending request needs.
+
 After the user accepts the choices, write the answers as JSON in a temporary file, following the returned settings shape. Run `agent-plugin project setup --input <answers-file> --resume <original-request-file> --project <project-directory>`. Omit `--resume` when there was no pending operation. The project preserves unrelated settings, saves the choices, constructs the adapter and resumes the pending operation once.
 
 Use the returned language for subsequent prose. On a credential or connection failure, follow the specific recovery and keep the saved choices. Do not restart the interview or repeat a write whose outcome is unknown.

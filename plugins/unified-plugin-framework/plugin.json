@@ -7,6 +7,12 @@
     "io.github.monolith-inc.upf": {
       "onboardedPlugins": [
         {
+          "name": "agent-continuity",
+          "version": "0.13.0",
+          "source": "github:Monolith-INC/agent-continuity",
+          "adapter": "continuity"
+        },
+        {
           "name": "agile-backlog-toolkit",
           "version": "0.12.1",
           "source": "github:theocarranza/agile-backlog-toolkit",

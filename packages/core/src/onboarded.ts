@@ -4,7 +4,7 @@ import type { Diagnostic } from "./index.js";
 export const UPF_EXTENSION = "io.github.monolith-inc.upf";
 
 /** The workflows the framework offers; each has one adapter in `@agent-plugins/workflows` (ADR-001). */
-export const WORKFLOW_NAMES = Object.freeze(["code-review", "discovery", "project-tracking"] as const);
+export const WORKFLOW_NAMES = Object.freeze(["code-review", "discovery", "project-tracking", "continuity"] as const);
 
 export type WorkflowName = (typeof WORKFLOW_NAMES)[number];
 

@@ -45,7 +45,7 @@ flowchart TD
 
 | Workflow | Plugin behind it | Status |
 | --- | --- | --- |
-| Continuity | Agent Continuity | Planned: [AGE-97](https://linear.app/agentical-monolithics/issue/AGE-97/continuity-workflow-adapter-agent-continuity) |
+| Continuity | Agent Continuity | Implemented, awaiting framework merge: [continuity workflow](workflows/continuity.md) |
 | Discovery | Superpowers and BMad Method | Shipped: [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method) |
 | Project tracking | Agile Backlog Toolkit | Implemented: [project tracking workflow](workflows/project-tracking.md) |
 | Implementation | Not chosen | No workflow or ticket yet |
