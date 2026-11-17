@@ -111,24 +111,23 @@ pnpm --filter @agent-plugins/cli exec agent-plugin --help
 Install exactly one verified, adapter-owned shipped payload. Build first so the `agent-plugin` bin points at compiled output.
 
 ```text
-plugins/hello-world
+plugins/<plugin>            (hello-world, unified-plugin-framework)
   plugin.json
-  skills/hello-world/SKILL.md
+  skills/<skill>/SKILL.md
         |
         v
-@agent-plugins/compiler
+release-time assembly (@agent-plugins/workflows) -> @agent-plugins/compiler
         |
-        +-- @agent-plugins/adapter-claude -> packages/adapter-claude/payloads/hello-world
-        +-- @agent-plugins/adapter-cursor -> packages/adapter-cursor/payloads/hello-world
-        +-- @agent-plugins/adapter-codex  -> packages/adapter-codex/payloads/hello-world
+        +-- @agent-plugins/adapter-claude -> packages/adapter-claude/payloads/<plugin>
+        +-- @agent-plugins/adapter-cursor -> packages/adapter-cursor/payloads/<plugin>
+        +-- @agent-plugins/adapter-codex  -> packages/adapter-codex/payloads/<plugin>
         |
         v
 agent-plugin install -> @agent-plugins/installer -> target directory
 ```
 
 ```sh
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor claude --target <target-directory>
-pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor cursor --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugin-framework --vendor claude --target <target-directory>
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor codex --target <target-directory>
 ```
 

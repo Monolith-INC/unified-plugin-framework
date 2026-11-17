@@ -31,8 +31,6 @@ const readiness = (adapter: WorkflowAdapter<string>, served: readonly PluginSkil
     `1. **Available:** ${served.map(qualified).join(" and ")} ${served.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${[...new Set(served.map(({ plugin }) => `\`${plugin}\``))].join(", ")} for this host, then continue once it is.`,
     `2. **Project knowledge store:** \`.project-knowledge.json\` names a \`knowledgeRoot\`. If not, run ${qualified(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults, then continue.`,
     ...sharedStoreStep(adapter.knowledgeStores),
-    "",
-    `From a checkout, \`agent-plugin adapter-check ${adapter.workflow}\` runs the same checks and prints each recovery action.`,
   ].join("\n");
 
 const generated = (adapter: WorkflowAdapter<string>, operation: string): string =>

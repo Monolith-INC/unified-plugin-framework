@@ -16,5 +16,5 @@
     "@agent-plugins/compiler": "workspace:*",
     "@agent-plugins/core": "workspace:*"
   },
-  "devDependencies": { "@agent-plugins/testing": "workspace:*" }
+  "devDependencies": { "@agent-plugins/testing": "workspace:*", "@agent-plugins/workflows": "workspace:*" }
 }

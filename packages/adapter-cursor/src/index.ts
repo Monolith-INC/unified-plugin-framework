@@ -27,7 +27,9 @@ export const CURSOR_SCHEMA_EVIDENCE = Object.freeze([
   "https://cursor.com/docs/reference/plugins",
   "https://cursor.com/docs/hooks",
 ] as const);
-export const CURSOR_SHIPPED_HELLO_WORLD = new URL("../payloads/hello-world", import.meta.url);
+/** Where this adapter's committed payload for the plugin directory `name` lives; callers check that it exists. */
+export const cursorShippedBundle = (name: string): URL => new URL(`../payloads/${name}`, import.meta.url);
+export const CURSOR_SHIPPED_HELLO_WORLD = cursorShippedBundle("hello-world");
 
 const CURSOR_MANIFEST_PATH = ".cursor-plugin/plugin.json";
 const CURSOR_HOOKS_PATH = "hooks/hooks.json";

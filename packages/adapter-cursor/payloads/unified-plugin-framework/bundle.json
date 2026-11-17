@@ -1,0 +1,40 @@
+{
+  "adapter": {
+    "vendorSchemaVersion": "cursor-plugins-2026-08-10",
+    "version": "1.0.0"
+  },
+  "files": [
+    {
+      "bytes": 189,
+      "mode": 420,
+      "path": ".cursor-plugin/plugin.json",
+      "sha256": "7078164e1b1ae97cd62228ac3af0489ef8d9a201222b719284dc1315fbcac2bd"
+    },
+    {
+      "bytes": 1959,
+      "mode": 420,
+      "path": "skills/review-feature/SKILL.md",
+      "sha256": "13aa416daf256978befd05eb022609348b4ab8fc528fd49804a42f76b833ac36"
+    },
+    {
+      "bytes": 2649,
+      "mode": 420,
+      "path": "skills/review-story/SKILL.md",
+      "sha256": "6331e4de0118d5753f293be08e2ba1a8dc173b431a93bfc4c2c93e35d1d9e85c"
+    },
+    {
+      "bytes": 2027,
+      "mode": 420,
+      "path": "skills/review-task/SKILL.md",
+      "sha256": "4e1154cea9007840aae8ddc9ed7458a70cb7d671d76189ba5bfa7cfdc25ba839"
+    }
+  ],
+  "payloadDigest": "438819b648636e6b1121696bbc0bd9d12ce60575ef65b0ca4800725ac7e67b3c",
+  "plugin": {
+    "name": "unified-plugin-framework",
+    "version": "0.1.0"
+  },
+  "schemaVersion": "1.0.0",
+  "sourceDigest": "6a4285b45858c9d702ae5b93068e9a6b25f52326dfe6714744dfbf9057c81a3e",
+  "vendor": "cursor"
+}

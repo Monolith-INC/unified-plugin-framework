@@ -1,0 +1,40 @@
+{
+  "adapter": {
+    "vendorSchemaVersion": "codex-plugins-2026-08-10",
+    "version": "1.0.0"
+  },
+  "files": [
+    {
+      "bytes": 191,
+      "mode": 420,
+      "path": ".codex-plugin/plugin.json",
+      "sha256": "6a47f4bdb35cedf232adaf3464f26a0a3872fa73bfed4e58d41c748de16a6819"
+    },
+    {
+      "bytes": 1959,
+      "mode": 420,
+      "path": "skills/review-feature/SKILL.md",
+      "sha256": "13aa416daf256978befd05eb022609348b4ab8fc528fd49804a42f76b833ac36"
+    },
+    {
+      "bytes": 2649,
+      "mode": 420,
+      "path": "skills/review-story/SKILL.md",
+      "sha256": "6331e4de0118d5753f293be08e2ba1a8dc173b431a93bfc4c2c93e35d1d9e85c"
+    },
+    {
+      "bytes": 2027,
+      "mode": 420,
+      "path": "skills/review-task/SKILL.md",
+      "sha256": "4e1154cea9007840aae8ddc9ed7458a70cb7d671d76189ba5bfa7cfdc25ba839"
+    }
+  ],
+  "payloadDigest": "c12d24a8b92d84e13c6d62983c2a6859f52235ab3530bac65c4c9e4921e5d166",
+  "plugin": {
+    "name": "unified-plugin-framework",
+    "version": "0.1.0"
+  },
+  "schemaVersion": "1.0.0",
+  "sourceDigest": "6a4285b45858c9d702ae5b93068e9a6b25f52326dfe6714744dfbf9057c81a3e",
+  "vendor": "codex"
+}

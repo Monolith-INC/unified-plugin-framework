@@ -22,6 +22,7 @@ import {
   sha256,
 } from "@agent-plugins/compiler";
 import { createVendorInstaller, installVendorBundle } from "@agent-plugins/installer";
+import { SHIPPED_PLUGINS } from "@agent-plugins/workflows";
 import { runInstallCommand } from "../dist/index.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -176,9 +177,15 @@ test("release documentation is backed by shipped payloads and exercised install 
   ];
   for (const pattern of forbiddenDocumentationModels) assert.doesNotMatch(documentation, pattern);
 
-  const commandPattern = /pnpm --filter @agent-plugins\/cli exec agent-plugin install (?<plugin>plugins\/hello-world) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
+  const commandPattern = /pnpm --filter @agent-plugins\/cli exec agent-plugin install (?<plugin>plugins\/[a-z0-9-]+) --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
   const commands = [...documentation.matchAll(commandPattern)].map((match) => match.groups);
-  assert.deepEqual(new Set(commands.map((command) => command.vendor)), new Set(["claude", "codex", "cursor"]));
+  SHIPPED_PLUGINS.map((plugin) =>
+    assert.deepEqual(
+      new Set(commands.filter((command) => command.plugin === `plugins/${plugin}`).map((command) => command.vendor)),
+      new Set(["claude", "codex", "cursor"]),
+      `every host's install command is documented for ${plugin}`,
+    ),
+  );
 
   for (const command of commands) {
     const target = mkdtempSync(join(tmpdir(), `docs-${command.vendor}-`));

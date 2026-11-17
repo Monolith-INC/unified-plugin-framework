@@ -1,3 +1,4 @@
+import type { VendorAdapter } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
 
 import type { WorkflowAdapter } from "./adapter.js";
@@ -54,3 +55,15 @@ export const assembleSkills = (
 /** Copies a plugin source into a fresh staging directory with its template skills assembled. Release-time only. */
 export const assemblePluginSource = (sourceRoot: string, stagingRoot: string): Assembled =>
   assembleSource(sourceRoot, stagingRoot, ACTIVE_ADAPTERS);
+
+import { releasePayloads as releaseWith, withAssembledSource as stageWith, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+
+export { SHIPPED_PLUGINS, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+
+/** Runs `use` on a temporary, assembled copy of the plugin at `sourceRoot`, then removes the copy. */
+export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: string) => A): Staged<A> =>
+  stageWith(sourceRoot, ACTIVE_ADAPTERS, use);
+
+/** Builds or verifies one host's payloads for every shipped plugin, assembled with the active adapters. */
+export const releasePayloads = (operation: string, adapter: VendorAdapter, layout: ReleaseLayout): readonly PayloadReport[] =>
+  releaseWith(operation, adapter, layout, ACTIVE_ADAPTERS);
