@@ -11,10 +11,10 @@
       "sha256": "e876bf36ac7c241e3d159a6db03751c3b6f7680883d720aad68c103f34bfe05d"
     },
     {
-      "bytes": 18553,
+      "bytes": 18556,
       "mode": 420,
       "path": "skills/discover-project-knowledge/SKILL.md",
-      "sha256": "a6191ed96a2f22ad41d2c8756262afc8af69c3f05a490951b33d638dfc297bf9"
+      "sha256": "014076d047a0b3455a70b544f56af83d64f3cc715e5d76b400bec7474b28b751"
     },
     {
       "bytes": 2508,
@@ -23,12 +23,12 @@
       "sha256": "dfba7eda5f1698fc7e12ca46de61d847d0b3d66a2c3d8c2a5c18ca8f80282aef"
     }
   ],
-  "payloadDigest": "a4a7fc9b8ab52ba90e271c4fcdae2e092232834a641b70bb424e8a86380a84f7",
+  "payloadDigest": "11615e2880a2e7f6c6f73e66974600e1f6672526ad76f5a72f0900445d055a6c",
   "plugin": {
     "name": "project-knowledge",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "4d36660af6ab3cbe30f2788ce260fe6eaa8cf5fc9d4e4bd35ab816acbc650912",
+  "sourceDigest": "1a8fa053024191de17edfd0d1562ae2de048458f364988f6cb796935013199f9",
   "vendor": "cursor"
 }

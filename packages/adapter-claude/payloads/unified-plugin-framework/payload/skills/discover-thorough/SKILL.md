@@ -1,6 +1,6 @@
 ---
 name: discover-thorough
-description: Use when an idea, proposal or plan needs shaping and the result must hold up: decisions are probed, the idea is pressure-tested before it is written down, and the design is reviewed for weak points. Part of the Discovery workflow (contract v1).
+description: Use when an idea, proposal or plan needs shaping and the result must hold up — decisions are probed, the idea is pressure-tested before it is written down, and the design is reviewed for weak points. Part of the Discovery workflow (contract v1).
 ---
 <!-- Assembled at release time from the discover-thorough template in plugins/unified-plugin-framework and the discovery adapter. Edit those, not this copy. -->
 
