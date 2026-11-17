@@ -71,6 +71,9 @@ pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugi
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor claude --target <target-directory>
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor cursor --target <target-directory>
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor codex --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor claude --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor cursor --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor codex --target <target-directory>
 ```
 
 The command looks up the selected adapter's `payloads/<plugin>` bundle and checks its source digest against the plugin being installed. It refuses, before writing anything, when the plugin has no shipped payload (`cli.payload.missing`) or the payload was built from a different source (`cli.payload.drift`); both messages name the command that fixes it.
@@ -137,11 +140,8 @@ The installer accepts an upgrade or reinstall only when the bundle validates aga
 | Claude | `packages/adapter-claude/payloads/unified-plugin-framework/bundle.json` | `claude-code-plugins-2026-08-10` | `054590a8ee5a5849c8b7f3686f36311446b43b1f84e024e949f284d9de70a982` |
 | Cursor | `packages/adapter-cursor/payloads/unified-plugin-framework/bundle.json` | `cursor-plugins-2026-08-10` | `f32b085caabeac2aaca47c0eae492744f354fdac8be50f2485e3075c18e43562` |
 | Codex | `packages/adapter-codex/payloads/unified-plugin-framework/bundle.json` | `codex-plugins-2026-08-10` | `c6116a18630e78fd289b6bc1937206ce7ebfa0b3f6471af304344d4e180f8df2` |
-
 | Claude | `packages/adapter-claude/payloads/project-knowledge/bundle.json` | `claude-code-plugins-2026-08-10` | `5e89836e453392c8fa9d2c6a144d44ab54eeae8e6f61bff70be64f6cc4f1491a` |
-
 | Cursor | `packages/adapter-cursor/payloads/project-knowledge/bundle.json` | `cursor-plugins-2026-08-10` | `a4a7fc9b8ab52ba90e271c4fcdae2e092232834a641b70bb424e8a86380a84f7` |
-
 | Codex | `packages/adapter-codex/payloads/project-knowledge/bundle.json` | `codex-plugins-2026-08-10` | `e9ca6be92b40e94102a0cdd0a3ce3763284c83735164e3ff47e7ad8da66cff1c` |
 
 Every shipped payload is verified by `pnpm payloads:verify`, CI, and the release-evidence test suite.
