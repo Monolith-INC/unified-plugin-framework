@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -25,8 +25,8 @@ test("listFixtureRoots returns sorted fixtures with expected.json", () => {
       return index === -1 ? [...items, item] : [...items.slice(0, index), item, ...items.slice(index)];
     }, []),
   );
-  assert.ok(valid.every((root) => root.includes("/fixtures/valid/")));
-  assert.ok(invalid.every((root) => root.includes("/fixtures/invalid/")));
+  assert.ok(valid.every((root) => root.includes(`${sep}fixtures${sep}valid${sep}`)));
+  assert.ok(invalid.every((root) => root.includes(`${sep}fixtures${sep}invalid${sep}`)));
 });
 
 test("fixture corpus matches expected.json contracts", () => {

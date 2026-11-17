@@ -545,7 +545,8 @@ function cleanupEmptyDirectories(created: readonly string[]): void {
   }
 }
 
-function fsyncFile(path: string): void { const handle = openSync(path, "r"); try { fsyncSync(handle); } finally { closeSync(handle); } }
+// Opened read-write: Windows flushes a file only through a handle with write access (EPERM otherwise).
+function fsyncFile(path: string): void { const handle = openSync(path, "r+"); try { fsyncSync(handle); } finally { closeSync(handle); } }
 function fsyncDirectory(path: string): void { try { const handle = openSync(path, "r"); try { fsyncSync(handle); } finally { closeSync(handle); } } catch { /* unsupported on some platforms */ } }
 function relativePath(path: string): RelativePayloadPath { const parsed = parseRelativePayloadPath(path); if (!parsed.ok) throw new Error(`Invalid internal path: ${path}`); return parsed.value; }
 function successResult<T>(value: T): Result<T> { return { ok: true, value }; }
