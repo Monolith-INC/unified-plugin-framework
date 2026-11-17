@@ -2,15 +2,17 @@
 
 One accepted setup plan coordinates the existing project service, transactional payload installer, knowledge runtime and host configuration. Invoke it explicitly, or when a required capability is missing. Ordinary skills use working adapters directly; bootstrap adds no periodic session scan or repeated setup interview.
 
-The current automated host is Codex on Linux/macOS, from a built framework source checkout. Other hosts retain their existing installation commands and receive an explicit unsupported-host recovery. A bare host payload still requires the framework CLI; bootstrap does not download an unselected distribution.
+Artifact tests exercise the distribution and Codex staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Other hosts retain their existing host-payload commands and receive an explicit unsupported-host recovery for full bootstrap. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
 ## Prepare and accept one plan
 
 Run `project describe` to reuse project choices. Collect only missing tracker/language/document choices through project-bootstrap. Download/install authorization applies to the concrete plan, including its selected host, the dependency sources it fetches and the isolated runtime.
 
-## Dependency plugins are fetched
+## Dependency plugins come with the release
 
-The selected workflows' onboarded plugins are dependencies: the framework manifest declares each one's `source`, and `onboarded.lock.json` pins its exact version and content. The `dependencies` step fetches every selected plugin that `pluginRoots` does not provide, so a fresh project needs no manual clones.
+The complete distribution contains all five upstream repositories under `dependencies/<plugin>@<version>`, unchanged, including licenses, runtime adapters and references outside nested plugin folders. `distribution.json` records file and link digests; the framework manifest declares each source and `onboarded.lock.json` pins the workflow bindings. Bootstrap verifies included content and stages selected plugins locally. Missing or modified distribution content fails with `distribution-incomplete`; there is no plugin download fallback.
+
+Only a development workspace may fetch dependencies: the release builder and development bootstrap use the source declarations and existing lock checks. The following fetch/cache details apply to that development path.
 
 A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit whose content the lock pins. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root. The declarations in `plugins/unified-plugin-framework/plugin.json` and the pins in its `onboarded.lock.json` are the only record of what is fetched.
 
@@ -50,7 +52,7 @@ Use `--resume request.json` for a saved neutral project request. Resume runs onc
 
 Project settings remain in `.unified-plugin-framework.json`; knowledge/document settings remain in `.project-knowledge.json`. The isolated Python environment is `.project-knowledge/runtime`; CLI and staged host distributions live in `.upf-tools/`. Keep these machine-local paths out of commits according to the consuming project's policy.
 
-The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
+The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Bundled, fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
 
 The knowledge runtime is installed from a private source copy into an isolated environment. It uses the runtime's own configuration selection and a fresh protocol client for catalog/search/fetch verification. Populate an empty store with discover-project-knowledge; bootstrap does not invent its content. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
 

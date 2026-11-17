@@ -14,7 +14,8 @@
     "payloads:verify": "pnpm -r --workspace-concurrency=1 --if-present run payload:verify",
     "release:assets": "node packages/cli/scripts/release-assets.mjs",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
-    "test": "pnpm -r --no-bail --filter \"./packages/*\" test"
+    "test": "pnpm -r --no-bail --filter \"./packages/*\" test",
+    "release:distribution": "node packages/cli/scripts/release-distribution.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

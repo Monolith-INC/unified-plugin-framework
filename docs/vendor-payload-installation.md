@@ -28,6 +28,41 @@ agent-plugin install <plugin> --version <version> --vendor <host> --target <dir>
 transactional installer
 ```
 
+## Complete framework installation
+
+Use the complete distribution for a new project. This delivery format is added after v0.2.0; choose a published version that actually lists `unified-plugin-framework-<version>.tar.gz` and `install.mjs`. The v0.2.0 host-only assets do not contain these files.
+
+Prerequisites: Node.js 22+, Python 3.12+ (`--python` chooses the extraction executable), and GitHub CLI for remote release downloads. Full automated bootstrap currently targets Codex on Linux. macOS qualification is deferred; other host payloads do not establish full setup support. Python runtime dependencies may be fetched from the package index by the existing isolated runtime setup; the framework and its plugin dependencies are already included.
+
+Prepare and accept `plan.json` using the [bootstrap guide](workflows/tooling-bootstrap.md), including selected workflows, project choices, knowledge locations and Python. Run the downloaded installer with that plan:
+
+```sh
+gh release download v<version> --repo Monolith-INC/unified-plugin-framework --pattern install.mjs --output install.mjs
+node install.mjs --version <version> --project <existing-project-directory> --input <accepted-plan.json>
+```
+
+The installer downloads one complete archive and its checksum file, validates the checksum and archive paths/links, installs an owned versioned directory at `.upf-tools/distributions/<version>`, and invokes the existing bootstrap. It preserves existing differing distributions and linked installation paths by refusing them. Setup reports missing credentials, knowledge content, provider configuration and host activation separately; an unfinished setup exits unsuccessfully and retains successful steps for resumption.
+
+For a local artifact or offline plugin installation:
+
+```sh
+node install.mjs --version <version> --source ./unified-plugin-framework-<version>.tar.gz --checksums ./SHA256SUMS --project <project-directory> --input <accepted-plan.json>
+```
+
+The archive includes the CLI and its production Node dependencies; canonical framework/knowledge sources and lock; all five unchanged pinned upstream repositories; their supporting files and licenses; and the owned knowledge runtime source. Bootstrap takes the selected plugin roots from this distribution and validates both its inventory and normal workflow pins. An installed release never fetches plugin repositories. The versioned distribution must remain available while its project CLI is in use.
+
+### Building and checking the complete distribution
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm release:assets
+UPF_RELEASE_VERSION=<version> pnpm release:distribution
+UPF_RELEASE_VERSION=<version> node packages/cli/scripts/check-distribution.mjs
+```
+
+The build fetches and verifies all pinned sources before packaging and deploys the existing CLI using pnpm's production deployment. Publication includes the complete archive and installer in `SHA256SUMS` and build attestations. CI tests relocation outside the checkout, CLI execution, both host payloads, all five dependency staging operations with fetching denied, re-entry, and refusal of source/staged drift. This is artifact evidence; live Codex activation and a real-project workflow trial remain distinct checks.
+
 ## Installation
 
 Install a released plugin for one host by naming the plugin, the release version and the host. Use the version of a published [release](https://github.com/Monolith-INC/unified-plugin-framework/releases) that lists `SHA256SUMS` among its assets; releases made before this workflow existed (up to `v0.2.0-rc.1`) have none:

@@ -92,6 +92,21 @@ jobs:
       - name: Pack release assets
         run: pnpm release:assets
 
+      - name: Setup Python for the release installer
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Pack complete framework distribution
+        env:
+          UPF_RELEASE_VERSION: ${{ needs.tag.outputs.name }}
+        run: UPF_RELEASE_VERSION="${UPF_RELEASE_VERSION#v}" pnpm release:distribution
+
+      - name: Verify artifact-only installation
+        env:
+          UPF_RELEASE_VERSION: ${{ needs.tag.outputs.name }}
+        run: UPF_RELEASE_VERSION="${UPF_RELEASE_VERSION#v}" node packages/cli/scripts/check-distribution.mjs
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
