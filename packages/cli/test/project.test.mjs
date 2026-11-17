@@ -3,9 +3,10 @@ import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-const cli = new URL('../dist/index.js', import.meta.url).pathname;
+const cli = fileURLToPath(new URL('../dist/index.js', import.meta.url));
 const run = (root, args) => JSON.parse(execFileSync(process.execPath, [cli, 'project', ...args, '--project', root], {encoding: 'utf8'}));
 
 test('actual CLI bootstraps a new project, resumes once, and reuses its adapter', async () => {
