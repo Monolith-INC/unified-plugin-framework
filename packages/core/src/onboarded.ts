@@ -3,8 +3,13 @@ import type { Diagnostic } from "./index.js";
 /** Manifest `extensions` key holding Unified Plugin Framework declarations. */
 export const UPF_EXTENSION = "io.github.monolith-inc.upf";
 
-/** Workflow adapters an onboarded plugin can serve. Grows as adapters are built. */
-export const WORKFLOW_ADAPTERS: ReadonlySet<string> = new Set(["code-review"]);
+/** The workflows the framework offers; each has one adapter in `@agent-plugins/workflows` (ADR-001). */
+export const WORKFLOW_NAMES = Object.freeze(["code-review"] as const);
+
+export type WorkflowName = (typeof WORKFLOW_NAMES)[number];
+
+/** Workflow adapters an onboarded plugin can serve. */
+export const WORKFLOW_ADAPTERS: ReadonlySet<string> = new Set(WORKFLOW_NAMES);
 
 export const onboardedDiagnosticCodes = {
   upfExtensionInvalid: "upf.extension.invalid",

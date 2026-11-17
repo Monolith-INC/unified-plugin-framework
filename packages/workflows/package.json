@@ -1,0 +1,23 @@
+{
+  "name": "@agent-plugins/workflows",
+  "version": "0.1.0",
+  "description": "Workflow contracts and the adapters that fulfil them with onboarded plugins (ADR-001).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json && tsc -p test/tsconfig.json",
+    "test": "tsc -b tsconfig.json && tsc -p test/tsconfig.json && node --test test/**/*.test.mjs"
+  },
+  "dependencies": {
+    "@agent-plugins/core": "workspace:*"
+  }
+}

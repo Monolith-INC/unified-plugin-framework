@@ -26,6 +26,7 @@
     "@agent-plugins/adapter-cursor": "workspace:*",
     "@agent-plugins/compiler": "workspace:*",
     "@agent-plugins/core": "workspace:*",
-    "@agent-plugins/installer": "workspace:*"
+    "@agent-plugins/installer": "workspace:*",
+    "@agent-plugins/workflows": "workspace:*"
   }
 }

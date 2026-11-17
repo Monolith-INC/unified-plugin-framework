@@ -79,7 +79,8 @@ The toolkit loads plugin roots, validates portable manifests, discovers immediat
 | `@agent-plugins/adapter-cursor` | Cursor adapter plus verified `hello-world` payload |
 | `@agent-plugins/adapter-codex` | Codex adapter plus verified `hello-world` payload |
 | `@agent-plugins/installer` | Transactional payload installer with locking, journaling, rollback, and installed-record verification |
-| `@agent-plugins/cli` | `agent-plugin` CLI (`validate`, `inspect`, `install`, `create`, `add skill`) |
+| `@agent-plugins/cli` | `agent-plugin` CLI (`validate`, `inspect`, `install`, `create`, `add skill`, `adapter-check`) |
+| `@agent-plugins/workflows` | Workflow contracts and their adapters; see [ADR-001](docs/adr/ADR-001-workflow-adapter-interface.md) and the [code review workflow](docs/workflows/code-review.md) |
 | `@agent-plugins/testing` | Shared test helpers |
 
 ## Requirements

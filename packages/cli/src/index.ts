@@ -27,6 +27,8 @@ import {
 import type { Diagnostic } from "@agent-plugins/core";
 import { installVendorBundle } from "@agent-plugins/installer";
 
+import { NODE_ADAPTER_CHECK_IO, runAdapterCheck } from "./adapter-check.js";
+
 const USAGE = `Usage: agent-plugin <command> [options]
 
 Commands:
@@ -37,6 +39,8 @@ Commands:
   create <plugin-name> [--path dir] Scaffold a portable plugin root
   add skill <skill-name> [--path dir]
                                     Add an immediate-child Skill to a plugin root
+  adapter-check <workflow> [--framework dir] [--plugin-root dir]... [--project dir]
+                                    Check a workflow adapter's readiness (declared, installed, bound)
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -59,6 +63,8 @@ export function run(argv: readonly string[]): number {
       return runAdd(rest);
     case "install":
       return runInstallCommand(rest);
+    case "adapter-check":
+      return runAdapterCheck(NODE_ADAPTER_CHECK_IO, rest, process.cwd());
     case "help":
     case "--help":
     case "-h":

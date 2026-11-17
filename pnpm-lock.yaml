@@ -74,6 +74,9 @@ importers:
       '@agent-plugins/installer':
         specifier: workspace:*
         version: link:../installer
+      '@agent-plugins/workflows':
+        specifier: workspace:*
+        version: link:../workflows
 
   packages/compiler:
     dependencies:
@@ -97,6 +100,12 @@ importers:
       '@agent-plugins/compiler':
         specifier: workspace:*
         version: link:../compiler
+      '@agent-plugins/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/workflows:
+    dependencies:
       '@agent-plugins/core':
         specifier: workspace:*
         version: link:../core

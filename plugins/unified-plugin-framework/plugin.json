@@ -1,0 +1,18 @@
+{
+  "name": "unified-plugin-framework",
+  "version": "0.1.0",
+  "description": "Project companion workflows backed by onboarded plugins through workflow adapters.",
+  "schemaVersion": "1.0.0",
+  "extensions": {
+    "io.github.monolith-inc.upf": {
+      "onboardedPlugins": [
+        {
+          "name": "monolithic-code-review-toolkit",
+          "version": "^0.6.0",
+          "source": "github:Monolith-INC/monolithic-code-review-toolkit",
+          "adapter": "code-review"
+        }
+      ]
+    }
+  }
+}

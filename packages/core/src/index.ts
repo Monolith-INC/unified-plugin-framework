@@ -17,9 +17,11 @@ import { onboardedDiagnosticCodes, readOnboardedPlugins, type OnboardedPlugin } 
 export {
   UPF_EXTENSION,
   WORKFLOW_ADAPTERS,
+  WORKFLOW_NAMES,
   readOnboardedPlugins,
   type OnboardedPlugin,
   type OnboardedPluginsRead,
+  type WorkflowName,
 } from "./onboarded.js";
 
 export type DiagnosticSeverity = "error" | "warning" | "info";
