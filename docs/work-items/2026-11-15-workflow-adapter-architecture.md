@@ -121,8 +121,8 @@ The main offering column is an initial reading and needs confirming per plugin.
 
 ## Open questions
 
-1. **Several plugins behind one adapter.** Discovery draws on Superpowers and BMad Method. Does each part of the contract map to one plugin, or can one part choose between plugins?
-2. **Skill mapping in practice.** How does a workflow skill hand a step to an onboarded plugin's skill reliably, given that the model decides which skill to follow?
+1. **Several plugins behind one adapter.** Answered by AGE-93: one operation may use skills from several plugins. Discovery's modes all run Superpowers' brainstorming flow and add BMad Method skills at set stages (composition `lead-and-layers`); every plugin they use is required.
+2. **Skill mapping in practice.** Answered in part by AGE-93: the assembled skill names the lead skill to run throughout and each added skill with the stage it belongs to. How reliably models follow the hand-off still needs observing in real sessions.
 3. **Where adapters live.** One folder per workflow adapter in this repository?
 4. **Contract format.** What defines each part of a contract: a name, a version and a description; or also input and output schemas for tool-based parts?
 5. **Elicitation and implementation workflows.** Which plugins supply them? They are not yet in the core functionalities map.

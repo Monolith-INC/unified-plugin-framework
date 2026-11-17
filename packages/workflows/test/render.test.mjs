@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { CODE_REVIEW_OPERATIONS, renderSkill, reviewToolkitAdapter } from "../dist/index.js";
+import { CODE_REVIEW_OPERATIONS, DISCOVERY_OPERATIONS, renderSkill, reviewToolkitAdapter } from "../dist/index.js";
 
 const templateText = (operation) =>
   readFileSync(new URL(`../../../plugins/unified-plugin-framework/skills/${operation}/SKILL.md`, import.meta.url), "utf8");
@@ -16,6 +16,13 @@ const rendered = (operation) => renderSkill(templateText(operation), reviewToolk
 test("templates never name a plugin; only the adapter does", () => {
   CODE_REVIEW_OPERATIONS.map((operation) => {
     assert.doesNotMatch(templateText(operation), /monolithic-code-review|review-setup|review-story-preflight/);
+    return operation;
+  });
+});
+
+test("Discovery templates name no plugin and no plugin skill either", () => {
+  DISCOVERY_OPERATIONS.map((operation) => {
+    assert.doesNotMatch(templateText(operation), /superpowers|bmad|brainstorming/i);
     return operation;
   });
 });

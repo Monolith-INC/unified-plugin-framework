@@ -27,14 +27,24 @@ export type PluginKnowledgeStore = {
 };
 
 /**
- * A workflow's adapter (ADR-001): its contract version, how plugins fulfil each operation, and where those plugins
- * keep their own knowledge store. `fulfil` is total and non-empty over `Operation`, so a missing or empty operation
- * does not compile.
+ * How an operation's plugin skills combine: `one-of` hands the work to the one that fits (each `use` says when);
+ * `lead-and-layers` runs the first skill throughout and adds the others at the stages their `use` names.
+ */
+export type SkillComposition = "one-of" | "lead-and-layers";
+
+/**
+ * A workflow's adapter (ADR-001): its contract version, how plugins fulfil each operation and how those skills
+ * combine, optional skills the user may add, which plugins' skills are invoked without a plugin prefix, and where
+ * the plugins keep their own knowledge store. `fulfil` is total and non-empty over `Operation`, so a missing or empty
+ * operation does not compile.
  */
 export interface WorkflowAdapter<Operation extends string> {
   readonly workflow: WorkflowName;
   readonly contractVersion: string;
+  readonly composition: SkillComposition;
   readonly fulfil: Readonly<Record<Operation, NonEmpty<PluginSkillRef>>>;
+  readonly catalog: readonly PluginSkillRef[];
+  readonly bareSkillPlugins: readonly string[];
   readonly knowledgeStores: readonly PluginKnowledgeStore[];
 }
 
@@ -104,13 +114,17 @@ const askUser = (message: string): Recovery => ({ action: "ask-user", message })
 const refs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
   Object.entries(adapter.fulfil).flatMap(([operation, served]) => served.map((ref) => [operation, ref] as const));
 
+/** The optional skills the user may add, labelled like operations. */
+const catalogRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
+  adapter.catalog.map((ref) => ["catalog", ref] as const);
+
 /** The setup skills the adapter's readiness recovery relies on, labelled like operations. */
 const setupRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
   adapter.knowledgeStores.map(({ plugin, setup }) => [`${plugin} knowledge store setup`, { plugin, skill: setup }] as const);
 
 /** Each plugin an adapter references, once, in first-reference order. */
 export const adapterPlugins = (adapter: WorkflowAdapter<string>): readonly string[] => [
-  ...new Set(refs(adapter).map(([, { plugin }]) => plugin)),
+  ...new Set([...refs(adapter), ...catalogRefs(adapter)].map(([, { plugin }]) => plugin)),
 ];
 
 /** "name version from source" for each plugin, using the framework's declaration when there is one. */
@@ -125,7 +139,16 @@ const declaration = (adapter: WorkflowAdapter<string>, onboarded: readonly Onboa
 
 /** A digest of the contract version and what the adapter maps, so changing either invalidates pins made against it. */
 export const mappingDigest = (adapter: WorkflowAdapter<string>): string =>
-  sha256(stableJson({ contractVersion: adapter.contractVersion, fulfil: adapter.fulfil, knowledgeStores: adapter.knowledgeStores }));
+  sha256(
+    stableJson({
+      contractVersion: adapter.contractVersion,
+      composition: adapter.composition,
+      fulfil: adapter.fulfil,
+      catalog: adapter.catalog,
+      bareSkillPlugins: adapter.bareSkillPlugins,
+      knowledgeStores: adapter.knowledgeStores,
+    }),
+  );
 
 const UPGRADE_CHECK = (workflow: string): string =>
   `\`agent-plugin upgrade-check ${workflow} --framework <framework plugin> --plugin-root <candidate plugin>\``;
@@ -258,7 +281,7 @@ const checkSameVersionContent = (facts: BindingFacts): Readiness => {
 };
 
 const checkMappedSkills = ({ adapter, onboarded, installed }: BindingFacts): Readiness => {
-  const missing = [...refs(adapter), ...setupRefs(adapter)].filter(
+  const missing = [...refs(adapter), ...catalogRefs(adapter), ...setupRefs(adapter)].filter(
     ([, { plugin, skill }]) => !(installed.get(plugin)?.skills ?? []).includes(skill),
   );
   return missing.length === 0

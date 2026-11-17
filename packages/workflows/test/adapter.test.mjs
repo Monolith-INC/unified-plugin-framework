@@ -10,6 +10,9 @@ const reviewKitStore = { plugin: "review-kit", file: ".review-kit/config.json", 
 const adapter = Object.freeze({
   workflow: "code-review",
   contractVersion: "1.0.0",
+  composition: "one-of",
+  catalog: [],
+  bareSkillPlugins: [],
   fulfil: Object.freeze({
     "review-task": [ref("review-kit", "task")],
     "review-story": [ref("review-kit", "story-pre"), ref("review-kit", "story-post")],

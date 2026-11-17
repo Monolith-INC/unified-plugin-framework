@@ -6,6 +6,15 @@ import type { OnboardedLock } from "./lock.js";
 import { reviewToolkitAdapter } from "./code-review.js";
 
 export {
+  brainstormingDiscoveryAdapter,
+  DISCOVERY_CONTRACT_VERSION,
+  DISCOVERY_OPERATIONS,
+  type DiscoveryAdapter,
+  type DiscoveryOperation,
+} from "./discovery.js";
+import { brainstormingDiscoveryAdapter } from "./discovery.js";
+
+export {
   adapterPlugins,
   checkAdapterReadiness,
   checkPluginBinding,
@@ -22,6 +31,7 @@ export {
   type ReadinessFacts,
   type Recovery,
   type ReadinessStep,
+  type SkillComposition,
   type WorkflowAdapter,
 } from "./adapter.js";
 
@@ -56,6 +66,7 @@ export {
 /** The active adapter for each workflow; a missing or unknown workflow name does not compile. */
 export const WORKFLOWS: Readonly<Record<WorkflowName, WorkflowAdapter<string>>> = Object.freeze({
   "code-review": reviewToolkitAdapter,
+  discovery: brainstormingDiscoveryAdapter,
 });
 
 const WORKFLOW_LOOKUP: ReadonlyMap<string, WorkflowAdapter<string>> = new Map(Object.entries(WORKFLOWS));

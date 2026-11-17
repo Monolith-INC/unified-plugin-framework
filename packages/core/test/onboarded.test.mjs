@@ -47,7 +47,7 @@ test("missing fields, unknown adapters and duplicates name the entry and the pro
       onboardedPlugins: [
         reviewToolkit,
         { name: "superpowers", source: "github:obra/superpowers", adapter: "code-review" },
-        { ...reviewToolkit, name: "bmad-method", adapter: "discovery" },
+        { ...reviewToolkit, name: "bmad-method", adapter: "planning" },
         { ...reviewToolkit, version: "^2.0.0" },
       ],
     }),

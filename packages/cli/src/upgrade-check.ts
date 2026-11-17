@@ -15,7 +15,7 @@ import {
   type WorkflowAdapter,
 } from "@agent-plugins/workflows";
 
-import { configError, gatherBinding, NODE_PLUGIN_FACTS_IO, tokenize, type PluginFactsIo } from "./plugin-facts.js";
+import { configError, gatherBinding, NODE_PLUGIN_FACTS_IO, parseRootArg, tokenize, type PluginFactsIo, type PluginRootArg } from "./plugin-facts.js";
 
 export const UPGRADE_CHECK_USAGE = `Usage: agent-plugin upgrade-check <workflow> --framework <dir> --plugin-root <dir>...
 
@@ -36,7 +36,7 @@ export interface UpgradeCheckIo extends PluginFactsIo {
 interface UpgradeRequest {
   readonly adapter: WorkflowAdapter<string>;
   readonly framework: string;
-  readonly pluginRoots: readonly string[];
+  readonly pluginRoots: readonly PluginRootArg[];
 }
 
 type Parsed =
@@ -68,7 +68,7 @@ const toRequest = (
           ? { kind: "invalid", message: "--plugin-root is required: the candidate version of each plugin to check." }
           : {
               kind: "ok",
-              request: { adapter, framework: resolve(cwd, values.framework), pluginRoots: roots.map((root) => resolve(cwd, root)) },
+              request: { adapter, framework: resolve(cwd, values.framework), pluginRoots: roots.map(parseRootArg(cwd)) },
             };
 };
 

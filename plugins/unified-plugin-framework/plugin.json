@@ -11,6 +11,18 @@
           "version": "^0.6.0",
           "source": "github:Monolith-INC/monolithic-code-review-toolkit",
           "adapter": "code-review"
+        },
+        {
+          "name": "superpowers",
+          "version": "^7.0.0",
+          "source": "github:obra/superpowers",
+          "adapter": "discovery"
+        },
+        {
+          "name": "bmad-method",
+          "version": "^6.12.0",
+          "source": "github:bmad-code-org/BMAD-METHOD",
+          "adapter": "discovery"
         }
       ]
     }

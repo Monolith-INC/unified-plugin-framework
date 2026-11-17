@@ -45,7 +45,7 @@ Chosen option: **Typed interface with frozen implementations**, because the comp
 | Piece | What it is | Where it lives |
 | --- | --- | --- |
 | `WORKFLOW_NAMES` / `WorkflowName` | The workflows the framework offers, as an `as const` list and its derived type | `packages/core` (manifest validation needs the names) |
-| `WorkflowAdapter<Operation>` | The generic interface every adapter implements, plus the pure readiness check | `packages/workflows/src/adapter.ts` |
+| `WorkflowAdapter<Operation>` | The generic interface every adapter implements, plus the pure readiness check. It records how an operation's skills combine (`one-of` or `lead-and-layers`), an optional-skill `catalog`, and the plugins whose skills carry no prefix (`bareSkillPlugins`) | `packages/workflows/src/adapter.ts` |
 | `<WORKFLOW>_OPERATIONS` / `<Workflow>Operation` | The workflow's contract: an `as const` list of operation names, its derived type, and a contract version | `packages/workflows/src/<workflow>.ts` |
 | `<plugin>Adapter` | A frozen object implementing the interface for one plugin | Next to its contract |
 | `WORKFLOWS` | The active adapter for each workflow, typed `Record<WorkflowName, …>` | `packages/workflows/src/index.ts` |
@@ -126,7 +126,8 @@ Each of these is a compile error: leaving out `"review-feature"`, adding an oper
 7. Readiness is a pure function over an adapter and observed facts. File and host reads happen at the command-line boundary, through injected effects.
 8. Contract skills in the plugin source are templates and never name a plugin; a test enforces it. The assembler fills them from the adapter at release time, and `pnpm payloads:verify` fails when a shipped bundle drifts from its source.
 9. Every readiness failure carries a recovery action: run a skill and continue, or ask the user for the one thing only they can do. No failure stops the work without a recovery path.
-10. Share code between adapters only once two adapters exist and show what they have in common.
+10. Share code between adapters only once two adapters exist and show what they have in common. With code review and Discovery in place, the shared shape gained `composition`, `catalog` and `bareSkillPlugins`.
+11. Every plugin an operation or the catalog uses is required: readiness is never partial, and a missing plugin is a readiness failure, not a reduced contract.
 
 ### Consequences
 - **Positive:** Missing, extra or empty operations and unknown workflow names are compile errors. The contract is a type that code review can read. Readiness and upgrade checks are unit-testable.
@@ -135,7 +136,7 @@ Each of these is a compile error: leaving out `"review-feature"`, adding an oper
   - [x] [AGE-70](https://linear.app/agentical-monolithics/issue/AGE-70/pin-onboarded-plugin-versions-and-check-upgrades-against-adapter-tests): use the adapter readiness check as the upgrade gate. The plugin side of readiness, `checkPluginBinding`, gates `agent-plugin upgrade-check`, which pins each plugin in `onboarded.lock.json`. The assembler writes each pinned version into the assembled skills' readiness step.
   - [ ] [AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures): repair agent for failures that cannot recover automatically.
   - [ ] [AGE-95](https://linear.app/agentical-monolithics/issue/AGE-95/install-any-plugin-through-the-host-adapters-not-just-hello-world): package the framework plugin, with its generated skills, through the host adapters.
-  - [ ] [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method): implement the Discovery contract with this pattern, then extract anything the two adapters share.
+  - [x] [AGE-93](https://linear.app/agentical-monolithics/issue/AGE-93/discovery-workflow-adapter-superpowers-and-bmad-method): implement the Discovery contract with this pattern, then extract anything the two adapters share. See [the Discovery workflow](../workflows/discovery.md).
 
 ## 5. Pros and Cons of Options
 

@@ -2,12 +2,28 @@
   "lockVersion": 1,
   "plugins": [
     {
+      "adapter": "discovery",
+      "checksum": "0a50abef18ebf15bd241920c1ae58b18c2849d354ee20dfe456fc33dec653396",
+      "contractVersion": "1.0.0",
+      "mappingDigest": "3b2cac782d62fde94df2bdc10331e7d05ec0a5bdfb7a831bf133896e021e173c",
+      "plugin": "bmad-method",
+      "version": "6.12.0"
+    },
+    {
       "adapter": "code-review",
       "checksum": "fb6ce6fa82be37782146a46d8b17f1bdb1f4982a9b49621d637a4dca10828395",
       "contractVersion": "1.0.0",
-      "mappingDigest": "bde0acb09d99260b6ad8e28d11da939adefb39c415738dece66e333b7bd4dfa9",
+      "mappingDigest": "916bfb102f4dfcb6fea7befe50fa39f9e49c81edf7bfb9a1473a3b4fd31fa944",
       "plugin": "monolithic-code-review-toolkit",
       "version": "0.6.0"
+    },
+    {
+      "adapter": "discovery",
+      "checksum": "2765c35b379c7030140ed95147eca8fd897ba423f7562ea1ef4202c3bf076d0d",
+      "contractVersion": "1.0.0",
+      "mappingDigest": "3b2cac782d62fde94df2bdc10331e7d05ec0a5bdfb7a831bf133896e021e173c",
+      "plugin": "superpowers",
+      "version": "7.0.0"
     }
   ]
 }

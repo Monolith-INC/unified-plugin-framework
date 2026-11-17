@@ -18,6 +18,7 @@ const toolkit = (skill: string, use?: string): PluginSkillRef =>
 export const reviewToolkitAdapter: CodeReviewAdapter = Object.freeze({
   workflow: "code-review",
   contractVersion: CODE_REVIEW_CONTRACT_VERSION,
+  composition: "one-of",
   fulfil: Object.freeze({
     "review-task": Object.freeze([toolkit("review-task")] as const),
     "review-story": Object.freeze([
@@ -26,6 +27,8 @@ export const reviewToolkitAdapter: CodeReviewAdapter = Object.freeze({
     ] as const),
     "review-feature": Object.freeze([toolkit("review-feature")] as const),
   }),
+  catalog: Object.freeze([]),
+  bareSkillPlugins: Object.freeze([]),
   knowledgeStores: Object.freeze([
     Object.freeze({ plugin: TOOLKIT, file: ".monolithic-code-review/sources.json", key: ["knowledge", "root"] as const, setup: "review-setup" }),
   ]),

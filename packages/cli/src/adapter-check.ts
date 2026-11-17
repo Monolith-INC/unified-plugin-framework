@@ -13,10 +13,12 @@ import {
   configError,
   gatherBinding,
   NODE_PLUGIN_FACTS_IO,
+  parseRootArg,
   tokenize,
   type Gathered,
   type JsonFile,
   type PluginFactsIo,
+  type PluginRootArg,
 } from "./plugin-facts.js";
 
 export const ADAPTER_CHECK_USAGE = `Usage: agent-plugin adapter-check <workflow> --framework <dir> [--plugin-root <dir>]... [--project <dir>]
@@ -33,7 +35,7 @@ interface CheckRequest {
   readonly adapter: WorkflowAdapter<string>;
   readonly framework: string;
   readonly project: string;
-  readonly pluginRoots: readonly string[];
+  readonly pluginRoots: readonly PluginRootArg[];
 }
 
 type Parsed =
@@ -67,7 +69,7 @@ const toRequest = (
               adapter,
               framework: resolve(cwd, values.framework),
               project: resolve(cwd, values.project ?? "."),
-              pluginRoots: (values["plugin-root"] ?? []).map((root) => resolve(cwd, root)),
+              pluginRoots: (values["plugin-root"] ?? []).map(parseRootArg(cwd)),
             },
           };
 };

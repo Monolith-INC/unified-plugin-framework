@@ -19,7 +19,7 @@
           "name": "bmad-method",
           "version": "^6.0.0",
           "source": "github:bmad-code-org/BMAD-METHOD",
-          "adapter": "discovery"
+          "adapter": "planning"
         },
         {
           "name": "monolithic-code-review-toolkit",

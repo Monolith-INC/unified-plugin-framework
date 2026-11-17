@@ -64,7 +64,7 @@ test("parseLock accepts a complete lock and rejects incomplete, duplicate or unk
     { lockVersion: 2, plugins: [] },
     { lockVersion: 1, plugins: [pin("x"), pin("x")] },
     { lockVersion: 1, plugins: [pin("x", { checksum: "nope" })] },
-    { lockVersion: 1, plugins: [pin("x", { adapter: "discovery" })] },
+    { lockVersion: 1, plugins: [pin("x", { adapter: "planning" })] },
     { lockVersion: 1, plugins: [{ ...pin("x"), extra: "field" }] },
     { lockVersion: 1 },
     [],

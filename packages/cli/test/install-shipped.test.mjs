@@ -32,14 +32,22 @@ const install = (plugin, vendor) => {
 
 const diagnosticCodes = (stderr) => JSON.parse(stderr).diagnostics.map(({ code }) => code);
 
-test("the framework plugin installs each host's assembled skills, naming the onboarded plugin and no placeholder", () => {
+test("the framework plugin installs each host's assembled skills, naming the onboarded plugins and no placeholder", () => {
   VENDORS.map((vendor) => {
     const { target, code, stderr } = install(framework, vendor);
     assert.equal(code, 0, stderr);
-    assert.deepEqual(readdirSync(join(target, "skills")).toSorted(), ["review-feature", "review-story", "review-task"]);
+    assert.deepEqual(readdirSync(join(target, "skills")).toSorted(), [
+      "discover-comprehensive",
+      "discover-quick",
+      "discover-research",
+      "discover-thorough",
+      "review-feature",
+      "review-story",
+      "review-task",
+    ]);
     readdirSync(join(target, "skills")).map((skill) => {
       const text = readFileSync(join(target, "skills", skill, "SKILL.md"), "utf8");
-      assert.match(text, /monolithic-code-review-toolkit:/);
+      assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/ : /monolithic-code-review-toolkit:/);
       assert.doesNotMatch(text, /\{\{/);
       return skill;
     });
