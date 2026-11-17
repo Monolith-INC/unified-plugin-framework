@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { appendFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { mappingDigest, reviewToolkitAdapter } from "@agent-plugins/workflows";
@@ -118,7 +118,7 @@ test("upgrade-check writes the lock once, through its injected effect, only when
   const passing = injected();
   assert.equal(passing.run(), 0);
   assert.equal(passing.writes.length, 1);
-  assert.equal(passing.writes[0][0], join("/framework", "onboarded.lock.json"));
+  assert.equal(passing.writes[0][0], resolve("/framework", "onboarded.lock.json"));
   assert.equal(JSON.parse(passing.writes[0][1]).plugins[0].version, "0.6.3");
   const failing = injected({ skills: ["review-task"] });
   assert.equal(failing.run(), 1);
