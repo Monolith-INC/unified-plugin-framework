@@ -12,7 +12,7 @@
     "payloads:build": "pnpm -r --workspace-concurrency=1 --if-present run payload:build",
     "payloads:verify": "pnpm -r --workspace-concurrency=1 --if-present run payload:verify",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
-    "test": "pnpm -r --filter \"./packages/*\" test"
+    "test": "pnpm -r --no-bail --filter \"./packages/*\" test"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

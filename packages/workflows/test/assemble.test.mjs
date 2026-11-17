@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { assemblePluginSource, assembleSkills, reviewToolkitAdapter } from "../dist/index.js";
 
@@ -46,7 +47,7 @@ test("an operation claimed by two workflows fails", () => {
 
 test("assemblePluginSource copies the plugin and renders its templates into staging, leaving the source untouched", () => {
   const staging = join(mkdtempSync(join(tmpdir(), "upf-assemble-")), "plugin");
-  const result = assemblePluginSource(pluginSource.pathname, staging);
+  const result = assemblePluginSource(fileURLToPath(pluginSource), staging);
   assert.equal(result.ok, true, result.problems?.join("; "));
   assert.equal(existsSync(join(staging, "plugin.json")), true);
   readdirSync(join(staging, "skills")).map((skill) => {
@@ -62,7 +63,7 @@ test("assemblePluginSource refuses a staging directory that already exists", () 
   const staging = mkdtempSync(join(tmpdir(), "upf-assemble-existing-"));
   mkdirSync(join(staging, "keep"));
   writeFileSync(join(staging, "keep", "file.txt"), "keep");
-  const result = assemblePluginSource(pluginSource.pathname, staging);
+  const result = assemblePluginSource(fileURLToPath(pluginSource), staging);
   assert.equal(result.ok, false);
   assert.equal(readFileSync(join(staging, "keep", "file.txt"), "utf8"), "keep");
 });

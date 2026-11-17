@@ -3,10 +3,11 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { releasePayloads, SHIPPED_PLUGINS, withAssembledSource } from "../dist/index.js";
 
-const framework = new URL("../../../plugins/unified-plugin-framework/", import.meta.url).pathname;
+const framework = fileURLToPath(new URL("../../../plugins/unified-plugin-framework/", import.meta.url));
 
 const unusedAdapter = Object.freeze({ vendor: "claude" });
 
