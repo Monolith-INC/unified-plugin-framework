@@ -41,17 +41,22 @@ export type PluginRead = {
   readonly skills: readonly string[];
 };
 
-/** A `--plugin-root` argument: a directory, optionally named as `name=dir` for plugins without a manifest. */
-export type PluginRootArg = { readonly path: string; readonly name: string | undefined };
+/**
+ * A `--plugin-root` argument: a directory, optionally named as `name=dir` or `name@version=dir` for plugins without a
+ * manifest, so a release of such a plugin can be given its version.
+ */
+export type PluginRootArg = { readonly path: string; readonly name: string | undefined; readonly version: string | undefined };
 
-const NAMED_ROOT = /^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)=(.+)$/;
+const NAMED_ROOT = /^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?:@(\d+\.\d+\.\d+))?=(.+)$/;
 
 /** Parses a `--plugin-root` value; `cwd` resolves relative paths. */
 export const parseRootArg =
   (cwd: string) =>
   (text: string): PluginRootArg => {
     const named = NAMED_ROOT.exec(text);
-    return named === null ? { path: resolve(cwd, text), name: undefined } : { path: resolve(cwd, named[2] ?? ""), name: named[1] };
+    return named === null
+      ? { path: resolve(cwd, text), name: undefined, version: undefined }
+      : { path: resolve(cwd, named[3] ?? ""), name: named[1], version: named[2] };
   };
 
 /** Facts gathered from disk, or every configuration problem found. */
@@ -84,7 +89,7 @@ export const errorsOf = (label: string, inspection: PluginInspection): readonly 
         .filter(({ severity }) => severity === "error")
         .map(({ code, message, path }) => `${label}: ${code} ${message}${path === undefined ? "" : ` (${path})`}`);
 
-/** The version a declared range starts at: what a manifest-less plugin is taken to be. */
+/** The version a declared range starts at: what a manifest-less plugin is taken to be when none is given. */
 const declaredFloor = (onboarded: readonly OnboardedPlugin[], name: string): string | undefined => {
   const range = parseRange(onboarded.find((plugin) => plugin.name === name)?.version ?? "");
   return range === undefined ? undefined : range.floor.join(".");
@@ -92,16 +97,25 @@ const declaredFloor = (onboarded: readonly OnboardedPlugin[], name: string): str
 
 type Resolved = { readonly ok: true; readonly entry: readonly [string, InstalledPlugin] } | { readonly ok: false; readonly problems: readonly string[] };
 
+/** A manifest's version and a version given on the command line must agree; one alone is enough. */
+const versionConflict = (arg: PluginRootArg, read: PluginRead): string | undefined =>
+  arg.version !== undefined && read.version !== undefined && arg.version !== read.version
+    ? `Plugin root ${arg.path} is version ${read.version} by its manifest, not ${arg.version} as given.`
+    : undefined;
+
 const resolveRead = (arg: PluginRootArg, read: Result<PluginRead>, onboarded: readonly OnboardedPlugin[]): Resolved => {
   const name = read.ok ? (arg.name ?? read.value.name) : undefined;
-  const version = read.ok && name !== undefined ? (read.value.version ?? declaredFloor(onboarded, name)) : undefined;
+  const version = read.ok && name !== undefined ? (read.value.version ?? arg.version ?? declaredFloor(onboarded, name)) : undefined;
+  const conflict = read.ok ? versionConflict(arg, read.value) : undefined;
   return !read.ok
     ? { ok: false, problems: read.diagnostics.map(({ code, message, path }) => `Plugin root ${arg.path}: ${code} ${message}${path === undefined ? "" : ` (${path})`}`) }
     : name === undefined
-      ? { ok: false, problems: [`Plugin root ${arg.path} has no manifest: name it as --plugin-root <plugin>=${arg.path}.`] }
-      : version === undefined
-        ? { ok: false, problems: [`Plugin root ${arg.path} has no version, and the framework declares no exact or ^/~ range for ${name}.`] }
-        : { ok: true, entry: [name, { version, checksum: read.value.checksum, skills: read.value.skills }] };
+      ? { ok: false, problems: [`Plugin root ${arg.path} has no manifest: name it as --plugin-root <plugin>@<version>=${arg.path}.`] }
+      : conflict !== undefined
+        ? { ok: false, problems: [conflict] }
+        : version === undefined
+          ? { ok: false, problems: [`Plugin root ${arg.path} has no version: give it as --plugin-root ${name}@<version>=${arg.path}.`] }
+          : { ok: true, entry: [name, { version, checksum: read.value.checksum, skills: read.value.skills }] };
 };
 
 const duplicates = (names: readonly string[]): readonly string[] => [...new Set(names.filter((name, index) => names.indexOf(name) !== index))];

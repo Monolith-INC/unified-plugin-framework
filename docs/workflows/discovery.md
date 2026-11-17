@@ -34,13 +34,15 @@ Both plugins are required, including for the catalog: readiness is never partial
 
 ## Pinning and upgrading
 
-Superpowers is read as a Claude Code plugin: its name and version come from `.claude-plugin/plugin.json`. BMad Method is read as a folder of skills with no manifest: name it on the command line, and its version is the declared range's starting version. For both, the checksum covers the manifest, if any, and every `SKILL.md`, with line endings normalised.
+Superpowers is read as a Claude Code plugin: its name and version come from `.claude-plugin/plugin.json`. BMad Method is read as a folder of skills with no manifest, so name it on the command line, and give the release's version as `bmad-method@<version>=<dir>`. Without a version it is taken to be the declared range's starting version, so a newer release given no version is refused as new content under the pinned version. For both, the checksum covers the manifest, if any, and every `SKILL.md`, with line endings normalised.
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin upgrade-check discovery \
   --framework plugins/unified-plugin-framework \
   --plugin-root <superpowers-plugin> \
-  --plugin-root bmad-method=<bmad-method-checkout>
+  --plugin-root bmad-method@<version>=<bmad-method-checkout>
 ```
+
+A version given this way must agree with the plugin's own manifest when it has one.
 
 `adapter-check discovery` takes the same `--plugin-root` values, plus `--project`.

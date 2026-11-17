@@ -276,7 +276,9 @@ const checkSameVersionContent = (facts: BindingFacts): Readiness => {
     : notReady(
         "installed",
         `A release must not change under its own version: ${changed.join("; ")}.`,
-        askUser("Check the candidate against the published release, or publish the change as a new version."),
+        askUser(
+          "Check the candidate against the published release. A plugin without a manifest takes its declared range's starting version unless given one: pass the release's version as --plugin-root <plugin>@<version>=<dir>.",
+        ),
       );
 };
 

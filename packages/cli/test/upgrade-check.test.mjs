@@ -193,7 +193,7 @@ test("a skills folder hashes the same with either line ending, and needs a name"
   assert.equal(lf, crlf);
   const unnamed = upgradeDiscovery(root, [superpowers, skillsFolder()]);
   assert.equal(unnamed.exitCode, 2);
-  assert.match(unnamed.stderr, /has no manifest: name it as --plugin-root <plugin>=/);
+  assert.match(unnamed.stderr, /has no manifest: name it as --plugin-root <plugin>@<version>=/);
 });
 
 test("a Claude Code plugin outside its declared range fails the upgrade gate, leaving the lock unchanged", () => {
@@ -203,4 +203,25 @@ test("a Claude Code plugin outside its declared range fails the upgrade gate, le
   assert.equal(result.exitCode, 1);
   assert.match(JSON.parse(result.stderr).reason, /superpowers 8\.0\.0 \(declared \^7\.0\.0\)/);
   assert.equal(lockAt(root), before);
+});
+
+test("a newer release of a manifest-less plugin is adopted when its version is given, and refused when it is not", () => {
+  const root = frameworkCopy({ unpinned: true });
+  const superpowers = claudePlugin();
+  assert.equal(upgradeDiscovery(root, [superpowers, `bmad-method=${skillsFolder()}`]).exitCode, 0);
+  const next = skillsFolder();
+  appendFileSync(join(next, "skills", "bmad-spec", "SKILL.md"), "A change in the next release.\n");
+  const unversioned = upgradeDiscovery(root, [superpowers, `bmad-method=${next}`]);
+  assert.equal(unversioned.exitCode, 1);
+  assert.match(JSON.parse(unversioned.stderr).recovery.message, /--plugin-root <plugin>@<version>=<dir>/);
+  const versioned = upgradeDiscovery(root, [superpowers, `bmad-method@6.13.0=${next}`]);
+  assert.equal(versioned.exitCode, 0, versioned.stderr);
+  assert.deepEqual(JSON.parse(versioned.stdout).pinned[1], { plugin: "bmad-method", version: "6.13.0", checksum: JSON.parse(versioned.stdout).pinned[1].checksum });
+  assert.equal(JSON.parse(lockAt(root)).plugins.find(({ plugin }) => plugin === "bmad-method").version, "6.13.0");
+});
+
+test("a version given on the command line must agree with the plugin's own manifest", () => {
+  const result = upgradeDiscovery(frameworkCopy({ unpinned: true }), [`superpowers@7.1.0=${claudePlugin()}`, `bmad-method=${skillsFolder()}`]);
+  assert.equal(result.exitCode, 2);
+  assert.match(result.stderr, /is version 7\.0\.0 by its manifest, not 7\.1\.0 as given/);
 });
