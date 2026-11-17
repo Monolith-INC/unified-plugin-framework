@@ -29,16 +29,16 @@
       "sha256": "fd19774d93a5e64b084336ea270c962b8691f7ca19ee3fdc6326bd44dc1459c9"
     },
     {
-      "bytes": 3803,
+      "bytes": 3806,
       "mode": 420,
       "path": "skills/discover-comprehensive/SKILL.md",
-      "sha256": "737bbb516d7a1e03405bafef9ee7e0518321347cb5008e5112c9ab89f16fb89d"
+      "sha256": "4bcd4c998b300b8a636cd79aa585714d16247b158457f6119b14ab5404d10461"
     },
     {
-      "bytes": 3520,
+      "bytes": 3523,
       "mode": 420,
       "path": "skills/discover-quick/SKILL.md",
-      "sha256": "791f7005625b92bbe12d1524dfbfb1bcf593e5b743cde124acdcd49f374dc1cc"
+      "sha256": "47f6d6efadb6d85fea726d01b9882a2d1bf8a0690b1652f35d4d1793ccf5233f"
     },
     {
       "bytes": 3749,
@@ -47,10 +47,10 @@
       "sha256": "e441ae8a5e0bb3b68c702a963904bd2f82627b2c962bb8efde6578fd14830a7b"
     },
     {
-      "bytes": 3688,
+      "bytes": 3691,
       "mode": 420,
       "path": "skills/discover-thorough/SKILL.md",
-      "sha256": "bbd959485fb83f6e86cdbc83a896f5068e3406faf05925d870dcb45cef3bf0c3"
+      "sha256": "03a2e106b26f994aeaedd79d1db0ef006ee3a2966b0ad181a9b889562aef3433"
     },
     {
       "bytes": 5969,
@@ -137,12 +137,12 @@
       "sha256": "3ef6a97995025128750331776c6a0e597cb2b0ee73e7c69d404ebb4749a81b78"
     }
   ],
-  "payloadDigest": "8fd161b30366c47fafe568e6ea800d9103cd77b0e78f1f4ba6ec096ba40c8687",
+  "payloadDigest": "0bf3307df28a5c1b746403e161e41eb502eab4010477bf2b826eaa2b81ab3009",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "2adbbc9b9b54b961517888ffb5823aff983bfda1928e5fb232a4da52ddcb63fa",
+  "sourceDigest": "a99f4949a16886d8372be37335c4ca92931d2ce910f79d1501380c0e10ce3f01",
   "vendor": "codex"
 }

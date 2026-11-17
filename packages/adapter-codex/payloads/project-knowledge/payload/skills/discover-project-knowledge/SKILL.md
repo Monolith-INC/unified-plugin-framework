@@ -1,6 +1,6 @@
 ---
 name: discover-project-knowledge
-description: Use independently to build or refresh a project knowledge store: a file-shaped index of what a repository is, how it is built, and how changes are governed.
+description: Use independently to build or refresh a project knowledge store — a file-shaped index of what a repository is, how it is built, and how changes are governed.
 ---
 
 # Discover Project Knowledge
