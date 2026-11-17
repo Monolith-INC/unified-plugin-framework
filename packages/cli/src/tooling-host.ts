@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
 import { fail, nodeProjectFiles, object, ok, type Result } from "@agent-plugins/project";
 import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinFor, sourceMatches, type BindingFacts } from "@agent-plugins/workflows";
+import { rootArg, selectedPlugins, sourcesFor, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
+import { fetchSources, GIT_FETCHER, unfetched } from "./dependency-fetch.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
 import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
@@ -16,17 +18,38 @@ export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.m
 export const toolsRoot = (project: string): string => join(project, ".upf-tools");
 export const marketplaceRoot = toolsRoot;
 export const pluginTarget = (project: string, name: string): string => join(toolsRoot(project), "plugins", name);
-export const pluginNames = (input: BootstrapInput): readonly string[] => [...new Set(input.workflows.flatMap((name) => {
-  const adapter = findWorkflow(name);
-  return adapter === undefined ? [] : adapterPlugins(adapter);
-}))];
+export const pluginNames = (input: BootstrapInput): readonly string[] => selectedPlugins(input.workflows);
+const FRAMEWORK_PLUGIN = join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework");
+/** Verified checkouts of fetched dependency sources, one per plugin and pinned version. */
+export const sourcesRoot = (project: string): string => join(toolsRoot(project), "sources");
+
+/** Selected plugins without an explicit root, each with its declared source at the pinned version. */
+export const dependencySources = (project: string, input: BootstrapInput): Result<readonly DependencySource[]> => {
+  const roots = parseRootArgs(project, input.pluginRoots);
+  return roots.ok ? sourcesFor(NODE_PLUGIN_FACTS_IO, FRAMEWORK_PLUGIN, input.workflows, roots.roots) : setupFailure(roots.message);
+};
+/** Explicit roots as given, plus the cached checkout for every plugin bootstrap fetches; both pass one binding gate. */
+export const resolvedInput = (project: string, input: BootstrapInput): BootstrapInput => {
+  const sources = dependencySources(project, input);
+  return sources.ok ? { ...input, pluginRoots: [...input.pluginRoots, ...sources.value.map((source) => rootArg(sourcesRoot(project), source))] } : input;
+};
+/** Sources still to fetch, so a fresh project's dependencies are missing rather than misconfigured. */
+export const pendingSources = (project: string, input: BootstrapInput): Promise<Result<readonly DependencySource[]>> => {
+  const sources = dependencySources(project, input);
+  return sources.ok ? unfetched(sourcesRoot(project), sources.value).then(ok) : Promise.resolve(sources);
+};
+const fetchDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher): Promise<Result<string>> => {
+  const sources = dependencySources(project, input);
+  return sources.ok ? fetchSources({ project, cache: sourcesRoot(project), framework: FRAMEWORK_PLUGIN, workflows: input.workflows,
+    io: NODE_PLUGIN_FACTS_IO, fetcher }, sources.value) : Promise.resolve(sources);
+};
 
 export const pluginBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => {
   const parsed = parseRootArgs(project, input.pluginRoots);
   const bindings = input.workflows.map((name) => {
     const adapter = findWorkflow(name);
     return parsed.ok && adapter !== undefined ? gatherBinding(NODE_PLUGIN_FACTS_IO, adapter,
-      join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework"), parsed.roots) : undefined;
+      FRAMEWORK_PLUGIN, parsed.roots) : undefined;
   });
   const problem = bindings.find((binding) => binding?.kind !== "facts");
   return !parsed.ok || problem !== undefined || bindings.some((binding) => binding === undefined)
@@ -66,8 +89,10 @@ export const activeSkillsMatch = (project: string, input: BootstrapInput, discov
   }));
 };
 
-/** Stage complete unmodified dependency trees; host-only manifests are generated in a separate wrapper. */
-export const stageDependencies = (project: string, input: BootstrapInput): Promise<Result<string>> => {
+/** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
+export const stageDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher = GIT_FETCHER): Promise<Result<string>> =>
+  fetchDependencies(project, input, fetcher).then((fetched) => fetched.ok ? stageResolved(project, resolvedInput(project, input)) : fetched);
+const stageResolved = (project: string, input: BootstrapInput): Promise<Result<string>> => {
   const bindings = pluginBindings(project, input);
   const roots = parseRootArgs(project, input.pluginRoots);
   return !bindings.ok ? Promise.resolve(bindings) : !roots.ok ? Promise.resolve(setupFailure(roots.message))
@@ -114,7 +139,7 @@ const copySource = async (project: string, target: string, source: string, name:
       .catch(() => setupFailure(`Could not stage ${name}; preserve existing source and wrapper, then inspect the partial installation.`));
 };
 const pinnedVersion = (name: string): string => {
-  const raw = NODE_PLUGIN_FACTS_IO.readJson(join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework", LOCK_FILE));
+  const raw = NODE_PLUGIN_FACTS_IO.readJson(join(FRAMEWORK_PLUGIN, LOCK_FILE));
   const lock = raw.kind === "value" ? parseLock(raw.value) : undefined;
   return lock?.ok ? lock.lock.plugins.find((pin) => pin.plugin === name)?.version ?? "0.0.0" : "0.0.0";
 };

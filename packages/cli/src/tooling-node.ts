@@ -5,7 +5,7 @@ import { CODEX_TOOLING, codexToolingRegistration } from "@agent-plugins/adapter-
 import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, readToml, setupFailure } from "./tooling-files.js";
-import { activeSkillsMatch, discoverHost, expectedDependencySkills, installHostPlugins, marketplaceRoot, pluginBindings, pluginNames, pluginTarget, registerHost, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
+import { activeSkillsMatch, discoverHost, expectedDependencySkills, installHostPlugins, marketplaceRoot, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
@@ -31,7 +31,7 @@ const inspect = async (project: string, input: BootstrapInput, step: ToolingStep
     case "knowledge-content": return inspectKnowledgeContent(project, input);
     case "knowledge-server": return inspectServer(project, input);
     case "review": return inspectReview(project, input);
-    case "host-discovery": return inspectDiscovery(project, input);
+    case "host-discovery": return inspectDiscovery(project, resolvedInput(project, input));
     case "tracker": return input.trackerRef === undefined ? missing("Provide trackerRef for an existing scoped item to verify a read without publishing test work.")
       : operate(nodeProjectIO(project), { operation: "get_work_item", ref: input.trackerRef })().then((result) => result.ok && result.value.status === "completed"
         ? ready("Selected adapter read an existing project-scoped item.") : result.ok ? missing("Complete project settings and retry the scoped read.") : result);
@@ -51,14 +51,14 @@ const configureStep = (project: string, input: BootstrapInput, step: ToolingStep
       : setup(nodeProjectIO(project), input.answers)().then((result) => result.ok ? ok("Settings saved.") : result);
     case "cli": return wireCli(project).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
     case "skills": return installSkills(project).then((installed) => installed.ok ? installHostPlugins(project, input, ["unified-plugin-framework", "project-knowledge"]) : installed);
-    case "dependencies": return stageDependencies(project, input).then((staged) => staged.ok ? installHostPlugins(project, input, pluginNames(input)) : staged);
+    case "dependencies": return stageDependencies(project, input).then((staged) => staged.ok ? installHostPlugins(project, resolvedInput(project, input), pluginNames(input)) : staged);
     case "knowledge-runtime": return process.platform === "win32" ? inputNeeded("unsupported-runtime", "The knowledge runtime currently supports Linux and macOS.", "Use a supported runtime host; preserve this host's existing configuration.") : installKnowledge(project, input);
     case "knowledge-settings": return configureKnowledge(project, input);
     case "knowledge-content": return inputNeeded("knowledge-discovery-needed", "Project knowledge has not been populated.", "Run the installed discover-project-knowledge skill on the accepted root, preserving authored decisions and citing source evidence; then rerun bootstrap.");
     case "knowledge-server": return registerHost(project, input, knowledgeExecutable(project));
     case "review": return configureReview(project, input);
     case "host-discovery": return stagedBindings(project, input).ok
-      ? installHostPlugins(project, input, ["unified-plugin-framework", "project-knowledge", ...pluginNames(input)])
+      ? installHostPlugins(project, resolvedInput(project, input), ["unified-plugin-framework", "project-knowledge", ...pluginNames(input)])
       : inputNeeded("host-activation-needed", "Pinned dependencies have not been staged successfully.", "Complete the dependency source recovery, then repeat fresh host discovery; configuration alone is not proof.");
     case "tracker": return inputNeeded("tracker-attention", "The selected project adapter needs attention.", "Follow its authentication or connection recovery; retain saved project choices and do not put credentials in chat or files.");
   }
@@ -111,10 +111,13 @@ const requiredSkills = (project: string, input: BootstrapInput): readonly string
   ])];
 };
 const inspectDependencies = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
-  const bindings = pluginBindings(project, input);
+  const pending = await pendingSources(project, input);
+  const bindings = pluginBindings(project, resolvedInput(project, input));
   const staged = stagedBindings(project, input);
   const markers = await Promise.all(pluginNames(input).map((name) => readText(join(pluginTarget(project, name), "upf-source.json"))));
-  return !bindings.ok ? bindings : staged.ok && markers.every((marker) => marker.ok && marker.value !== null)
-    ? ready("Selected dependency sources pass the existing binding gate and staged wrappers are present.")
-    : missing("Stage the accepted clean pinned dependency sources and activate them through the host plugin installer.");
+  return !pending.ok ? pending : pending.value.length > 0
+    ? missing(`Fetch and verify the pinned sources of ${pending.value.map(({ plugin }) => plugin).join(", ")}, then stage and activate them.`)
+    : !bindings.ok ? bindings : staged.ok && markers.every((marker) => marker.ok && marker.value !== null)
+      ? ready("Selected dependency sources pass the existing binding gate and staged wrappers are present.")
+      : missing("Stage the accepted clean pinned dependency sources and activate them through the host plugin installer.");
 };
