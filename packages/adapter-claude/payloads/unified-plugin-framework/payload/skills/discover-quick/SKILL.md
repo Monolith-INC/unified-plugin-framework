@@ -12,7 +12,7 @@ Shape the user's starting material into an approved design through one focused c
 
 Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message.
 
-1. **Available:** `superpowers:brainstorming` is available in this session. If not, ask the user to install and enable `superpowers` and `bmad-method` for this host, then continue once it is. This workflow is tested with `superpowers` 7.0.0 and `bmad-method` 6.12.0. If the session shows another version installed, mention it to the user once, in one line, and continue.
+1. **Available:** `superpowers:brainstorming` and `bmad-brainstorming` are available in this session. If not, ask the user to install and enable `superpowers` and `bmad-method` for this host, then continue once it is. This workflow is tested with `superpowers` 7.0.0 and `bmad-method` 6.12.0. If the session shows another version installed, mention it to the user once, in one line, and continue.
 2. **Project knowledge store:** `.project-knowledge.json` names a `knowledgeRoot`. If not, run `project-knowledge:setup-project-knowledge` with its recommended defaults, then continue.
 
 ## Optional skills

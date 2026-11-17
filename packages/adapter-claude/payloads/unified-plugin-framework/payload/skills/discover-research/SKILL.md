@@ -26,6 +26,7 @@ Once, at the start, offer the user these skills to add to the session. Use any t
 - `bmad-party-mode` — During the conversation: bring several perspectives to the hardest open question.
 - `bmad-forge-idea` — Before the written design: pressure-test the idea until the user can act on it or drop it.
 - `bmad-prfaq` — Before the written design: write the press release and the hard questions first, to test the concept from the customer's side.
+- `bmad-review` — On the written design: run the adversarial and edge-case lenses, then revise the design with the user.
 - `bmad-product-brief` — On the written design: record it as a product brief when a product-level summary is enough.
 - `bmad-prd` — On the written design: record it as a PRD when the work needs full requirements.
 

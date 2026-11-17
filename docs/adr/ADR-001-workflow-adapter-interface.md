@@ -126,7 +126,7 @@ Each of these is a compile error: leaving out `"review-feature"`, adding an oper
 7. Readiness is a pure function over an adapter and observed facts. File and host reads happen at the command-line boundary, through injected effects.
 8. Contract skills in the plugin source are templates and never name a plugin; a test enforces it. The assembler fills them from the adapter at release time, and `pnpm payloads:verify` fails when a shipped bundle drifts from its source.
 9. Every readiness failure carries a recovery action: run a skill and continue, or ask the user for the one thing only they can do. No failure stops the work without a recovery path.
-10. Share code between adapters only once two adapters exist and show what they have in common. With code review and Discovery in place, the shared shape gained `composition`, `catalog` and `bareSkillPlugins`.
+10. Share code between adapters only once two adapters exist and show what they have in common. Discovery's needs moved three fields into the shared shape: `composition`, `catalog` and `bareSkillPlugins`. Code review uses the defaults (`one-of`, no catalog, no bare plugins). The mapping digest covers the whole adapter, so a new field can't be left out of it.
 11. Every plugin an operation or the catalog uses is required: readiness is never partial, and a missing plugin is a readiness failure, not a reduced contract.
 
 ### Consequences

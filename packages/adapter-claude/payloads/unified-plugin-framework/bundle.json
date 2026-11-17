@@ -17,16 +17,16 @@
       "sha256": "5df56f7336ffcf929e0217d30567c81494738b3131256b802439bcf17582f524"
     },
     {
-      "bytes": 3191,
+      "bytes": 3217,
       "mode": 420,
       "path": "skills/discover-quick/SKILL.md",
-      "sha256": "34db8bbea0afcc8478e24021f5f4ecfb1871998944f9dcfa3bcb736ce0217626"
+      "sha256": "e1910d7b2b155c1811d77b7474c7e0e3f1c033c0991e5e2d5eb37e3bf4bfbe23"
     },
     {
-      "bytes": 3323,
+      "bytes": 3446,
       "mode": 420,
       "path": "skills/discover-research/SKILL.md",
-      "sha256": "f3d4ee6b477d1dc343468b67479006fd3face926ed785d883bc931308904b173"
+      "sha256": "7781cd992683552d4d4cc946f5a136952ad43d07e8e23718e4e612f921ebd896"
     },
     {
       "bytes": 3385,
@@ -53,12 +53,12 @@
       "sha256": "2d3a76f64fc8783b2f9cab9cb12c262b40381455471ccd7c3d7dd50e63cdef75"
     }
   ],
-  "payloadDigest": "641d02520c0b5c6ada6fab4c106a3ee077ec0e9fd309793951084b0021615f2a",
+  "payloadDigest": "7da87d1539bb6af77d1037d8efe825a4e0c91405336a497fe86f3e67d6c6da7b",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "8a009b7bf793b24020ff8062fe861b31b2b88f5c86c7c077bfe34834bdb6965f",
+  "sourceDigest": "438e2a39973c3d40f144547886df86e433d471c1ca3876aff9c959fece50ae36",
   "vendor": "claude"
 }

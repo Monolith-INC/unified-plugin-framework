@@ -81,3 +81,19 @@ test("Discovery readiness is all or nothing: a missing plugin fails it, naming t
   assert.equal(missing.step, "installed");
   assert.match(missing.reason, /bmad-method/);
 });
+
+test("a mode that runs no BMad skill still checks that BMad is installed, because its catalog offers BMad skills", () => {
+  const quick = rendered("discover-quick").text;
+  assert.match(quick, /1\. \*\*Available:\*\* `superpowers:brainstorming` and `bmad-brainstorming` are available/);
+});
+
+test("the research mode still offers the adversarial lenses, which its verification layer does not cover", () => {
+  const research = rendered("discover-research").text;
+  assert.match(research.split("## Optional skills")[1].split("## Run the session")[0], /`bmad-review` — On the written design: run the adversarial/);
+});
+
+test("a template that drops the catalog placeholder while the mode offers a catalog is refused", () => {
+  const result = renderSkill(template("discover-quick").replace("{{catalog}}", ""), brainstormingDiscoveryAdapter, "discover-quick", lock);
+  assert.equal(result.ok, false);
+  assert.match(result.message, /missing placeholders: \{\{catalog\}\}/);
+});

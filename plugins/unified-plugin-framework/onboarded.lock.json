@@ -3,9 +3,9 @@
   "plugins": [
     {
       "adapter": "discovery",
-      "checksum": "0a50abef18ebf15bd241920c1ae58b18c2849d354ee20dfe456fc33dec653396",
+      "checksum": "652b35eb98e9b941819012d2c179d8a9bdf3cad206d05dcae41b91c863cf8b48",
       "contractVersion": "1.0.0",
-      "mappingDigest": "3b2cac782d62fde94df2bdc10331e7d05ec0a5bdfb7a831bf133896e021e173c",
+      "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42",
       "plugin": "bmad-method",
       "version": "6.12.0"
     },
@@ -13,15 +13,15 @@
       "adapter": "code-review",
       "checksum": "fb6ce6fa82be37782146a46d8b17f1bdb1f4982a9b49621d637a4dca10828395",
       "contractVersion": "1.0.0",
-      "mappingDigest": "916bfb102f4dfcb6fea7befe50fa39f9e49c81edf7bfb9a1473a3b4fd31fa944",
+      "mappingDigest": "98c193cec36c01c4500f109af874b8db11a3083ce4cf114101178e1be17e0822",
       "plugin": "monolithic-code-review-toolkit",
       "version": "0.6.0"
     },
     {
       "adapter": "discovery",
-      "checksum": "2765c35b379c7030140ed95147eca8fd897ba423f7562ea1ef4202c3bf076d0d",
+      "checksum": "0221b59049f5bb2d68d43587b61034ce79acfe031c2f341041a3ee7d0b0b3a88",
       "contractVersion": "1.0.0",
-      "mappingDigest": "3b2cac782d62fde94df2bdc10331e7d05ec0a5bdfb7a831bf133896e021e173c",
+      "mappingDigest": "de39edc6945d8022510a7ecf765f0ae5ccf7dffc038b8d75abf14b897ea58f42",
       "plugin": "superpowers",
       "version": "7.0.0"
     }

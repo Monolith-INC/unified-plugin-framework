@@ -43,9 +43,9 @@ Commands:
   create <plugin-name> [--path dir] Scaffold a portable plugin root
   add skill <skill-name> [--path dir]
                                     Add an immediate-child Skill to a plugin root
-  adapter-check <workflow> --framework dir [--plugin-root dir]... [--project dir]
+  adapter-check <workflow> --framework dir [--plugin-root [plugin[@version]=]dir]... [--project dir]
                                     Check a workflow adapter's readiness (declared, installed, bound)
-  upgrade-check <workflow> --framework dir --plugin-root dir...
+  upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
 `;
 

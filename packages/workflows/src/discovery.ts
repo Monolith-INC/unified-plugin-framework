@@ -18,10 +18,9 @@ const SUPERPOWERS = "superpowers";
 const BMAD = "bmad-method";
 
 const ref = (plugin: string) => (skill: string, use: string): PluginSkillRef => Object.freeze({ plugin, skill, use });
-const superpowers = ref(SUPERPOWERS);
 const bmad = ref(BMAD);
 
-const LEAD = superpowers("brainstorming", "Lead the whole session with it, from the first question to the written design.");
+const LEAD: PluginSkillRef = Object.freeze({ plugin: SUPERPOWERS, skill: "brainstorming" });
 
 const ELICIT = bmad(
   "bmad-advanced-elicitation",

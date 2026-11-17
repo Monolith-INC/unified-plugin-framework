@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 
-import { mappingDigest, reviewToolkitAdapter } from "@agent-plugins/workflows";
+import { brainstormingDiscoveryAdapter, mappingDigest, reviewToolkitAdapter } from "@agent-plugins/workflows";
 
 import { run } from "../dist/index.js";
 import { runUpgradeCheck } from "../dist/upgrade-check.js";
@@ -17,6 +18,7 @@ import {
   recordingIo,
   repoRoot,
   TOOLKIT_SKILLS,
+  writeJson,
 } from "./onboarded-helpers.mjs";
 
 const check = (args, root) => capture(() => run(["adapter-check", "code-review", "--framework", root, ...args]));
@@ -126,12 +128,6 @@ test("upgrade-check reports a lock it cannot write as a configuration problem, n
   assert.match(unwritable.lines.err[0], /Could not write .*onboarded\.lock\.json: EACCES: permission denied\. The lock is unchanged\./);
 });
 
-import { cpSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-
-import { brainstormingDiscoveryAdapter } from "@agent-plugins/workflows";
-
-import { writeJson } from "./onboarded-helpers.mjs";
 
 const discoverySkills = (plugin) => [
   ...new Set(
@@ -216,7 +212,8 @@ test("a newer release of a manifest-less plugin is adopted when its version is g
   assert.match(JSON.parse(unversioned.stderr).recovery.message, /--plugin-root <plugin>@<version>=<dir>/);
   const versioned = upgradeDiscovery(root, [superpowers, `bmad-method@6.13.0=${next}`]);
   assert.equal(versioned.exitCode, 0, versioned.stderr);
-  assert.deepEqual(JSON.parse(versioned.stdout).pinned[1], { plugin: "bmad-method", version: "6.13.0", checksum: JSON.parse(versioned.stdout).pinned[1].checksum });
+  const [, bmadPin] = JSON.parse(versioned.stdout).pinned;
+  assert.deepEqual([bmadPin.plugin, bmadPin.version], ["bmad-method", "6.13.0"]);
   assert.equal(JSON.parse(lockAt(root)).plugins.find(({ plugin }) => plugin === "bmad-method").version, "6.13.0");
 });
 
@@ -224,4 +221,42 @@ test("a version given on the command line must agree with the plugin's own manif
   const result = upgradeDiscovery(frameworkCopy({ unpinned: true }), [`superpowers@7.1.0=${claudePlugin()}`, `bmad-method=${skillsFolder()}`]);
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /is version 7\.0\.0 by its manifest, not 7\.1\.0 as given/);
+});
+
+test("adapter-check takes an adopted manifest-less release's version from its pin, so it needs no version given", () => {
+  const root = frameworkCopy({ unpinned: true });
+  const superpowers = claudePlugin();
+  const next = skillsFolder();
+  appendFileSync(join(next, "skills", "bmad-spec", "SKILL.md"), "A change in the next release.\n");
+  assert.equal(upgradeDiscovery(root, [superpowers, `bmad-method@6.13.0=${next}`]).exitCode, 0);
+  const ready = capture(() =>
+    run(["adapter-check", "discovery", "--framework", root, "--plugin-root", superpowers, "--plugin-root", `bmad-method=${next}`, "--project", project()]),
+  );
+  assert.equal(ready.exitCode, 0, ready.stderr);
+});
+
+test("the checksum of a skills folder covers every file in each skill, not only SKILL.md", () => {
+  const superpowers = claudePlugin();
+  const before = skillsFolder();
+  const after = skillsFolder();
+  writeFileSync(join(after, "skills", "bmad-review", "lens.md"), "A supporting file.\n");
+  const checksumOf = (bmad) => JSON.parse(upgradeDiscovery(frameworkCopy({ unpinned: true }), [superpowers, `bmad-method=${bmad}`]).stdout).pinned[1].checksum;
+  assert.notEqual(checksumOf(before), checksumOf(after));
+});
+
+test("a plugin root that is not a folder, a malformed named root, or a name that contradicts the manifest is a configuration problem", () => {
+  const root = frameworkCopy({ unpinned: true });
+  const notAFolder = join(mkdtempSync(join(tmpdir(), "upf-file-")), "plain.txt");
+  writeFileSync(notAFolder, "not a plugin\n");
+  const cases = [
+    [[claudePlugin(), `bmad-method=${notAFolder}`], /plugin\.root\.(unreadable|unrecognised)/],
+    [[claudePlugin(), `bmad-method@6.13=${skillsFolder()}`], /"6\.13" is not a release version/],
+    [[`bmad-method=${claudePlugin()}`, `bmad-method=${skillsFolder()}`], /is superpowers by its manifest, not bmad-method as given/],
+  ];
+  cases.map(([roots, message]) => {
+    const result = upgradeDiscovery(root, roots);
+    assert.equal(result.exitCode, 2, result.stderr);
+    assert.match(result.stderr, message);
+    return message;
+  });
 });
