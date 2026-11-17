@@ -12,17 +12,9 @@ Run `project describe` to reuse project choices. Collect only missing tracker/la
 
 The selected workflows' onboarded plugins are dependencies: the framework manifest declares each one's `source`, and `onboarded.lock.json` pins its exact version and content. The `dependencies` step fetches every selected plugin that `pluginRoots` does not provide, so a fresh project needs no manual clones.
 
-A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root.
+A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit whose content the lock pins. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root. The declarations in `plugins/unified-plugin-framework/plugin.json` and the pins in its `onboarded.lock.json` are the only record of what is fetched.
 
-| Plugin | Ref fetched | Folder |
-| --- | --- | --- |
-| `agent-continuity` | `v0.13.0` | repository root |
-| `agile-backlog-toolkit` | `v0.12.1` | repository root |
-| `monolithic-code-review-toolkit` | `v0.6.0` | `plugins/monolithic-code-review-toolkit` |
-| `superpowers` | `v7.0.0` | repository root |
-| `bmad-method` | commit `1cbcfa27`, the content pinned as 6.12.0 | repository root |
-
-Each source is fetched as a shallow git checkout into a private directory and checked against the lock for every selected workflow it serves. Only a matching tree is kept, as `.upf-tools/sources/<plugin>@<version>`; later runs reuse it. A tree that differs from its pin fails with `dependency-fetch-mismatch`: the copy is discarded and nothing is staged. A failed fetch reports `dependency-fetch`. Until the sources are fetched, the `dependencies` capability reports as missing rather than misconfigured.
+Each source is fetched as a shallow git checkout into a private directory and checked against the lock for every selected workflow it serves. Only a matching tree is kept, as `.upf-tools/sources/<plugin>@<version>`; later runs reuse it while it still matches, and fetch it again otherwise. A tree that differs from its pin fails with `dependency-fetch-mismatch`: the copy is discarded and nothing is staged. A failed fetch reports `dependency-fetch`. Until the sources are fetched, the `dependencies` capability reports as missing rather than misconfigured.
 
 To use a local copy instead, give its root in `pluginRoots`, with the same `[plugin[@version]=]directory` syntax as `adapter-check`. An explicit root replaces fetching for that plugin and passes the same lock check.
 

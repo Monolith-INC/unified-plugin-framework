@@ -4,14 +4,14 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
 import { fail, nodeProjectFiles, object, ok, type Result } from "@agent-plugins/project";
-import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinFor, sourceMatches, type BindingFacts } from "@agent-plugins/workflows";
-import { rootArg, selectedPlugins, sourcesFor, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
-import { fetchSources, GIT_FETCHER, unfetched } from "./dependency-fetch.js";
+import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinMatches, type BindingFacts } from "@agent-plugins/workflows";
+import { rootArg, rootPluginName, selectedPlugins, sourcesFor, verifySource, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
+import { fetchSources, GIT_FETCHER, unfetched, type FetchContext } from "./dependency-fetch.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
 import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
 import { checkPluginBinding } from "@agent-plugins/workflows";
-import { command, hostRequest } from "./tooling-process.js";
+import { command, hostRequest, sequence } from "./tooling-process.js";
 import { directory, readText, readToml, safePath, setupFailure, writeText } from "./tooling-files.js";
 
 export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -28,7 +28,8 @@ export const dependencySources = (project: string, input: BootstrapInput): Resul
   const roots = parseRootArgs(project, input.pluginRoots);
   return roots.ok ? sourcesFor(NODE_PLUGIN_FACTS_IO, FRAMEWORK_PLUGIN, input.workflows, roots.roots) : setupFailure(roots.message);
 };
-/** Explicit roots as given, plus the cached checkout for every plugin bootstrap fetches; both pass one binding gate. */
+/** Explicit roots as given, plus the cached checkout for every plugin bootstrap fetches; both pass one binding gate.
+ * A plan that cannot be made leaves the input as given: the dependencies step reports why. */
 export const resolvedInput = (project: string, input: BootstrapInput): BootstrapInput => {
   const sources = dependencySources(project, input);
   return sources.ok ? { ...input, pluginRoots: [...input.pluginRoots, ...sources.value.map((source) => rootArg(sourcesRoot(project), source))] } : input;
@@ -36,12 +37,13 @@ export const resolvedInput = (project: string, input: BootstrapInput): Bootstrap
 /** Sources still to fetch, so a fresh project's dependencies are missing rather than misconfigured. */
 export const pendingSources = (project: string, input: BootstrapInput): Promise<Result<readonly DependencySource[]>> => {
   const sources = dependencySources(project, input);
-  return sources.ok ? unfetched(sourcesRoot(project), sources.value).then(ok) : Promise.resolve(sources);
+  return sources.ok ? unfetched(fetchContext(project, input, GIT_FETCHER), sources.value).then(ok) : Promise.resolve(sources);
 };
+const fetchContext = (project: string, input: BootstrapInput, fetcher: SourceFetcher): FetchContext => ({ project, cache: sourcesRoot(project),
+  verify: verifySource(NODE_PLUGIN_FACTS_IO, FRAMEWORK_PLUGIN, input.workflows), fetcher });
 const fetchDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher): Promise<Result<string>> => {
   const sources = dependencySources(project, input);
-  return sources.ok ? fetchSources({ project, cache: sourcesRoot(project), framework: FRAMEWORK_PLUGIN, workflows: input.workflows,
-    io: NODE_PLUGIN_FACTS_IO, fetcher }, sources.value) : Promise.resolve(sources);
+  return sources.ok ? fetchSources(fetchContext(project, input, fetcher), sources.value) : Promise.resolve(sources);
 };
 
 export const pluginBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => {
@@ -58,11 +60,8 @@ export const pluginBindings = (project: string, input: BootstrapInput): Result<r
 };
 const checkedBindings = (bindings: readonly BindingFacts[]): Result<readonly BindingFacts[]> => {
   const failed = bindings.map(checkPluginBinding).find((result) => result.status !== "ready");
-  const unpinned = bindings.flatMap(({ adapter, installed, lock }) => adapterPlugins(adapter).filter((name) => {
-    const found = installed.get(name);
-    const pin = pinFor(lock, name, adapter.workflow);
-    return pin === undefined || found === undefined || !sourceMatches(pin, found);
-  }));
+  const unpinned = bindings.flatMap(({ adapter, installed, lock }) => adapterPlugins(adapter)
+    .filter((name) => !pinMatches(lock, adapter.workflow, name, installed.get(name))));
   return failed?.status === "not-ready" ? fail("dependency-binding", failed.reason,
     failed.recovery.action === "ask-user" ? failed.recovery.message : failed.recovery.goal)
     : unpinned.length > 0 ? fail("dependency-pin", `Selected sources differ from their exact pins: ${unpinned.join(", ")}.`,
@@ -96,22 +95,16 @@ const stageResolved = (project: string, input: BootstrapInput): Promise<Result<s
   const bindings = pluginBindings(project, input);
   const roots = parseRootArgs(project, input.pluginRoots);
   return !bindings.ok ? Promise.resolve(bindings) : !roots.ok ? Promise.resolve(setupFailure(roots.message))
-    : stageSources(project, input, roots.roots, pluginNames(input));
+    : sequence(pluginNames(input), (name) => stageNamed(project, roots.roots, name), "Pinned dependencies staged.");
 };
 
 /** Installed wrappers are checked against the same binding gate, rather than trusting a marker alone. */
 export const stagedBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => pluginBindings(project, {
   ...input, pluginRoots: pluginNames(input).map((name) => `${name}@${pinnedVersion(name)}=${join(pluginTarget(project, name), "source")}`),
 });
-const stageSources = async (project: string, input: BootstrapInput, roots: readonly PluginRootArg[],
-  names: readonly string[]): Promise<Result<string>> => {
-  const [name, ...rest] = names;
-  const root = name === undefined ? undefined : roots.find((root) => {
-    const read = NODE_PLUGIN_FACTS_IO.readPlugin(root.path);
-    return read.ok && (read.value.name ?? root.name) === name;
-  });
-  return name === undefined ? ok("Pinned dependencies staged.") : root === undefined ? setupFailure(`No source for ${name}.`)
-    : stageDependency(project, name, root.path).then((result) => result.ok ? stageSources(project, input, roots, rest) : result);
+const stageNamed = (project: string, roots: readonly PluginRootArg[], name: string): Promise<Result<string>> => {
+  const root = roots.find((root) => rootPluginName(NODE_PLUGIN_FACTS_IO, root) === name);
+  return root === undefined ? Promise.resolve(setupFailure(`No source for ${name}.`)) : stageDependency(project, name, root.path);
 };
 export const stageDependency = async (project: string, name: string, source: string): Promise<Result<string>> => {
   const target = pluginTarget(project, name);
@@ -159,7 +152,8 @@ export const installHostPlugins = async (project: string, input: BootstrapInput,
   const merged = parsed.ok ? mergeCodexMarketplace(parsed.value, ["unified-plugin-framework", "project-knowledge", ...pluginNames(input)]) : undefined;
   return !old.ok ? old : !parsed.ok ? parsed : merged?.ok !== true ? setupFailure(merged?.diagnostics.map((d) => d.message).join(" ") ?? "The marketplace could not be read.")
     : writeText(project, catalog, JSON.stringify(merged.value, null, 2), old.value).then((written) => written.ok ? registerHost(project, input) : written)
-    .then((registered) => registered.ok ? installNext(project, names.filter((name) => !barePlugins(project, input).includes(name))) : registered)
+    .then((registered) => registered.ok ? sequence(names.filter((name) => !barePlugins(project, input).includes(name)),
+      (name) => command("codex", CODEX_TOOLING.install(name), project), "Host plugins activated.") : registered)
     .then((installed) => installed.ok ? activateBare(project, input, names) : installed);
 };
 const barePlugins = (project: string, input: BootstrapInput): readonly string[] => {
@@ -170,12 +164,8 @@ const activateBare = (project: string, input: BootstrapInput, names: readonly st
   const bindings = pluginBindings(project, input);
   const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog]
     .filter(({ plugin }) => names.includes(plugin) && adapter.bareSkillPlugins.includes(plugin))) : [];
-  return activateBareNext(project, [...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()]);
-};
-const activateBareNext = async (project: string, skills: readonly {readonly plugin: string; readonly skill: string}[]): Promise<Result<string>> => {
-  const [ref, ...rest] = skills;
-  return ref === undefined ? ok("Bare dependency skills activated.") : copyBare(project, ref.plugin, ref.skill)
-    .then((result) => result.ok ? activateBareNext(project, rest) : result);
+  return sequence([...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()],
+    (ref) => copyBare(project, ref.plugin, ref.skill), "Bare dependency skills activated.");
 };
 const copyBare = async (project: string, plugin: string, skill: string): Promise<Result<string>> => {
   const source = join(pluginTarget(project, plugin), "source/skills", skill);
@@ -192,11 +182,6 @@ const copyBare = async (project: string, plugin: string, skill: string): Promise
         ? cp(source, target, { recursive: true, errorOnExist: false, force: false })
         : Promise.reject(new Error("unmanaged-content")))
         .then(() => writeText(project, join(target, ".upf-source"), expected, null)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
-};
-const installNext = (project: string, names: readonly string[]): Promise<Result<string>> => {
-  const [name, ...rest] = names;
-  return name === undefined ? Promise.resolve(ok("Host plugins activated."))
-    : command("codex", CODEX_TOOLING.install(name), project).then((result) => result.ok ? installNext(project, rest) : result);
 };
 
 export const discoverHost = (project: string): Promise<Result<readonly {readonly name: string; readonly path: string}[]>> =>

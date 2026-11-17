@@ -3,15 +3,20 @@ import { createInterface } from "node:readline";
 import { fail, ok, type Result } from "@agent-plugins/project";
 
 /** Process boundary: argv is passed directly; output and credentials never enter failure messages. */
-export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000): Promise<Result<string>> =>
+export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<Result<string>> =>
   new Promise((resolve) => {
-    const child = spawn(program, [...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(program, [...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
     const stdout = collect(child.stdout[Symbol.asyncIterator](), []);
     child.stderr.resume();
     const timer = setTimeout(() => child.kill(), timeout);
     child.on("error", () => { clearTimeout(timer); resolve(processFailure(program)); });
     child.on("close", (code) => { clearTimeout(timer); stdout.then((bytes) => resolve(code === 0 ? ok(bytes) : processFailure(program))).catch(() => resolve(processFailure(program))); });
   });
+/** Runs `step` over `items` in order; the first failure stops the run, otherwise the result is `done`. */
+export const sequence = <A>(items: readonly A[], step: (item: A) => Promise<Result<unknown>>, done: string): Promise<Result<string>> => {
+  const [item, ...rest] = items;
+  return item === undefined ? Promise.resolve(ok(done)) : step(item).then((result) => result.ok ? sequence(rest, step, done) : result);
+};
 const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[]): Promise<string> => {
   const next = await stream.next();
   return next.done ? Buffer.concat(chunks).toString("utf8") : collect(stream, [...chunks, next.value]);

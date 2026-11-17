@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readdirSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { checkoutDir, parseSource, rootArg, sourcesFor } from "../dist/dependency-sources.js";
+import { checkoutDir, parseSource, rootArg, sourcesFor, verifySource } from "../dist/dependency-sources.js";
 import { fetchSources } from "../dist/dependency-fetch.js";
 import { NODE_PLUGIN_FACTS_IO } from "../dist/plugin-reader.js";
 import { nodeToolingIO } from "../dist/tooling-node.js";
@@ -29,7 +29,7 @@ const fakeFetcher = (tree) => {
 
 const context = (fetcher, frameworkRoot) => {
   const project = mkdtempSync(join(tmpdir(), "upf-fetch-"));
-  return { project, cache: join(project, ".upf-tools/sources"), framework: frameworkRoot, workflows: ["code-review"], io: NODE_PLUGIN_FACTS_IO, fetcher };
+  return { project, cache: join(project, ".upf-tools/sources"), verify: verifySource(NODE_PLUGIN_FACTS_IO, frameworkRoot, ["code-review"]), fetcher };
 };
 const reviewSources = (frameworkRoot) => sourcesFor(NODE_PLUGIN_FACTS_IO, frameworkRoot, ["code-review"], []).value;
 
@@ -42,22 +42,27 @@ test("a github source maps its pin to the v<version> tag unless it names a ref, 
     .map((declared) => assert.equal(parseSource("kit", "1.2.3", declared), undefined, declared));
 });
 
-test("the framework declares a fetchable pinned source for every onboarded plugin", () => {
+test("the framework declares a fetchable source at the locked version for every onboarded plugin", () => {
+  const manifest = JSON.parse(readFileSync(join(framework, "plugin.json"), "utf8")).extensions["io.github.monolith-inc.upf"].onboardedPlugins;
+  const lock = JSON.parse(readFileSync(join(framework, "onboarded.lock.json"), "utf8")).plugins;
   const planned = sourcesFor(NODE_PLUGIN_FACTS_IO, framework, WORKFLOWS, []);
   assert.equal(planned.ok, true, JSON.stringify(planned));
-  assert.deepEqual(planned.value.map(({ plugin, version, repository, ref, path }) => [plugin, version, repository, ref, path]).sort(), [
-    ["agent-continuity", "0.13.0", "https://github.com/Monolith-INC/agent-continuity.git", "v0.13.0", ""],
-    ["agile-backlog-toolkit", "0.12.1", "https://github.com/theocarranza/agile-backlog-toolkit.git", "v0.12.1", ""],
-    ["bmad-method", "6.12.0", "https://github.com/bmad-code-org/BMAD-METHOD.git", "1cbcfa272fe65787c06a1fa164a901f46117cca7", ""],
-    ["monolithic-code-review-toolkit", "0.6.0", "https://github.com/Monolith-INC/monolithic-code-review-toolkit.git", "v0.6.0", "plugins/monolithic-code-review-toolkit"],
-    ["superpowers", "7.0.0", "https://github.com/obra/superpowers.git", "v7.0.0", ""],
-  ]);
+  assert.deepEqual(planned.value.map(({ plugin }) => plugin).sort(), manifest.map(({ name }) => name).sort());
+  planned.value.map((source) => {
+    const version = lock.find(({ plugin }) => plugin === source.plugin).version;
+    const declared = manifest.find(({ name }) => name === source.plugin).source;
+    assert.deepEqual(source, parseSource(source.plugin, version, declared));
+    assert.equal(source.ref, declared.includes("#") ? declared.split("#")[1] : `v${version}`);
+  });
 });
 
-test("an explicit plugin root overrides fetching that plugin", () => {
+test("an explicit plugin root overrides fetching that plugin; an unreadable unnamed root is reported, not fetched around", () => {
   const toolkit = fakeToolkit(TOOLKIT_SKILLS);
   assert.deepEqual(sourcesFor(NODE_PLUGIN_FACTS_IO, framework, ["code-review"], [{ path: toolkit, name: undefined, version: undefined }]).value, []);
   assert.deepEqual(sourcesFor(NODE_PLUGIN_FACTS_IO, framework, ["code-review"], [{ path: toolkit, name: "monolithic-code-review-toolkit", version: undefined }]).value, []);
+  const typo = sourcesFor(NODE_PLUGIN_FACTS_IO, framework, ["code-review"], [{ path: join(toolkit, "missing"), name: undefined, version: undefined }]);
+  assert.equal(typo.ok, false);
+  assert.equal(typo.error.code, "dependency-source");
 });
 
 test("a fetched source that matches its pin is cached once and resolves to a pinned root", async () => {
@@ -85,12 +90,30 @@ test("a fetched tree that differs from its pin is a typed failure and is never c
   assert.deepEqual(readdirSync(run.cache), []);
 });
 
-test("a failed fetch is reported and leaves no partial checkout", async () => {
+test("an edited cached checkout no longer counts as fetched and is replaced by a verified one", async () => {
+  const toolkit = fakeToolkit(TOOLKIT_SKILLS);
+  const pinned = frameworkPinning(toolkit);
+  const { calls, fetcher } = fakeFetcher(toolkit);
+  const run = context(fetcher, pinned);
+  const sources = reviewSources(pinned);
+  assert.equal((await fetchSources(run, sources)).ok, true);
+  const skill = join(checkoutDir(run.cache, sources[0]), sources[0].path, "skills", TOOLKIT_SKILLS[0], "SKILL.md");
+  writeFileSync(skill, "edited");
+  assert.equal((await fetchSources(run, sources)).ok, true);
+  assert.equal(calls.length, 2);
+  assert.notEqual(readFileSync(skill, "utf8"), "edited");
+  assert.deepEqual(readdirSync(run.cache), ["monolithic-code-review-toolkit@0.6.0"]);
+});
+
+test("a failed or crashed fetch is reported and leaves no partial checkout", async () => {
   const pinned = frameworkPinning(fakeToolkit(TOOLKIT_SKILLS));
   const failure = { ok: false, error: { code: "dependency-fetch", message: "unreachable", recovery: "retry" } };
-  const run = context({ fetch: async () => failure }, pinned);
-  assert.deepEqual(await fetchSources(run, reviewSources(pinned)), failure);
-  assert.deepEqual(readdirSync(run.cache), []);
+  const failed = context({ fetch: async () => failure }, pinned);
+  assert.deepEqual(await fetchSources(failed, reviewSources(pinned)), failure);
+  assert.deepEqual(readdirSync(failed.cache), []);
+  const crashed = context({ fetch: async () => { throw new Error("disk"); } }, pinned);
+  assert.equal((await fetchSources(crashed, reviewSources(pinned))).error.code, "dependency-fetch");
+  assert.deepEqual(readdirSync(crashed.cache), []);
 });
 
 test("a fresh project without plugin roots reports its dependencies as missing, to be fetched", async () => {

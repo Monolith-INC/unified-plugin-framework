@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { fail, ok, type Result } from "@agent-plugins/project";
-import { adapterPlugins, findWorkflow, LOCK_FILE, pinFor, sourceMatches, type OnboardedLock } from "@agent-plugins/workflows";
+import { collect, fail, ok, type Result } from "@agent-plugins/project";
+import { adapterPlugins, findWorkflow, LOCK_FILE, pinMatches, type OnboardedLock, type WorkflowAdapter } from "@agent-plugins/workflows";
 import type { OnboardedPlugin } from "@agent-plugins/core";
 import { gatherBinding, lockFrom, type PluginFactsIo, type PluginRootArg } from "./plugin-facts.js";
 
@@ -38,8 +38,16 @@ export const selectedPlugins = (workflows: readonly string[]): readonly string[]
   return adapter === undefined ? [] : adapterPlugins(adapter);
 }))];
 
+/** The plugin a root provides: the name given, else its own manifest's; `undefined` when neither says. */
+export const rootPluginName = (io: PluginFactsIo, root: PluginRootArg): string | undefined => {
+  const read = root.name === undefined ? io.readPlugin(root.path) : undefined;
+  return root.name ?? (read?.ok === true ? read.value.name : undefined);
+};
+
 const unfetchable = (plugin: string): Result<never> => fail("dependency-source", `${plugin} has no fetchable pinned source.`,
   `Declare its source as github:<owner>/<repo>[/<folder>][#<ref>] with a pin in ${LOCK_FILE}, or give its root in pluginRoots.`);
+const unnamedRoot = (root: PluginRootArg): Result<never> => fail("dependency-source", `Plugin root ${root.path} is missing or names no plugin.`,
+  "Correct the path, or name it as <plugin>[@<version>]=<dir>; nothing was fetched.");
 
 const sourceOf = (onboarded: readonly OnboardedPlugin[], lock: OnboardedLock) => (plugin: string): Result<DependencySource> => {
   const version = lock.plugins.find((pin) => pin.plugin === plugin)?.version;
@@ -50,26 +58,24 @@ const sourceOf = (onboarded: readonly OnboardedPlugin[], lock: OnboardedLock) =>
 
 /** Sources to fetch: every selected plugin that no explicit root provides. Pure over the framework's declarations. */
 export const plannedSources = (onboarded: readonly OnboardedPlugin[], lock: OnboardedLock, plugins: readonly string[],
-  explicit: readonly string[]): Result<readonly DependencySource[]> => {
-  const planned = plugins.filter((plugin) => !explicit.includes(plugin)).map(sourceOf(onboarded, lock));
-  return planned.find(failed) ?? ok(planned.flatMap((result) => result.ok ? [result.value] : []));
-};
-type Failed = Extract<Result<unknown>, { readonly ok: false }>;
-const failed = <A>(result: Result<A>): result is Failed & Result<A> => !result.ok;
+  explicit: readonly string[]): Result<readonly DependencySource[]> =>
+  collect(plugins.filter((plugin) => !explicit.includes(plugin)).map(sourceOf(onboarded, lock)));
 
-/** The plugins explicit roots provide: by the name given, else by the root's own manifest. */
-export const explicitPlugins = (io: PluginFactsIo, roots: readonly PluginRootArg[]): readonly string[] => roots.flatMap((root) => {
-  const read = root.name === undefined ? io.readPlugin(root.path) : undefined;
-  return root.name ?? (read?.ok === true && read.value.name !== undefined ? [read.value.name] : []);
-});
+/** Explicit roots' plugins; an unreadable unnamed root is reported rather than silently replaced by a fetch. */
+const explicitPlugins = (io: PluginFactsIo, roots: readonly PluginRootArg[]): Result<readonly string[]> =>
+  collect(roots.map((root) => {
+    const name = rootPluginName(io, root);
+    return name === undefined ? unnamedRoot(root) : ok(name);
+  }));
 
 /** The fetch plan for a framework and its selected workflows, read through `io`. */
 export const sourcesFor = (io: PluginFactsIo, framework: string, workflows: readonly string[],
   roots: readonly PluginRootArg[]): Result<readonly DependencySource[]> => {
   const lock = lockFrom(io, framework);
-  return lock.kind === "facts"
-    ? plannedSources(io.inspectPlugin(framework).onboardedPlugins ?? [], lock.facts, selectedPlugins(workflows), explicitPlugins(io, roots))
-    : fail("dependency-source", lock.problems.join(" "), `Restore a valid ${LOCK_FILE} beside the framework manifest.`);
+  const explicit = explicitPlugins(io, roots);
+  return lock.kind === "config-error" ? fail("dependency-source", lock.problems.join(" "), `Restore a valid ${LOCK_FILE} beside the framework manifest.`)
+    : !explicit.ok ? explicit
+      : plannedSources(io.inspectPlugin(framework).onboardedPlugins ?? [], lock.facts, selectedPlugins(workflows), explicit.value);
 };
 
 /** A source's cached checkout, keyed by plugin and pinned version. */
@@ -80,21 +86,26 @@ export const sourceRoot = (checkout: string, source: DependencySource): string =
 export const rootArg = (cache: string, source: DependencySource): string =>
   `${source.plugin}@${source.version}=${sourceRoot(checkoutDir(cache, source), source)}`;
 
-const mismatch = (source: DependencySource, detail: string): Result<never> => fail("dependency-fetch-mismatch",
-  `${source.plugin} at ${source.ref} from ${source.repository} does not match its ${LOCK_FILE} pin${detail}.`,
+const mismatch = (source: DependencySource, detail: readonly string[]): Result<never> => fail("dependency-fetch-mismatch",
+  `${source.plugin} at ${source.ref} from ${source.repository} does not match its ${LOCK_FILE} pin (${detail.join("; ")}).`,
   `Nothing was staged and the fetched copy was discarded. Check that the declared source and ref publish pinned release ${source.version}, re-pin it through upgrade-check, or give a matching root in pluginRoots.`);
 
-/** Every selected workflow's pin must accept the fetched tree before it is cached or staged. */
-export const verifySource = (io: PluginFactsIo, framework: string, workflows: readonly string[], source: DependencySource,
-  root: string): Result<string> => {
-  const problems = workflows.flatMap((name) => {
-    const adapter = findWorkflow(name);
-    const gathered = adapter === undefined || !adapterPlugins(adapter).includes(source.plugin) ? undefined
-      : gatherBinding(io, adapter, framework, [{ path: root, name: source.plugin, version: source.version }]);
-    const pin = gathered?.kind === "facts" ? pinFor(gathered.facts.lock, source.plugin, gathered.facts.adapter.workflow) : undefined;
-    const found = gathered?.kind === "facts" ? gathered.facts.installed.get(source.plugin) : undefined;
-    return gathered === undefined ? [] : gathered.kind === "config-error" ? gathered.problems
-      : pin === undefined || found === undefined || !sourceMatches(pin, found) ? [`for ${name}`] : [];
-  });
-  return problems.length === 0 ? ok(root) : mismatch(source, ` (${problems.join("; ")})`);
-};
+/** Why one workflow's pin rejects the tree at `root`; empty when it accepts it. */
+const problemsFor = (io: PluginFactsIo, framework: string, source: DependencySource, root: string) =>
+  (adapter: WorkflowAdapter<string>): readonly string[] => {
+    const gathered = gatherBinding(io, adapter, framework, [{ path: root, name: source.plugin, version: source.version }]);
+    switch (gathered.kind) {
+      case "config-error": return gathered.problems;
+      case "facts": return pinMatches(gathered.facts.lock, adapter.workflow, source.plugin, gathered.facts.installed.get(source.plugin))
+        ? [] : [`for ${adapter.workflow}`];
+    }
+  };
+
+/** Every selected workflow's pin must accept the tree at `root` before it is cached or staged. */
+export const verifySource = (io: PluginFactsIo, framework: string, workflows: readonly string[]) =>
+  (source: DependencySource, root: string): Result<string> => {
+    const problems = workflows.flatMap((name) => findWorkflow(name) ?? [])
+      .filter((adapter) => adapterPlugins(adapter).includes(source.plugin))
+      .flatMap(problemsFor(io, framework, source, root));
+    return problems.length === 0 ? ok(root) : mismatch(source, problems);
+  };

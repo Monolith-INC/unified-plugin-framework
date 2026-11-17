@@ -27,6 +27,7 @@ export {
   mappingDigest,
   firstFailure,
   PROJECT_KNOWLEDGE_SETUP,
+  pinMatches,
   sourceMatches,
   type Monoid,
   type NonEmpty,
