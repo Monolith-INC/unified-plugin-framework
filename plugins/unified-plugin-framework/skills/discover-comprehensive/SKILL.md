@@ -1,6 +1,6 @@
 ---
 name: discover-comprehensive
-description: Use when an idea, proposal or plan is large, costly or hard to reverse and needs the deepest treatment: several perspectives, a customer-side test of the concept, a reviewed design and formal documents. Part of the Discovery workflow (contract v1).
+description: Use when an idea, proposal or plan is large, costly or hard to reverse and needs the deepest treatment — several perspectives, a customer-side test of the concept, a reviewed design and formal documents. Part of the Discovery workflow (contract v1).
 ---
 {{generated}}
 
