@@ -11,6 +11,10 @@ on:
       tag:
         description: Existing release tag to build and publish again (it must contain this workflow)
         required: true
+      skip_macos:
+        description: Run the checks without macOS (use when macOS runners are unavailable)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,6 +55,8 @@ jobs:
     name: Full CI suite
     needs: tag
     uses: ./.github/workflows/ci.yml
+    with:
+      skip_macos: ${{ inputs.skip_macos == true }}
 
   release:
     name: Build and publish host payloads
