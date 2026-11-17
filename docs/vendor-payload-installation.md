@@ -1,6 +1,6 @@
 # Vendor Payload Installation
 
-Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) ships a verified payload for each host: today the `hello-world` reference plugin and the `unified-plugin-framework` plugin. The release shape:
+Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) ships a verified payload for each host: `hello-world`, `unified-plugin-framework` and `project-knowledge`. The release shape:
 
 ```text
 canonical source
@@ -71,6 +71,9 @@ pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/unified-plugi
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor claude --target <target-directory>
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor cursor --target <target-directory>
 pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/hello-world --vendor codex --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor claude --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor cursor --target <target-directory>
+pnpm --filter @agent-plugins/cli exec agent-plugin install plugins/project-knowledge --vendor codex --target <target-directory>
 ```
 
 The command looks up the selected adapter's `payloads/<plugin>` bundle and checks its source digest against the plugin being installed. It refuses, before writing anything, when the plugin has no shipped payload (`cli.payload.missing`) or the payload was built from a different source (`cli.payload.drift`); both messages name the command that fixes it.
@@ -134,8 +137,11 @@ The installer accepts an upgrade or reinstall only when the bundle validates aga
 | Claude | `packages/adapter-claude/payloads/hello-world/bundle.json` | `claude-code-plugins-2026-08-10` | `8d4aae916cbc30a068b9618e159c3bf12c611dd313200057d662729f5d79deb4` |
 | Cursor | `packages/adapter-cursor/payloads/hello-world/bundle.json` | `cursor-plugins-2026-08-10` | `75649714dfda40f7c158d5712f19411a9bedfcaf72ee5c31f92a991521d2202e` |
 | Codex | `packages/adapter-codex/payloads/hello-world/bundle.json` | `codex-plugins-2026-08-10` | `47b9c9a3f30240a8d90da1ff31e791b33179b7ac49c68283d1ad8f0605109ea3` |
-| Claude | `packages/adapter-claude/payloads/unified-plugin-framework/bundle.json` | `claude-code-plugins-2026-08-10` | `cc0f14bdc2c281b412ddd6d073e39e086bae724ff72abd765d7da81444ea07f8` |
-| Cursor | `packages/adapter-cursor/payloads/unified-plugin-framework/bundle.json` | `cursor-plugins-2026-08-10` | `ae9d655ef83961a63132e7409c7adb21301fd58ccabc913df16bec788101bf88` |
-| Codex | `packages/adapter-codex/payloads/unified-plugin-framework/bundle.json` | `codex-plugins-2026-08-10` | `bebe378057594abd00e36bfc7d1e0799a04bc7f0ee2a16a9963f5758257e7c62` |
+| Claude | `packages/adapter-claude/payloads/unified-plugin-framework/bundle.json` | `claude-code-plugins-2026-08-10` | `054590a8ee5a5849c8b7f3686f36311446b43b1f84e024e949f284d9de70a982` |
+| Cursor | `packages/adapter-cursor/payloads/unified-plugin-framework/bundle.json` | `cursor-plugins-2026-08-10` | `f32b085caabeac2aaca47c0eae492744f354fdac8be50f2485e3075c18e43562` |
+| Codex | `packages/adapter-codex/payloads/unified-plugin-framework/bundle.json` | `codex-plugins-2026-08-10` | `c6116a18630e78fd289b6bc1937206ce7ebfa0b3f6471af304344d4e180f8df2` |
+| Claude | `packages/adapter-claude/payloads/project-knowledge/bundle.json` | `claude-code-plugins-2026-08-10` | `5e89836e453392c8fa9d2c6a144d44ab54eeae8e6f61bff70be64f6cc4f1491a` |
+| Cursor | `packages/adapter-cursor/payloads/project-knowledge/bundle.json` | `cursor-plugins-2026-08-10` | `a4a7fc9b8ab52ba90e271c4fcdae2e092232834a641b70bb424e8a86380a84f7` |
+| Codex | `packages/adapter-codex/payloads/project-knowledge/bundle.json` | `codex-plugins-2026-08-10` | `e9ca6be92b40e94102a0cdd0a3ce3763284c83735164e3ff47e7ad8da66cff1c` |
 
 Every shipped payload is verified by `pnpm payloads:verify`, CI, and the release-evidence test suite.

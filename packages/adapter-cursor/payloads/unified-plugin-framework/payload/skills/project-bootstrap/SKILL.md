@@ -5,7 +5,7 @@ description: Complete missing project setup, preserve existing choices and resum
 
 # Project Bootstrap
 
-Use the setup context returned by the project operation. If setup was requested explicitly without that context, run `agent-plugin project describe --project <project-directory>` once. If configured, use its project language and continue the user's request. Do not add a recurring setup check.
+Use the setup context returned by the project operation. If setup was requested explicitly without that context, run `agent-plugin project describe --project <project-directory>` once. Adopt existing project choices; explicit tooling bootstrap continues to the setup plan below even when tracker settings are already present. Do not add a recurring setup check.
 
 Use the CLI supplied with the installation. In a source checkout, `pnpm --dir <framework-checkout> agent-plugin project ...` is the same command after install/build. If the CLI is unavailable, preserve the request and identify that installation prerequisite instead of restarting setup or silently installing a replacement.
 
@@ -16,3 +16,13 @@ Collect the missing questions together. Preserve the original operation while wa
 After the user accepts the choices, write the answers as JSON in a temporary file, following the returned settings shape. Run `agent-plugin project setup --input <answers-file> --resume <original-request-file> --project <project-directory>`. Omit `--resume` when there was no pending operation. The project preserves unrelated settings, saves the choices, constructs the adapter and resumes the pending operation once.
 
 Use the returned language for subsequent prose. On a credential or connection failure, follow the specific recovery and keep the saved choices. Do not restart the interview or repeat a write whose outcome is unknown.
+
+## Bootstrap tooling together
+
+For explicit full setup, or when a required tool is missing, use `agent-plugin project bootstrap --input <plan.json> --project <project-directory>`. This command plans without installing. The plan selects the supported host, Python executable, workflow names, clean pinned dependency roots, accepted knowledge/document locations, and any missing project answers. Use the same runtime location as the commands above. Supported automation starts with the current Codex host; preserve unsupported hosts and report their next step.
+
+Read existing settings and reuse valid choices before asking. Show the concrete plan: reused tools, required installations, local cache/runtime locations, registration changes and authentication needs. After the user accepts, add `--apply`; add `--resume <original-request.json>` only for the saved pending request. Existing authorization for these exact changes remains valid. Setup verifies each configured capability before resuming; unfinished steps retain the request and successful setup.
+
+The setup input contains `host`, `python`, `workflows`, `pluginRoots`, `knowledge` (`knowledgeRoot`, `documentMode`, `docsRoot`, `vaultRoot`), optional project `answers` and an existing `trackerRef` for a read-only check. Paths are project-relative for knowledge/documents. Optional `steps` restricts setup to named missing capabilities; otherwise the command checks the complete supported set once. Use project-selected adapter settings; never place credentials in the plan or chat.
+
+When the report requests project knowledge, run the installed `discover-project-knowledge` skill to build accurate source-backed units, then rerun the same accepted plan. When review bindings are absent, run the installed review setup through the workflow adapter using the saved project choices and shared root. On authentication failure follow the adapter's recovery; another client's login is not proof. Host discovery and catalog/search/fetch are verified separately from configuration. Report any required host reload instead of claiming current-session activation.

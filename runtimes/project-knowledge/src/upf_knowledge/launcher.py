@@ -64,6 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--project", type=Path, default=Path.cwd())
     parser.add_argument("--root")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--verify", action="store_true", help="Verify catalog, search and fetch over a fresh MCP connection.")
     return parser
 
 
@@ -88,6 +89,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.check:
         print(json.dumps({"ok": True, "root": str(root)}))
         return 0
+
+    if args.verify:
+        # External protocol boundary: failures remain a recoverable CLI result.
+        try:
+            from upf_knowledge.verify import verify_store
+            print(json.dumps(verify_store(project, root)))
+            return 0
+        except Exception:
+            return _error("verification_failed", "Knowledge protocol verification failed. Run discovery to populate the store, or reinstall its runtime; then retry --verify.")
 
     # Load the vendored modules by file path in this process. This avoids resolving
     # same-named modules from an unrelated Python installation.

@@ -11,8 +11,8 @@ const framework = fileURLToPath(new URL("../../../plugins/unified-plugin-framewo
 
 const unusedAdapter = Object.freeze({ vendor: "claude" });
 
-test("the framework plugin and the reference plugin are shipped", () => {
-  assert.deepEqual([...SHIPPED_PLUGINS], ["hello-world", "unified-plugin-framework"]);
+test("the framework, knowledge and reference plugins are shipped", () => {
+  assert.deepEqual([...SHIPPED_PLUGINS], ["hello-world", "unified-plugin-framework", "project-knowledge"]);
 });
 
 test("withAssembledSource hands over an assembled copy and removes it afterwards", () => {

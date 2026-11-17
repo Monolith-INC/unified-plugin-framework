@@ -35,10 +35,10 @@
       "sha256": "bbd959485fb83f6e86cdbc83a896f5068e3406faf05925d870dcb45cef3bf0c3"
     },
     {
-      "bytes": 2298,
+      "bytes": 4479,
       "mode": 420,
       "path": "skills/project-bootstrap/SKILL.md",
-      "sha256": "458810ece7d539bc2defb04fcdc5b3b794d1c56c6b89f3da31968fc057a3c2cc"
+      "sha256": "706125c165d9969cee4b1a6d97bea9782a933093abbb3736956c0074d28f933e"
     },
     {
       "bytes": 2442,
@@ -107,12 +107,12 @@
       "sha256": "5089bcd5479885a4a348a49692fff62d51c821934c475ed2d2e13b4622a2f62b"
     }
   ],
-  "payloadDigest": "cc0f14bdc2c281b412ddd6d073e39e086bae724ff72abd765d7da81444ea07f8",
+  "payloadDigest": "054590a8ee5a5849c8b7f3686f36311446b43b1f84e024e949f284d9de70a982",
   "plugin": {
     "name": "unified-plugin-framework",
     "version": "0.1.0"
   },
   "schemaVersion": "1.0.0",
-  "sourceDigest": "a5be74d149d32078f00d524c97ee18ee6ccd46ec7ba2490a190b8ead90668ca1",
+  "sourceDigest": "b38fb2a3ab71d84375ffc115dcf3f72e292599fcd17e9ccc99af2b16eff48255",
   "vendor": "claude"
 }

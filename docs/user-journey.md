@@ -12,6 +12,10 @@ The project language applies to communication, documentation and other generated
 
 See [Project bootstrap and tracker adapters](work-items/2026-11-17-project-bootstrap-and-tracker-adapters.md) for the responsibility boundaries and delivery scope.
 
+### Complete tooling bootstrap
+
+[AGE-101](work-items/2026-11-17-age-101-tooling-bootstrap.md) extends setup to the full supported toolchain: CLI, host skills and pinned workflow dependencies, shared project knowledge, an isolated retrieval runtime, host registration and review integration. It begins with this repository, then makes the same setup available to future projects. Existing working capabilities are reused; a missing required capability resumes its setup step. Configuration, live operation and host activation are reported separately.
+
 ## The journey
 
 A session starts or resumes with Continuity, then moves through Discovery, project tracking, implementation and code review. Every workflow reads and writes the same project knowledge store.
