@@ -1,5 +1,6 @@
 import type { VendorAdapter } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
+import { agentContinuityAdapter } from "./continuity.js";
 
 import type { WorkflowAdapter } from "./adapter.js";
 import type { OnboardedLock } from "./lock.js";
@@ -74,7 +75,10 @@ export const WORKFLOWS: Readonly<Record<WorkflowName, WorkflowAdapter<string>>> 
   "code-review": reviewToolkitAdapter,
   discovery: brainstormingDiscoveryAdapter,
   "project-tracking": backlogTrackingAdapter,
+  continuity: agentContinuityAdapter,
 });
+
+export { CONTINUITY_OPERATIONS, CONTINUITY_CONTRACT_VERSION, agentContinuityAdapter, type ContinuityAdapter, type ContinuityOperation } from "./continuity.js";
 
 const WORKFLOW_LOOKUP: ReadonlyMap<string, WorkflowAdapter<string>> = new Map(Object.entries(WORKFLOWS));
 

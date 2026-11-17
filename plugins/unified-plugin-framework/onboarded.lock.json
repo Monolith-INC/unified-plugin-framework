@@ -2,6 +2,14 @@
   "lockVersion": 1,
   "plugins": [
     {
+      "adapter": "continuity",
+      "checksum": "c54b7d77ef1de3cd3151a84910a45fa98336842b3768cc9e528c2e3574596d73",
+      "contractVersion": "1.0.0",
+      "mappingDigest": "2b56059b5a1eb7bd62b3d0fb975b0d2e732103f44f675f0a53eac8795787e80a",
+      "plugin": "agent-continuity",
+      "version": "0.13.0"
+    },
+    {
       "adapter": "project-tracking",
       "checksum": "3c79094b2810aa06ee0d521b28ee00fdf1fcdb7b587d9ab8b815af36aa091429",
       "contentSource": {
