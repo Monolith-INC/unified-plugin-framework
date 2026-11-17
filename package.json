@@ -5,6 +5,7 @@
   "description": "Reference implementation and CLI for the Agent Plugins v1.0.0 portable architecture.",
   "type": "module",
   "scripts": {
+    "agent-plugin": "node packages/cli/dist/index.js",
     "build": "pnpm -r --filter \"./packages/*\" build",
     "build:core": "pnpm --filter @agent-plugins/core build",
     "build:cli": "pnpm --filter @agent-plugins/cli build",

@@ -2,6 +2,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runProject } from "./project.js";
 
 import { claudeAdapter, claudeShippedBundle } from "@agent-plugins/adapter-claude";
 import { codexAdapter, codexShippedBundle } from "@agent-plugins/adapter-codex";
@@ -47,6 +48,7 @@ Commands:
                                     Check a workflow adapter's readiness (declared, installed, bound)
   upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
+  project describe|setup|request    Use the project's configuration and tracker adapter
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -67,10 +69,12 @@ export const NODE_CLI_IO: CliIo = Object.freeze({
   cwd: () => process.cwd(), // fp-allow: no-ambient-effect
 });
 
-export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number {
+export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | Promise<number> {
   const [command, ...rest] = argv;
 
   switch (command) {
+    case "project":
+      return runProject(rest, io);
     case "validate":
       return isHelpToken(rest[0]) ? printUsage(io, 0) : validatePlugin(io, resolve(io.cwd(), rest[0] ?? "."));
     case "inspect":
@@ -416,4 +420,4 @@ function toRealPath(path: string): string {
 }
 
 // Edge: the program's one effectful invocation, when this module is run as the CLI.
-if (isCliEntrypoint(process.argv[1], import.meta.url)) process.exit(run(process.argv.slice(2))); // fp-allow: no-ambient-effect
+if (isCliEntrypoint(process.argv[1], import.meta.url)) process.exit(await run(process.argv.slice(2))); // fp-allow: no-ambient-effect

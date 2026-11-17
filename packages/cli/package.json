@@ -21,6 +21,7 @@
     "test": "tsc -b tsconfig.json && node --test test/**/*.test.mjs"
   },
   "dependencies": {
+    "@agent-plugins/project": "workspace:*",
     "@agent-plugins/adapter-claude": "workspace:*",
     "@agent-plugins/adapter-codex": "workspace:*",
     "@agent-plugins/adapter-cursor": "workspace:*",
