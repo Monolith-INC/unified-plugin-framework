@@ -1,12 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { bootstrapTooling, fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, resumeTooling, type Request, type Result, type ToolingReport } from "@agent-plugins/project";
+import { bootstrapTooling, fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, resumeTooling, TOOLING_STEPS, type Request, type Result, type ToolingIO, type ToolingReport } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
 import { forHost, parseBootstrap, type AcceptedPlan } from "./tooling-input.js";
 import { nodeToolingIO } from "./tooling-node.js";
 import { finishKnowledge } from "./tooling-acquisition.js";
 import { sweepSetupWrites } from "./tooling-files.js";
 import { exitCodeOf, recoveryFor } from "./tooling-recovery.js";
+import { bootstrapHosts, HOST_STEPS, pendingTasks, summarizeSteps, type HostRun, type HostSetup } from "./tooling-bootstrap.js";
+import type { HostName } from "./host-names.js";
 
 const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>]";
 const pairs = (args: readonly string[]): readonly string[] => args.filter((entry) => entry !== "--apply");
@@ -35,25 +37,48 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
     : execute(project, parsed.value, args.includes("--apply"), request.value, io);
 };
 const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
-  const tooling = nodeToolingIO(project, forHost(plan, plan.hosts[0]), { claudeState: io.claudeState() });
+  const environment = { claudeState: io.claudeState() };
+  const ioFor = (host: HostName) => nodeToolingIO(project, forHost(plan, host), environment);
   const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
-  const result = swept.ok ? await bootstrapTooling(tooling, apply, plan.steps)() : swept;
+  const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan)() : swept;
   return result.ok
-    ? respond(project, plan, apply, request, io, apply ? await finishKnowledge(result.value, project, plan, tooling) : result.value)
+    ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor) : result.value)
     : output(io, result);
 };
 
-const followUp = (report: ToolingReport): boolean => report.steps.some((step) =>
-  step.status === "action-required" && step.failure.code === "knowledge-discovery-needed");
-const reportExit = (report: ToolingReport, handoff: boolean): number => !handoff ? 0
-  : report.steps.some((step) => step.status === "action-required"
-    && exitCodeOf(recoveryFor(step.step, step.failure.code).onFailure.class) === 1) ? 1 : 2;
-const respond = (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, report: ToolingReport): Promise<number> => {
-  const handoff = apply && followUp(report);
-  return apply && request !== null && report.status === "ready"
-    ? resumeTooling(report, operate(nodeProjectIO(project), request))().then((resumed) => output(io, resumed))
-    : Promise.resolve(output(io, ok({ mode: apply ? "apply" : "plan", host: plan.hosts[0], hosts: plan.hosts, workflows: plan.workflows,
-      tooling: report, request, next: report.status === "ready" ? "Selected tooling is verified. Continue the original work."
-        : handoff ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
-          : "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused." }), reportExit(report, handoff)));
+const refreshServer = async (run: HostRun, ioFor: (host: HostName) => ToolingIO): Promise<HostRun> => {
+  const verify = run.tooling.steps.some((step) => step.step === "knowledge-server" && step.status === "action-required");
+  const refreshed = verify ? await bootstrapTooling(ioFor(run.host), false, ["knowledge-server"])() : undefined;
+  return refreshed?.ok ? { ...run, tooling: summarizeSteps(run.tooling.steps.map((step) =>
+    step.step === "knowledge-server" ? refreshed.value.steps[0] ?? step : step)) } : run;
+};
+
+const acquire = async (setup: HostSetup, project: string, plan: AcceptedPlan, ioFor: (host: HostName) => ToolingIO): Promise<HostSetup> => {
+  const candidates = setup.hosts.filter(({ tooling }) => tooling.steps.some((step) =>
+    step.step === "host-discovery" && step.status === "ready")).map(({ host }) => host);
+  const shared = await finishKnowledge(setup.project, project, plan, ioFor(plan.hosts[0]), candidates);
+  const acquired = shared !== setup.project && shared.steps.some((step) => step.step === "knowledge-content" && step.status === "ready");
+  return { ...setup, project: shared, hosts: acquired ? await Promise.all(setup.hosts.map((run) => refreshServer(run, ioFor))) : setup.hosts };
+};
+
+const reportExit = (report: ToolingReport, apply: boolean): number => {
+  const codes = report.steps.flatMap((step) => step.status === "ready" ? [] : [exitCodeOf(recoveryFor(step.step, step.failure.code).onFailure.class)]);
+  return !apply ? 0 : codes.includes(1) ? 1 : codes.includes(2) ? 2 : 0;
+};
+const fullHost = (run: HostRun) => HOST_STEPS.every((step) => run.tooling.steps.some((entry) => entry.step === step));
+const respond = (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, setup: HostSetup): Promise<number> => {
+  const report = summarizeSteps([...setup.project.steps, ...setup.hosts.flatMap(({ tooling }) => tooling.steps)]);
+  const complete = TOOLING_STEPS.every((step) => plan.steps.includes(step));
+  const handoffs = apply ? pendingTasks(report) : [];
+  const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: report, request,
+    project: setup.project, hosts: setup.hosts.map((run) => ({ ...run, status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
+    handoffs, events: setup.events, log: null,
+    status: report.status === "action-required" || complete ? report.status : "not-verified",
+    next: handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
+      : report.status === "action-required" ? "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused."
+        : complete ? "Selected tooling is verified. Continue the original work." : "The selected steps passed. Other setup capabilities were not verified." };
+  return apply && request !== null && report.status === "ready" && report.steps.length > 0
+    ? resumeTooling(report, operate(nodeProjectIO(project), request))().then((resumed) =>
+      output(io, resumed.ok ? ok({ ...common, ...resumed.value }) : resumed))
+    : Promise.resolve(output(io, ok(common), reportExit(report, apply)));
 };

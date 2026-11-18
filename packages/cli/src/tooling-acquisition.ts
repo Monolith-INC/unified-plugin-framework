@@ -2,7 +2,7 @@ import { access, mkdtemp, realpath, rmdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { bootstrapTooling, fail, type Result, type ToolingIO, type ToolingOutcome, type ToolingReport } from "@agent-plugins/project";
+import { bootstrapTooling, fail, object, parseJson, type Result, type ToolingIO, type ToolingOutcome, type ToolingReport } from "@agent-plugins/project";
 import type { AcceptedPlan } from "./tooling-input.js";
 import type { HostName } from "./host-names.js";
 import { boundedOutput, selectEnvironment } from "./tooling-process.js";
@@ -36,24 +36,36 @@ const executable = async (host: HostName, cwd: string, path: string | undefined)
 
 const pinned = (version: Result<string>, host: HostName): boolean =>
   version.ok && version.value.trim().split(/\s+/).includes(PINS.hostClis[host].version);
-const approved = (report: ToolingReport, plan: AcceptedPlan): boolean =>
-  plan.consent.headlessDiscovery && ready(report, "knowledge-runtime") && ready(report, "knowledge-settings")
-    && ready(report, "host-discovery");
+const approved = (report: ToolingReport, plan: AcceptedPlan, candidates: readonly HostName[]): boolean =>
+  plan.consent.headlessDiscovery && ready(report, "knowledge-runtime") && ready(report, "knowledge-settings") && candidates.length > 0;
+const signedIn = (host: HostName, auth: Result<string>): boolean => {
+  if (!auth.ok) return false;
+  if (host === "codex") return true;
+  const status = parseJson(auth.value);
+  return status.ok && object(status.value) && status.value.loggedIn === true;
+};
 
-const runHost = async (host: HostName, project: string, runtime: string, root: string, scratch: string): Promise<Result<string>> => {
+const runHost = async (host: HostName, project: string, runtime: string, root: string, scratch: string): Promise<Result<string> | null> => {
   const env = selectEnvironment(process.env, DISCOVERY_ENV);
   const program = await executable(host, project, env.PATH);
   const run = (args: readonly string[], timeout: number) =>
     program === undefined ? Promise.resolve(pending()) : boundedOutput(program, args, scratch, timeout, env);
   const version = await run(["--version"], 5_000);
   const auth = pinned(version, host) ? await run(host === "codex" ? ["login", "status"] : ["auth", "status"], 10_000) : pending();
-  const discovery = auth.ok ? await run(headlessDiscovery(host, { project, runtime, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000) : auth;
+  if (!signedIn(host, auth)) return null;
+  const discovery = await run(headlessDiscovery(host, { project, runtime, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000);
   return discovery.ok && discovery.value.trim() === DISCOVERY_COMPLETE
     ? boundedOutput(runtime, ["--project", project, "--root", root, "--verify"], scratch, 60_000, env)
     : pending();
 };
 
-const verifyAndMark = async (project: string, plan: AcceptedPlan): Promise<Result<string>> => {
+const tryEligibleHosts = async (candidates: readonly HostName[], project: string, runtime: string, root: string, scratch: string): Promise<Result<string>> => {
+  const [host, ...remaining] = candidates;
+  return host === undefined ? pending()
+    : (await runHost(host, project, runtime, root, scratch)) ?? tryEligibleHosts(remaining, project, runtime, root, scratch);
+};
+
+const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: readonly HostName[]): Promise<Result<string>> => {
   const canonical = await realpath(project);
   const temp = await realpath(tmpdir());
   const runtime = knowledgeExecutable(canonical);
@@ -64,7 +76,7 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan): Promise<Resul
   if (!previous.ok || within(canonical, temp)) return pending();
   const scratch = await mkdtemp(join(temp, "upf-discovery-"));
   try {
-    const verified = await runHost(plan.hosts[0], canonical, runtime, root, scratch);
+    const verified = await tryEligibleHosts(candidates, canonical, runtime, root, scratch);
     return verified.ok ? writeText(canonical, marker, "verified\n", previous.value, plan.python) : verified;
   } finally {
     await rmdir(scratch).catch(() => undefined);
@@ -72,9 +84,10 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan): Promise<Resul
 };
 
 /** Run once after host verification. An unavailable host or incomplete run leaves the manual hand-off. */
-export const finishKnowledge = async (report: ToolingReport, project: string, plan: AcceptedPlan, tooling: ToolingIO): Promise<ToolingReport> => {
+export const finishKnowledge = async (report: ToolingReport, project: string, plan: AcceptedPlan, tooling: ToolingIO,
+  candidates: readonly HostName[] = ready(report, "host-discovery") ? plan.hosts : []): Promise<ToolingReport> => {
   if (!missing(report)) return report;
-  const acquired = approved(report, plan) ? await verifyAndMark(project, plan).catch(pending) : pending();
+  const acquired = approved(report, plan, candidates) ? await verifyAndMark(project, plan, candidates).catch(pending) : pending();
   const server = acquired.ok && report.steps.some(({ step }) => step === SERVER)
     ? await bootstrapTooling(tooling, false, [SERVER])() : undefined;
   const steps = report.steps.map((outcome): ToolingOutcome => {

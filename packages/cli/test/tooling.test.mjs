@@ -220,7 +220,7 @@ test('a marked runtime resumes, but a replacement directory is preserved',async(
 
 test('bootstrap holds a saved request while incomplete and applies it once after required setup',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-bootstrap-resume-'));
-  const input=join(project,'plan.json');await writeFile(input,JSON.stringify(choices));
+  const input=join(project,'plan.json');await writeFile(input,JSON.stringify({...choices,hosts:['codex','claude']}));
   const request=join(project,'request.json');await writeFile(request,JSON.stringify({operation:'create_work_item',kind:'user_story',title:'Resume this saved request',description:'One accepted create.'}));
   const argv=[cli,'project','bootstrap','--input',input,'--resume',request,'--project',project];
   const planned=JSON.parse(execFileSync(process.execPath,argv,{encoding:'utf8'}));
@@ -228,6 +228,8 @@ test('bootstrap holds a saved request while incomplete and applies it once after
   await assert.rejects(readFile(join(project,'.unified-plugin-framework','items.json')));
   const applied=JSON.parse(execFileSync(process.execPath,[...argv,'--apply'],{encoding:'utf8'}));
   assert.equal(applied.value.resumed.status,'completed');
+  assert.deepEqual(applied.value.hosts.map(({host,status})=>[host,status]),[['codex','not-verified'],['claude','not-verified']]);
+  assert.equal(applied.value.status,'not-verified');
   assert.equal(JSON.parse(await readFile(join(project,'.unified-plugin-framework','items.json'),'utf8')).length,1);
 });
 
