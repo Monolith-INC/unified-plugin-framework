@@ -1,7 +1,7 @@
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, probeProjectRead, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
-import { CODEX_TOOLING } from "@agent-plugins/adapter-codex";
+import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 import type { BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
@@ -62,7 +62,7 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
     case "knowledge-server": return registerHost(project, input, knowledgeExecutable(project));
     case "review": return configureReview(project, input);
     case "host-discovery": return stagedBindings(project, input).ok
-      ? installHostPlugins(project, resolved, ["unified-plugin-framework", "project-knowledge", ...pluginNames(input)])
+      ? installHostPlugins(project, resolved, [...FRAMEWORK_PLUGINS, ...pluginNames(input)])
       : inputNeeded("host-activation-needed", "Pinned dependencies have not been staged successfully.", "Complete the dependency source recovery, then repeat fresh host discovery; configuration alone is not proof.");
     case "tracker": return inputNeeded("tracker-attention", "The selected project adapter needs attention.", "Follow its authentication or connection recovery; retain saved project choices and do not put credentials in chat or files.");
   }
@@ -93,7 +93,7 @@ const inspectServer = (project: string, input: BootstrapInput): Promise<Result<T
 const inspectReview = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const raw = await nodeProjectFiles.read(join(project, ".monolithic-code-review/sources.json"))();
   return raw.ok && reviewBindingsValid(raw.value) && object(raw.value.knowledge)
-    && raw.value.knowledge.root === input.knowledge.knowledgeRoot && raw.value.knowledge.mcp_server === CODEX_TOOLING.server
+    && raw.value.knowledge.root === input.knowledge.knowledgeRoot && raw.value.knowledge.mcp_server === KNOWLEDGE_SERVER
     ? ready("Review settings point to the project's single knowledge root and server.") : missing("Run review-setup for provider bindings if absent, then point review knowledge to the accepted project root.");
 };
 const inspectDiscovery = (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => discoverHost(project, input).then((result) => {

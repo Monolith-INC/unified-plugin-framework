@@ -1,6 +1,6 @@
 import { fail, object, ok, text, TOOLING_STEPS, type Result, type ToolingStep } from "@agent-plugins/project";
 import { WORKFLOWS } from "@agent-plugins/workflows";
-import { isHostName, type HostName } from "./tooling-hosts.js";
+import { isHostName, type HostName } from "./host-names.js";
 
 export interface BootstrapInput {
   readonly host: HostName;
@@ -28,4 +28,4 @@ export const parseBootstrap = (value: unknown): Result<BootstrapInput> => object
   && (value.trackerRef === undefined || text(value.trackerRef))
   ? ok({ ...value, steps: value.steps ?? TOOLING_STEPS } as unknown as BootstrapInput)
   : fail("invalid-bootstrap", "Choose a supported host, Python executable, workflows, plugin roots and project-relative knowledge/document paths.",
-    "Use project-bootstrap to prepare the concrete setup plan for Codex, Claude Code or Cursor; preserve other hosts' configuration.");
+    "Use project-bootstrap to prepare the concrete setup plan for Codex or Claude Code; preserve other hosts' configuration.");

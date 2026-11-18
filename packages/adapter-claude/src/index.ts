@@ -17,6 +17,7 @@ import {
   type VendorBundle,
   type VendorBundleDraft,
 } from "@agent-plugins/compiler";
+import { andThen, concatAll, type Monoid } from "@agent-plugins/compiler/railway";
 
 export const CLAUDE_ADAPTER_VERSION = "1.0.0" as const;
 export const CLAUDE_SCHEMA_VERSION = "claude-code-plugins-2026-08-10" as const;
@@ -85,27 +86,34 @@ export function compileClaudePayload(plugin: CanonicalPlugin): Result<VendorBund
 
 export function validateClaudeBundle(bundle: VendorBundle): readonly Diagnostic[] {
   const common = validateVendorBundle(bundle);
-  if (common.length > 0) return common;
-  const diagnostics: Diagnostic[] = [];
-  if (bundle.manifest.vendor !== "claude" || bundle.manifest.adapter.version !== CLAUDE_ADAPTER_VERSION ||
-      bundle.manifest.adapter.vendorSchemaVersion !== CLAUDE_SCHEMA_VERSION) {
-    diagnostics.push(diagnostic("claude.bundle.identity", "Bundle is not owned by this Claude adapter."));
-  }
+  return common.length > 0 ? common : claudeBundleDiagnostics(bundle);
+}
+
+const PAYLOAD_PATH = /^(?:\.claude-plugin\/plugin\.json|skills\/[^/]+\/SKILL\.md|hooks\/hooks\.json|\.mcp\.json)$/;
+const FRONTMATTER = /^---\n[\s\S]*\n---\n/u;
+/** Every Claude-specific problem, in the order identity, paths, manifest, skills, hooks, MCP. */
+function claudeBundleDiagnostics(bundle: VendorBundle): readonly Diagnostic[] {
   const paths = new Set<string>(bundle.files.map((file) => file.path));
-  const allowed = /^(?:\.claude-plugin\/plugin\.json|skills\/[^/]+\/SKILL\.md|hooks\/hooks\.json|\.mcp\.json)$/;
-  for (const file of bundle.files) {
-    if (!allowed.test(file.path)) diagnostics.push(diagnostic("claude.payload.path", "Unexpected Claude payload path.", file.path));
-  }
   const manifest = parseJson(bundle, MANIFEST_PATH);
-  if (!manifest.ok) diagnostics.push(...manifest.diagnostics);
-  else diagnostics.push(...validateManifest(manifest.value, paths));
-  for (const file of bundle.files.filter((entry) => entry.path.startsWith("skills/"))) {
-    const text = decodeText(file);
-    if (!text.ok || !/^---\n[\s\S]*\n---\n/u.test(text.value)) diagnostics.push(diagnostic("claude.skill.invalid", "Claude Skills require YAML frontmatter.", file.path));
-  }
-  if (paths.has(HOOKS_PATH)) diagnostics.push(...validateHooks(parseJson(bundle, HOOKS_PATH)));
-  if (paths.has(MCP_PATH)) diagnostics.push(...validateMcp(parseJson(bundle, MCP_PATH)));
-  return diagnostics;
+  return [
+    ...(ownedByAdapter(bundle) ? [] : [diagnostic("claude.bundle.identity", "Bundle is not owned by this Claude adapter.")]),
+    ...bundle.files.filter((file) => !PAYLOAD_PATH.test(file.path)).map((file) => diagnostic("claude.payload.path", "Unexpected Claude payload path.", file.path)),
+    ...(manifest.ok ? validateManifest(manifest.value, paths) : manifest.diagnostics),
+    ...bundle.files.filter((file) => file.path.startsWith("skills/") && !hasFrontmatter(file))
+      .map((file) => diagnostic("claude.skill.invalid", "Claude Skills require YAML frontmatter.", file.path)),
+    ...(paths.has(HOOKS_PATH) ? validateHooks(parseJson(bundle, HOOKS_PATH)) : []),
+    ...(paths.has(MCP_PATH) ? validateMcp(parseJson(bundle, MCP_PATH)) : []),
+  ];
+}
+
+function ownedByAdapter(bundle: VendorBundle): boolean {
+  return bundle.manifest.vendor === "claude" && bundle.manifest.adapter.version === CLAUDE_ADAPTER_VERSION
+    && bundle.manifest.adapter.vendorSchemaVersion === CLAUDE_SCHEMA_VERSION;
+}
+
+function hasFrontmatter(file: PayloadFile): boolean {
+  const text = decodeText(file);
+  return text.ok && FRONTMATTER.test(text.value);
 }
 
 export function planClaudeInstallation(bundle: VendorBundle, _target: InstallTarget): Result<InstallPlan> {
@@ -125,30 +133,45 @@ export function planClaudeInstallation(bundle: VendorBundle, _target: InstallTar
 type HookCommand = { readonly type: "command"; readonly command: string; readonly timeout?: number };
 type HookGroup = { readonly matcher?: string; readonly hooks: readonly HookCommand[] };
 
+type HookEvents = Readonly<Record<string, readonly HookGroup[]>>;
+type HookMapping = { readonly event: string; readonly matcher?: string };
+
+/** Hook groups by event: `concat` appends each event's groups in order, and events keep the order they first appear in. */
+export const HOOK_EVENTS: Monoid<HookEvents> = Object.freeze({
+  empty: {},
+  concat: (x: HookEvents, y: HookEvents): HookEvents => ({
+    ...x, ...Object.fromEntries(Object.entries(y).map(([event, groups]) => [event, [...(x[event] ?? []), ...groups]])),
+  }),
+});
+
 function renderHooks(intents: readonly CanonicalHookIntent[]): Result<JsonValue | undefined> {
   if (intents.length === 0) return success(undefined);
-  const hooks: Record<string, HookGroup[]> = {};
-  for (const intent of intents) {
-    const mappings = hookMappings(intent);
-    if (!mappings.ok) return mappings;
-    for (const mapping of mappings.value) {
-      hooks[mapping.event] = [
-        ...(hooks[mapping.event] ?? []),
-        {
-          ...(mapping.matcher === undefined ? {} : { matcher: mapping.matcher }),
-          hooks: [{
-            type: "command",
-            command: [intent.executable, ...intent.arguments].map((part) => JSON.stringify(part)).join(" "),
-            ...(intent.timeoutSeconds === undefined ? {} : { timeout: intent.timeoutSeconds }),
-          }],
-        },
-      ];
-    }
-  }
-  return success({ hooks });
+  return andThen(firstFailureOrAll(intents.map((intent) => andThen(hookMappings(intent), (mappings) => success(intentEvents(intent, mappings))))),
+    (events): Result<JsonValue | undefined> => success({ hooks: concatAll(HOOK_EVENTS)(events) } as JsonValue));
 }
 
-function hookMappings(intent: CanonicalHookIntent): Result<readonly { readonly event: string; readonly matcher?: string }[]> {
+function intentEvents(intent: CanonicalHookIntent, mappings: readonly HookMapping[]): HookEvents {
+  return concatAll(HOOK_EVENTS)(mappings.map((mapping) => ({ [mapping.event]: [hookGroup(intent, mapping)] })));
+}
+
+function hookGroup(intent: CanonicalHookIntent, mapping: HookMapping): HookGroup {
+  return {
+    ...(mapping.matcher === undefined ? {} : { matcher: mapping.matcher }),
+    hooks: [{
+      type: "command",
+      command: [intent.executable, ...intent.arguments].map((part) => JSON.stringify(part)).join(" "),
+      ...(intent.timeoutSeconds === undefined ? {} : { timeout: intent.timeoutSeconds }),
+    }],
+  };
+}
+
+/** Every value in order, or the first failure; later results are not consulted once one fails. */
+function firstFailureOrAll<A>(results: readonly Result<A>[]): Result<readonly A[]> {
+  const [next, ...rest] = results;
+  return next === undefined ? success([]) : andThen(next, (value) => andThen(firstFailureOrAll(rest), (values): Result<readonly A[]> => success([value, ...values])));
+}
+
+function hookMappings(intent: CanonicalHookIntent): Result<readonly HookMapping[]> {
   switch (intent.lifecycle) {
     case "session-start": return success([{ event: "SessionStart" }]);
     case "session-end": return success([{ event: "SessionEnd" }]);
@@ -174,38 +197,39 @@ function toolMatcher(kind: CanonicalHookIntent["toolKinds"][number]): string {
 
 function renderMcp(servers: readonly PluginMcpServer[]): Result<JsonValue | undefined> {
   if (servers.length === 0) return success(undefined);
-  const entries: Record<string, JsonValue> = {};
-  for (const [index, server] of servers.entries()) {
-    const name = server.name ?? `server-${index + 1}`;
-    if (entries[name] !== undefined) return fail("claude.mcp.duplicate", "Claude MCP server names must be unique.", name);
-    switch (server.transport) {
-      case "stdio":
-        if (server.cwd !== undefined) return fail("claude.mcp.unsupported", "Claude plugin MCP declarations cannot preserve a portable working directory.", name);
-        entries[name] = { command: server.command, ...(server.args === undefined ? {} : { args: server.args }) };
-        break;
-      case "streamable-http": entries[name] = { type: "http", url: server.url }; break;
-      case "sse": entries[name] = { type: "sse", url: server.url }; break;
-      case "config-path": return fail("claude.mcp.unsupported", "Claude payloads cannot inline an opaque MCP config-path declaration.", name);
-    }
+  const named = servers.map((server, index) => ({ server, name: server.name ?? `server-${index + 1}` }));
+  return andThen(firstFailureOrAll(named.map(({ server, name }, index) => named.findIndex((other) => other.name === name) < index
+    ? fail("claude.mcp.duplicate", "Claude MCP server names must be unique.", name)
+    : andThen(mcpEntry(server, name), (entry): Result<readonly [string, JsonValue]> => success([name, entry])))),
+  (entries): Result<JsonValue | undefined> => success({ mcpServers: Object.fromEntries(entries) }));
+}
+
+function mcpEntry(server: PluginMcpServer, name: string): Result<JsonValue> {
+  switch (server.transport) {
+    case "stdio": return server.cwd !== undefined
+      ? fail("claude.mcp.unsupported", "Claude plugin MCP declarations cannot preserve a portable working directory.", name)
+      : success({ command: server.command, ...(server.args === undefined ? {} : { args: server.args }) });
+    case "streamable-http": return success({ type: "http", url: server.url });
+    case "sse": return success({ type: "sse", url: server.url });
+    case "config-path": return fail("claude.mcp.unsupported", "Claude payloads cannot inline an opaque MCP config-path declaration.", name);
   }
-  return success({ mcpServers: entries });
 }
 
 function validateManifest(value: unknown, paths: ReadonlySet<string>): readonly Diagnostic[] {
   if (!isRecord(value)) return [diagnostic("claude.manifest.invalid", "Claude manifest must be an object.", MANIFEST_PATH)];
   const allowed = ["name", "version", "description", "skills", "hooks", "mcpServers"];
-  const diagnostics = Object.keys(value).filter((key) => !allowed.includes(key)).map((key) => diagnostic("claude.manifest.unknown_field", "Unknown Claude manifest field.", key));
-  if (typeof value["name"] !== "string" || !NAME.test(value["name"])) diagnostics.push(diagnostic("claude.manifest.name", "Claude manifest name is invalid.", "name"));
-  if (typeof value["version"] !== "string" || !SEMVER.test(value["version"])) diagnostics.push(diagnostic("claude.manifest.version", "Claude manifest version must be semantic.", "version"));
   const components: readonly (readonly [string, string, boolean])[] = [
     ["skills", "./skills/", [...paths].some((path) => path.startsWith("skills/"))],
     ["hooks", `./${HOOKS_PATH}`, paths.has(HOOKS_PATH)],
     ["mcpServers", `./${MCP_PATH}`, paths.has(MCP_PATH)],
   ];
-  for (const [field, expected, present] of components) {
-    if (present ? value[field] !== expected : value[field] !== undefined) diagnostics.push(diagnostic("claude.manifest.component", "Claude component declaration does not match payload contents.", field));
-  }
-  return diagnostics;
+  return [
+    ...Object.keys(value).filter((key) => !allowed.includes(key)).map((key) => diagnostic("claude.manifest.unknown_field", "Unknown Claude manifest field.", key)),
+    ...(typeof value["name"] !== "string" || !NAME.test(value["name"]) ? [diagnostic("claude.manifest.name", "Claude manifest name is invalid.", "name")] : []),
+    ...(typeof value["version"] !== "string" || !SEMVER.test(value["version"]) ? [diagnostic("claude.manifest.version", "Claude manifest version must be semantic.", "version")] : []),
+    ...components.filter(([field, expected, present]) => present ? value[field] !== expected : value[field] !== undefined)
+      .map(([field]) => diagnostic("claude.manifest.component", "Claude component declaration does not match payload contents.", field)),
+  ];
 }
 
 function validateHooks(result: Result<unknown>): readonly Diagnostic[] {

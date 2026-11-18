@@ -1,6 +1,6 @@
+import { realpathSync } from "node:fs";
 import { cp, readdir, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fail, object, ok, type Result } from "@agent-plugins/project";
@@ -13,12 +13,12 @@ import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts
 import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
 import { checkPluginBinding } from "@agent-plugins/workflows";
 import { sequence } from "./tooling-process.js";
-import { HOSTS, type DiscoveredSkill, type HostContext, type HostName, type HostPlugin } from "./tooling-hosts.js";
+import { HOSTS, type DiscoveredSkill, type HostContext, type HostPlugin } from "./host-table.js";
+import type { HostName } from "./host-names.js";
 import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
 
 export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 export const toolsRoot = (project: string): string => join(project, ".upf-tools");
-export const marketplaceRoot = toolsRoot;
 export const pluginTarget = (project: string, name: string): string => join(toolsRoot(project), "plugins", name);
 export const pluginNames = (input: BootstrapInput): readonly string[] => selectedPlugins(input.workflows);
 const FRAMEWORK_PLUGIN = join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework");
@@ -88,12 +88,12 @@ const dependencyRefs = (adapter: BindingFacts["adapter"]) => [...Object.values(a
   ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup }))];
 
 /** Validate the content the host actually discovered, including cache copies and bare skills. */
-export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly {readonly name: string; readonly path: string}[]): boolean => {
+export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): boolean => {
   const bindings = stagedBindings(project, input);
   return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) =>
     activeMatches(discovered, adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`, join(pluginTarget(project, plugin), "source/skills", skill))));
 };
-const activeMatches = (discovered: readonly {readonly name: string; readonly path: string}[], name: string, sourceDir: string): boolean => {
+const activeMatches = (discovered: readonly DiscoveredSkill[], name: string, sourceDir: string): boolean => {
   const matches = discovered.filter((entry) => entry.name === name);
   const source = readContentTree(sourceDir);
   return source.ok && matches.length > 0 && matches.every((entry) => {
@@ -105,11 +105,11 @@ const activeMatches = (discovered: readonly {readonly name: string; readonly pat
 /** Plugins this framework ships itself, rather than pinned dependencies. */
 export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework", "project-knowledge"]);
 /** Every skill the installed framework plugins provide, under the name the host discovers it by. */
-export const frameworkSkills = (project: string, host: HostName = "codex"): readonly { readonly name: string; readonly source: string }[] =>
+export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly source: string }[] =>
   FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(frameworkTarget(project, host, plugin), "skills"))
     .map((skill) => ({ name: `${plugin}:${skill}`, source: join(frameworkTarget(project, host, plugin), "skills", skill) })));
 /** The host serves its own cached copy, current only once activation succeeds; an earlier install's copy can share every name, so compare bytes. */
-export const frameworkSkillsMatch = (project: string, discovered: readonly DiscoveredSkill[], host: HostName = "codex"): boolean =>
+export const frameworkSkillsMatch = (project: string, discovered: readonly DiscoveredSkill[], host: HostName): boolean =>
   frameworkSkills(project, host).every(({ name, source }) => activeMatches(discovered, name, source));
 
 /** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
@@ -154,13 +154,11 @@ const markerMatches = (raw: string, source: string): boolean => {
 const copySource = async (project: string, target: string, source: string, name: string, marker: string): Promise<Result<string>> => {
   const staged = join(toolsRoot(project), "staging", randomUUID());
   const sourceTree = join(staged, "source");
-  const manifest = await readText(join(target, ".codex-plugin/plugin.json"));
+  const occupied = await readdir(target).then((entries) => entries.length > 0).catch(() => false);
   const safe = await safePath(project, target);
-  return !manifest.ok ? manifest : !safe || manifest.value !== null ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
+  return !safe || occupied ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
     : directory(project, staged).then((created) => created.ok ? cp(source, sourceTree, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
-      .then(() => writeText(project, join(staged, ".codex-plugin/plugin.json"), JSON.stringify({ name,
-        version: pinnedVersion(name), skills: "./source/skills/" }, null, 2), null))
-      .then((written) => written.ok ? writeText(project, join(staged, "upf-source.json"), marker, null) : written)
+      .then(() => writeText(project, join(staged, "upf-source.json"), marker, null))
       .then((written) => written.ok ? rename(staged, target).then(() => ok(target)) : written) : created)
       .catch(() => setupFailure(`Could not stage ${name}; preserve existing source and wrapper, then inspect the partial installation.`));
 };
@@ -170,17 +168,24 @@ const pinnedVersion = (name: string): string => {
   return lock?.ok ? lock.lock.plugins.find((pin) => pin.plugin === name)?.version ?? "0.0.0" : "0.0.0";
 };
 
-/** The selected host's view of this project's setup. */
-const hostContext = (project: string, input: BootstrapInput, knowledgeCommand?: string): HostContext => ({ project, tools: toolsRoot(project),
-  python: input.python, home: homedir(), ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+/** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
+const hostContext = (project: string, input: BootstrapInput, knowledgeCommand?: string): HostContext => ({ project, canonical: realProject(project),
+  tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+const realProject = (project: string): string => {
+  try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
+};
 /** Framework payloads are built per host, so each host has its own copy; dependency sources are shared and wrapped per host. */
 export const frameworkTarget = (project: string, host: HostName, name: string): string => join(toolsRoot(project), HOSTS[host].frameworkDir, name);
 const hostPlugins = (project: string, input: BootstrapInput, names: readonly string[]): readonly HostPlugin[] => names.map((name) =>
-  ({ name, root: FRAMEWORK_PLUGINS.includes(name) ? frameworkTarget(project, input.host, name) : pluginTarget(project, name) }));
+  FRAMEWORK_PLUGINS.includes(name) ? { name, root: frameworkTarget(project, input.host, name), kind: "framework" } : { name, root: pluginTarget(project, name), kind: "dependency" });
 const wrapperManifest = (name: string): string => JSON.stringify({ name, version: pinnedVersion(name), skills: "./source/skills/" }, null, 2);
 /** A staged dependency gets the selected host's manifest beside its unmodified source; a different existing manifest is preserved. */
-const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Promise<Result<string>> => FRAMEWORK_PLUGINS.includes(plugin.name)
-  ? Promise.resolve(ok(plugin.root)) : ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name);
+const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Promise<Result<string>> => {
+  switch (plugin.kind) {
+    case "framework": return Promise.resolve(ok(plugin.root));
+    case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name);
+  }
+};
 const ensureWrapper = (project: string, path: string, name: string): Promise<Result<string>> => readText(path).then((existing) => !existing.ok ? existing
   : existing.value === null ? writeText(project, path, wrapperManifest(name), null)
     : existing.value === wrapperManifest(name) ? ok(path) : setupFailure(`An existing ${name} host manifest differs from its pinned wrapper; preserve and reconcile it.`));

@@ -5,7 +5,8 @@ import {createInterface} from 'node:readline/promises';
 import {configure,fail,ok,object,resolveLinearScope} from '@agent-plugins/project';
 import {WORKFLOWS} from '@agent-plugins/workflows';
 import {parseBootstrap} from '../dist/tooling-input.js';
-import {HOST_NAMES,HOSTS} from '../dist/tooling-hosts.js';
+import {HOST_NAMES} from '../dist/host-names.js';
+import {HOSTS} from '../dist/host-table.js';
 
 const readJson=path=>readFile(path,'utf8').then(JSON.parse).then(ok).catch(error=>error.code==='ENOENT' ? ok(null)
  : fail('unreadable-settings',`Could not read ${path}.`,'Preserve the existing file and correct it before rerunning the installer.'));
@@ -54,13 +55,8 @@ const complete=async(io,project,settings,plan,version)=>{
  const parsed=answers.ok ? parseBootstrap({...plan,answers:answers.value}) : answers;
  return !parsed.ok ? parsed : confirm(io,project,parsed.value,version);
 };
-const HOST_CHANGES=Object.freeze({
- codex:'Codex configuration (.codex/config.toml) and plugin registrations',
- claude:'Claude Code project settings (.claude/settings.json, .mcp.json, .claude/skills) and project-scoped plugin installs',
- cursor:'Cursor project settings (.cursor/mcp.json, .cursor/skills) and plugin links in ~/.cursor/plugins/local',
-});
 const confirm=async(io,project,plan,version)=>{
- await io.say(`\nInstall UPF ${version} into ${project}\nHost: ${HOSTS[plan.host].label}\nWorkflows: ${plan.workflows.join(', ')}\nTracker: ${plan.answers.tracker.adapter}\nLanguage: ${plan.answers.language}\nDocuments: ${plan.knowledge.docsRoot}\nVault: ${plan.knowledge.vaultRoot}\nKnowledge: ${plan.knowledge.knowledgeRoot}\n\nChanges: .upf-tools/ (bundled CLI/plugins), project settings, .project-knowledge/ runtime, ${HOST_CHANGES[plan.host]}. Existing valid choices are reused. Python runtime packages may be downloaded. No plugin repositories are downloaded.\nKnowledge content, provider bindings or authentication may still need follow-up; the report will name each action.`);
+ await io.say(`\nInstall UPF ${version} into ${project}\nHost: ${HOSTS[plan.host].label}\nWorkflows: ${plan.workflows.join(', ')}\nTracker: ${plan.answers.tracker.adapter}\nLanguage: ${plan.answers.language}\nDocuments: ${plan.knowledge.docsRoot}\nVault: ${plan.knowledge.vaultRoot}\nKnowledge: ${plan.knowledge.knowledgeRoot}\n\nChanges: .upf-tools/ (bundled CLI/plugins), project settings, .project-knowledge/ runtime, ${HOSTS[plan.host].changes}. Existing valid choices are reused. Python runtime packages may be downloaded. No plugin repositories are downloaded.\nKnowledge content, provider bindings or authentication may still need follow-up; the report will name each action.`);
  const accepted=await value(io,'Apply this setup? yes/no','no',oneOf(['yes','no']));
  return accepted==='yes' ? ok({project,plan}) : fail('installation-canceled','Installation canceled; project files were not changed.','Rerun the installer when ready.');
 };

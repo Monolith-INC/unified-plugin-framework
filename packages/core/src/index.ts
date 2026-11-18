@@ -83,6 +83,8 @@ export interface PluginManifest {
 }
 
 export const SUPPORTED_SCHEMA_VERSION = "1.0.0";
+/** Every host registers the project knowledge server under this one name, so workflows and review settings can refer to it. */
+export const KNOWLEDGE_SERVER = "project-knowledge" as const;
 
 const PORTABLE_MANIFEST_FIELDS = new Set([
   "name",

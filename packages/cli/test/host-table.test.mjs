@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,writeFile,readFile,mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import test from 'node:test';
+import {claudeMarketplaceName} from '@agent-plugins/adapter-claude/tooling';
+import {HOST_NAMES} from '../dist/host-names.js';
+import {HOSTS} from '../dist/host-table.js';
+import {parseBootstrap} from '../dist/tooling-input.js';
+
+const plan={python:'python3.12',workflows:[],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
+const context=async(extra={})=>{
+  const root=await mkdtemp(join(tmpdir(),'upf-hosts-'));
+  const project=join(root,'project');
+  await mkdir(join(project,'.upf-tools'),{recursive:true});
+  return {project,canonical:project,tools:join(project,'.upf-tools'),python:'python3.12',...extra};
+};
+const runtime='/elsewhere/checkout/.project-knowledge/runtime/bin/upf-project-knowledge';
+
+test('every setup host can be selected and is described before installation',()=>{
+  assert.deepEqual([...HOST_NAMES],['codex','claude']);
+  HOST_NAMES.map(host=>assert.equal(parseBootstrap({...plan,host}).ok,true,host));
+  assert.equal(parseBootstrap({...plan,host:'cursor'}).ok,false);
+  HOST_NAMES.map(host=>assert.match(HOSTS[host].changes,/\S/));
+  assert.equal(new Set(HOST_NAMES.map(host=>HOSTS[host].bareSkills)).size,HOST_NAMES.length,'each host reads bare skills from its own folder');
+});
+
+test('Claude Code catalog is named for this project, keeps earlier entries and refuses a moved source',async()=>{
+  const ctx=await context();
+  const name=claudeMarketplaceName(ctx.canonical);
+  const plugins=[{name:'unified-plugin-framework',root:join(ctx.tools,'hosts/claude/unified-plugin-framework'),kind:'framework'},{name:'superpowers',root:join(ctx.tools,'plugins/superpowers'),kind:'dependency'}];
+  assert.equal((await HOSTS.claude.catalog(ctx,plugins)).ok,true);
+  const path=join(ctx.tools,'.claude-plugin/marketplace.json');
+  const catalog=JSON.parse(await readFile(path,'utf8'));
+  assert.equal(catalog.name,name);
+  assert.deepEqual(catalog.plugins,[{name:'unified-plugin-framework',source:'./hosts/claude/unified-plugin-framework'},{name:'superpowers',source:'./plugins/superpowers'}]);
+  assert.equal((await HOSTS.claude.catalog(ctx,plugins.slice(1))).ok,true);
+  assert.deepEqual(JSON.parse(await readFile(path,'utf8')),catalog,'earlier entries are kept');
+  const moved=await HOSTS.claude.catalog(ctx,[{name:'superpowers',root:join(ctx.tools,'elsewhere'),kind:'dependency'}]);
+  assert.equal(moved.ok,false);
+  assert.match(moved.error.message,/another folder/);
+});
+
+test('Claude Code registration needs this project\'s local marketplace and the knowledge server',async()=>{
+  const ctx=await context({knowledgeCommand:join('/repo','.project-knowledge/runtime/bin/upf-project-knowledge')});
+  const name=claudeMarketplaceName(ctx.canonical);
+  const settings=join(ctx.project,'.claude/settings.local.json');
+  assert.equal((await HOSTS.claude.registered(ctx)).value,false);
+  await mkdir(join(ctx.project,'.claude'),{recursive:true});
+  await writeFile(settings,JSON.stringify({extraKnownMarketplaces:{[name]:{source:{source:'directory',path:ctx.tools}}}}));
+  assert.equal((await HOSTS.claude.registered(ctx)).value,false,'the knowledge server is still missing');
+  assert.equal((await HOSTS.claude.register(ctx)).ok,true,'a declared marketplace needs no host command');
+  assert.equal((await HOSTS.claude.registered(ctx)).value,true);
+  await writeFile(settings,JSON.stringify({extraKnownMarketplaces:{[name]:{source:{source:'directory',path:'/elsewhere'}}}}));
+  assert.equal((await HOSTS.claude.registered(ctx)).ok,false,'this project\'s marketplace declared for another folder is a conflict');
+  await writeFile(settings,JSON.stringify({extraKnownMarketplaces:{'upf-other':{source:{source:'directory',path:'/elsewhere'}},[name]:{source:{source:'directory',path:ctx.tools}}}}));
+  assert.equal((await HOSTS.claude.registered(ctx)).value,true,'another project\'s marketplace is not this one');
+});
+
+test('Claude Code knowledge server repoints an entry from another framework checkout and preserves any other',async()=>{
+  const ctx=await context({knowledgeCommand:join('/repo','.project-knowledge/runtime/bin/upf-project-knowledge')});
+  const path=join(ctx.project,'.mcp.json');
+  await mkdir(join(ctx.project,'.claude'),{recursive:true});
+  await writeFile(join(ctx.project,'.claude/settings.local.json'),JSON.stringify({extraKnownMarketplaces:{[claudeMarketplaceName(ctx.canonical)]:{source:{source:'directory',path:ctx.tools}}}}));
+  await writeFile(path,JSON.stringify({mcpServers:{'project-knowledge':{command:runtime,args:['--project','/elsewhere/checkout'],env:{KEEP:'1'}},kept:{command:'x'}}}));
+  assert.equal((await HOSTS.claude.register(ctx)).ok,true);
+  const repointed=JSON.parse(await readFile(path,'utf8'));
+  assert.deepEqual(repointed.mcpServers['project-knowledge'],{command:ctx.knowledgeCommand,args:['--project',ctx.project],env:{KEEP:'1'}});
+  assert.deepEqual(repointed.mcpServers.kept,{command:'x'});
+  const other={mcpServers:{'project-knowledge':{command:'other'}}};
+  await writeFile(path,JSON.stringify(other));
+  assert.equal((await HOSTS.claude.register(ctx)).ok,false);
+  assert.deepEqual(JSON.parse(await readFile(path,'utf8')),other,'a different server is never overwritten');
+});
