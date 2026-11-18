@@ -176,32 +176,36 @@ const install=async(args,io)=>{
 const stageArchive=async(args,scratch,io)=>{
  const project=resolve(args.project);
  const target=join(project,'.upf-tools/distributions',args.version);
- return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,target,io);
+ return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,io);
 };
-const prepareArchive=async(args,scratch,project,target,io)=>{
+const prepareArchive=async(args,scratch,project,io)=>{
  const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : await download(args.version,scratch,io);
  const archive=await verify(files,args.version);
  const python=args.extractionPython ?? pythonExecutable(args.python,io);
  const extracted=extract(python,archive,scratch,args.version,io);
  const manifest=JSON.parse(await readFile(join(extracted,'distribution.json'),'utf8'));
  return manifest.format!=='upf-distribution/1' || manifest.version!==args.version ? stop('Distribution identity does not match the selected release.')
-  : chooseInstallation({...args,extractionPython:python},extracted,project,target,io);
+  : chooseInstallation({...args,extractionPython:python},extracted,project,io);
 };
-const chooseInstallation=async(args,extracted,project,target,io)=>{
+const chooseInstallation=async(args,extracted,project,io)=>{
  const [wizard,report]=await Promise.all([
   import(pathToFileURL(join(extracted,'packages/cli/scripts/installer-wizard.mjs')).href),
   import(pathToFileURL(join(extracted,'packages/cli/scripts/install-report.mjs')).href),
  ]);
- const selection=args.input!==undefined ? await explicitPlan(args,extracted,project) : await (io.wizard ?? wizard.interactiveInstallation)({project,version:args.version,python:args.python,detectedPython:args.extractionPython});
+ const selection=args.input!==undefined ? await explicitPlan(args,extracted,project) : await (io.wizard ?? wizard.interactiveInstallation)({
+  project,version:args.version,python:args.python,detectedPython:args.extractionPython,privatePython:args.privateRuntime!==null,
+ });
  if(!selection.ok) return reportFailure(selection,io);
- const log=await beginRunLog(extracted,project,args.version,io);
- const lock=await acquireProjectLock(project,io);
+ const acceptedProject=selection.value.project;
+ if(!validTarget(acceptedProject,join(acceptedProject,'.upf-tools/distributions',args.version))) return stop('Choose an existing project directory with no linked installation paths.');
+ const log=await beginRunLog(extracted,acceptedProject,args.version,io);
+ const lock=await acquireProjectLock(acceptedProject,io);
  try {
-  const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(project,args.privateRuntime,io);
+  const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(acceptedProject,args.privateRuntime,io);
   const accepted={...selection.value,plan:{...selection.value.plan,python}};
   await appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined);
-  await ignoreToolFolders(project,io);
-  return activate(args,extracted,accepted,io,report.finishInstall,log,lock);
+  await ignoreToolFolders(acceptedProject,io);
+  return await activate(args,extracted,accepted,io,report.finishInstall,log,lock);
  } finally {
   await releaseProjectLock(lock);
  }
