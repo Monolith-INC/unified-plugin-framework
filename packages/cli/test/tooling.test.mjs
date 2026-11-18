@@ -40,7 +40,7 @@ test('review setup refuses incomplete bindings and preserves linked external con
   const path=join(project,'.monolithic-code-review','sources.json');await writeFile(path,'{}');
   assert.equal((await configureReview(project,choices)).error.code,'review-setup-needed');
   assert.equal(await readFile(path,'utf8'),'{}');
-  assert.equal((await nodeToolingIO(project,choices).inspect('review')()).value.status,'missing');
+  assert.equal((await nodeToolingIO(project,choices,{claudeState:join(project,'.claude.json')}).inspect('review')()).value.status,'missing');
   assert.equal(reviewBindingsValid({knowledge:{root:'knowledge'}}),false);
   const linkedProject=await mkdtemp(join(tmpdir(),'upf-review-linked-'));
   await symlink(join(project,'.monolithic-code-review'),join(linkedProject,'.monolithic-code-review'));
@@ -112,7 +112,7 @@ test('owned CLI can move to a new release while unmanaged or edited launchers ar
 test('an empty local tracker is verified by read-only search without creating a work item',async()=>{
  const project=await mkdtemp(join(tmpdir(),'upf-empty-local-'));
  await writeFile(join(project,'.unified-plugin-framework.json'),JSON.stringify({schemaVersion:1,language:'en',artifactsPath:'docs',tracker:{adapter:'local',values:{}}}));
- const observed=await nodeToolingIO(project,choices).inspect('tracker')();
+ const observed=await nodeToolingIO(project,choices,{claudeState:join(project,'.claude.json')}).inspect('tracker')();
  assert.equal(observed.ok,true,JSON.stringify(observed));assert.equal(observed.value.status,'ready');
  await assert.rejects(readFile(join(project,'.unified-plugin-framework/items.json')));
 });

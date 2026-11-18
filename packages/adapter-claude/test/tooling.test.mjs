@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeMarketplaceName, mergeClaudeMarketplace, mergeClaudeServer } from '../dist/tooling.js';
+import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeLocalServer, claudeMarketplaceName, claudeServerAction, mergeClaudeMarketplace } from '../dist/tooling.js';
 
 const entries=[{name:'framework',source:'./hosts/claude/framework'}];
 
@@ -32,15 +32,16 @@ test('settings declare the marketplace only for this tools folder',()=>{
   assert.equal(claudeDeclaration(declared,'upf-2','/repo/.upf-tools'),'absent');
 });
 
-test('server merge adds, keeps, repoints an owned runtime and refuses anything else',()=>{
+test('the knowledge server is registered at local scope and replaced only when another framework checkout owns it',()=>{
   const entry={command:'/repo/.project-knowledge/runtime/bin/upf-project-knowledge',args:['--project','/repo']};
-  const added=mergeClaudeServer({mcpServers:{kept:{command:'x'}}},entry);
-  assert.deepEqual(added.value.document.mcpServers,{kept:{command:'x'},'project-knowledge':entry});
-  assert.equal(mergeClaudeServer(added.value.document,entry).value.kind,'unchanged');
-  const moved=mergeClaudeServer({mcpServers:{'project-knowledge':{command:'/old/.project-knowledge/runtime/bin/upf-project-knowledge',args:['--project','/old'],type:'stdio'}}},entry);
-  assert.deepEqual(moved.value.document.mcpServers['project-knowledge'],{...entry,type:'stdio'});
-  [ {mcpServers:{'project-knowledge':{command:'other'}}}, {mcpServers:'bad'}, {mcpServers:{'project-knowledge':'bad'}}, [] ]
-    .map(existing=>assert.equal(mergeClaudeServer(existing,entry).ok,false));
+  assert.deepEqual(CLAUDE_TOOLING.addServer(entry),['mcp','add-json','project-knowledge',JSON.stringify({type:'stdio',...entry}),'--scope','local']);
+  const state={projects:{'/repo':{mcpServers:{'project-knowledge':{type:'stdio',...entry}}},'/other':{mcpServers:{'project-knowledge':{command:'x'}}}}};
+  assert.deepEqual(claudeLocalServer(state,'/repo'),{type:'stdio',...entry});
+  [null,{},{projects:{}},state].map((value,index)=>assert.equal(claudeLocalServer(value,'/missing'),undefined,String(index)));
+  assert.equal(claudeServerAction(undefined,entry),'add');
+  assert.equal(claudeServerAction(claudeLocalServer(state,'/repo'),entry),'keep');
+  assert.equal(claudeServerAction({command:'/old/.project-knowledge/runtime/bin/upf-project-knowledge',args:['--project','/old']},entry),'replace');
+  [{command:'other'},'bad',null].map(old=>assert.equal(claudeServerAction(old,entry),'conflict'));
 });
 
 test('installed plugins are this marketplace\'s, enabled, for exactly this project',()=>{

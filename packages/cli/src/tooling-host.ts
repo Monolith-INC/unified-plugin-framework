@@ -13,7 +13,7 @@ import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts
 import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
 import { checkPluginBinding } from "@agent-plugins/workflows";
 import { sequence } from "./tooling-process.js";
-import { HOSTS, type DiscoveredSkill, type HostContext, type HostPlugin } from "./host-table.js";
+import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment, type HostPlugin } from "./host-table.js";
 import type { HostName } from "./host-names.js";
 import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
 
@@ -169,8 +169,8 @@ const pinnedVersion = (name: string): string => {
 };
 
 /** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
-const hostContext = (project: string, input: BootstrapInput, knowledgeCommand?: string): HostContext => ({ project, canonical: realProject(project),
-  tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
+  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
 const realProject = (project: string): string => {
   try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
 };
@@ -190,14 +190,14 @@ const ensureWrapper = (project: string, path: string, name: string): Promise<Res
   : existing.value === null ? writeText(project, path, wrapperManifest(name), null)
     : existing.value === wrapperManifest(name) ? ok(path) : setupFailure(`An existing ${name} host manifest differs from its pinned wrapper; preserve and reconcile it.`));
 
-export const registerHost = (project: string, input: BootstrapInput, knowledgeCommand?: string): Promise<Result<string>> =>
-  HOSTS[input.host].register(hostContext(project, input, knowledgeCommand));
-export const hostRegistered = (project: string, input: BootstrapInput, knowledgeCommand?: string): Promise<Result<boolean>> =>
-  HOSTS[input.host].registered(hostContext(project, input, knowledgeCommand));
+export const registerHost = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<string>> =>
+  HOSTS[input.host].register(hostContext(project, input, environment, knowledgeCommand));
+export const hostRegistered = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<boolean>> =>
+  HOSTS[input.host].registered(hostContext(project, input, environment, knowledgeCommand));
 
-export const installHostPlugins = (project: string, input: BootstrapInput, names: readonly string[]): Promise<Result<string>> => {
+export const installHostPlugins = (project: string, input: BootstrapInput, environment: HostEnvironment, names: readonly string[]): Promise<Result<string>> => {
   const host = HOSTS[input.host];
-  const context = hostContext(project, input);
+  const context = hostContext(project, input, environment);
   const bare = barePlugins(project, input);
   return host.catalog(context, hostPlugins(project, input, [...FRAMEWORK_PLUGINS, ...pluginNames(input)].filter((name) => !bare.includes(name))))
     .then((listed) => listed.ok ? host.register(context) : listed)
@@ -233,5 +233,5 @@ const copyBare = async (project: string, folder: string, plugin: string, skill: 
         .then(() => writeText(project, join(target, ".upf-source"), expected, null)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
 };
 
-export const discoverHost = (project: string, input: BootstrapInput): Promise<Result<readonly DiscoveredSkill[]>> =>
-  HOSTS[input.host].discover(hostContext(project, input));
+export const discoverHost = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<readonly DiscoveredSkill[]>> =>
+  HOSTS[input.host].discover(hostContext(project, input, environment));

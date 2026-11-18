@@ -32,7 +32,7 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
     : execute(project, parsed.value, args.includes("--apply"), request.value, io);
 };
 const execute = async (project: string, input: BootstrapInput, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
-  const result = await bootstrapTooling(nodeToolingIO(project, input), apply, input.steps)();
+  const result = await bootstrapTooling(nodeToolingIO(project, input, { claudeState: io.claudeState() }), apply, input.steps)();
   return !result.ok ? output(io, result) : !apply || request === null || result.value.status !== "ready"
     ? output(io, ok({ mode: apply ? "apply" : "plan", host: input.host, workflows: input.workflows,
       tooling: result.value, request, next: result.value.status === "ready" ? "Selected tooling is verified. Continue the original work."

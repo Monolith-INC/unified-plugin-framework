@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { claudeStateFile } from "./host-table.js";
 import { runProject } from "./project.js";
 
 import { failure, parseVendorId, success, type InstallResult, type Result, type VendorId } from "@agent-plugins/compiler";
@@ -57,6 +59,8 @@ export interface CliIo {
   readonly out: (line: string) => void;
   readonly err: (line: string) => void;
   readonly cwd: () => string;
+  /** Claude Code's user state file, where it keeps local-scope servers for each project. */
+  readonly claudeState: () => string;
 }
 
 /** Edge interpreter: the real console and working directory. */
@@ -64,6 +68,7 @@ export const NODE_CLI_IO: CliIo = Object.freeze({
   out: (line: string) => console.log(line), // fp-allow: no-ambient-effect
   err: (line: string) => console.error(line), // fp-allow: no-ambient-effect
   cwd: () => process.cwd(), // fp-allow: no-ambient-effect
+  claudeState: () => claudeStateFile(homedir(), process.env["CLAUDE_CONFIG_DIR"]), // fp-allow: no-ambient-effect
 });
 
 export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | Promise<number> {

@@ -1,5 +1,5 @@
 import { join, posix, relative, sep } from "node:path";
-import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeMarketplaceName, mergeClaudeMarketplace, mergeClaudeServer, sameServer, type ClaudeServerEntry, type JsonEdit } from "@agent-plugins/adapter-claude/tooling";
+import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeMarketplaceName, claudeLocalServer, claudeServerAction, mergeClaudeMarketplace, sameServer, type ClaudeServerEntry, type JsonEdit } from "@agent-plugins/adapter-claude/tooling";
 import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
 import type { Result as PlanResult } from "@agent-plugins/compiler";
 import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
@@ -12,14 +12,21 @@ import { readText, readToml, writeText } from "./tooling-files.js";
 export interface DiscoveredSkill { readonly name: string; readonly path: string }
 /** A plugin directory the host should load, under the name its skills are namespaced by. */
 export interface HostPlugin { readonly name: string; readonly root: string; readonly kind: "framework" | "dependency" }
-/** Where one project's setup lives; `canonical` is the project's real path, which hosts record installs under. */
+/**
+ * Where one project's setup lives. `canonical` is the project's real path, which hosts record installs under;
+ * `claudeState` is Claude Code's user state file, where it keeps local-scope servers per project.
+ */
 export interface HostContext {
   readonly project: string;
   readonly canonical: string;
+  readonly claudeState: string;
   readonly tools: string;
   readonly python: string;
   readonly knowledgeCommand?: string;
 }
+
+/** What setup needs from the user's environment, read once at the program edge. */
+export interface HostEnvironment { readonly claudeState: string }
 
 /** One host's names, paths and commands; setup steps stay host-neutral and ask this record. */
 export interface HostTooling {
@@ -128,28 +135,41 @@ const declared = (context: HostContext, settings: unknown): Result<boolean> => {
 };
 const claudeDeclared = (context: HostContext): Promise<Result<boolean>> =>
   readDocument(join(context.project, CLAUDE_TOOLING.settings)).then((document) => document.ok ? declared(context, document.value.value) : document);
-const claudeServer = (context: HostContext): Promise<Result<string>> => knowledge(context, CLAUDE_TOOLING.servers, (knowledgeCommand) =>
-  editJson(context.project, join(context.project, CLAUDE_TOOLING.servers), "Claude Code MCP", (value) => mergeClaudeServer(value, serverEntry(context, knowledgeCommand))));
+const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command("claude", args, context.canonical);
+const claudeLocal = (context: HostContext): Promise<Result<unknown>> =>
+  readDocument(context.claudeState).then((document) => document.ok ? ok(claudeLocalServer(document.value.value, context.canonical)) : document);
+const applyServer = (context: HostContext, entry: ClaudeServerEntry, old: unknown): Promise<Result<string>> => {
+  switch (claudeServerAction(old, entry)) {
+    case "keep": return Promise.resolve(ok(KNOWLEDGE_SERVER));
+    case "add": return claude(context, CLAUDE_TOOLING.addServer(entry));
+    case "replace": return claude(context, CLAUDE_TOOLING.removeServer).then((removed) => removed.ok ? claude(context, CLAUDE_TOOLING.addServer(entry)) : removed);
+    case "conflict": return Promise.resolve(conflict("Claude Code MCP", context.claudeState, `server ${KNOWLEDGE_SERVER} for this project runs another command.`));
+  }
+};
+const claudeServer = (context: HostContext): Promise<Result<string>> => knowledge(context, KNOWLEDGE_SERVER, (knowledgeCommand) =>
+  claudeLocal(context).then((old) => old.ok ? applyServer(context, serverEntry(context, knowledgeCommand), old.value) : old));
 const claudeServerRegistered = (context: HostContext): Promise<Result<boolean>> => knowledge(context, true, (knowledgeCommand) =>
-  readDocument(join(context.project, CLAUDE_TOOLING.servers)).then((document) => document.ok
-    ? ok(sameServer(record(record(document.value.value).mcpServers)[KNOWLEDGE_SERVER], serverEntry(context, knowledgeCommand))) : document));
+  claudeLocal(context).then((old) => old.ok ? ok(sameServer(old.value, serverEntry(context, knowledgeCommand))) : old));
 const claudeRegister = (context: HostContext): Promise<Result<string>> => claudeDeclared(context).then((known) => !known.ok ? known
   : known.value ? claudeServer(context)
-    : command("claude", CLAUDE_TOOLING.addMarketplace(context.tools), context.project).then((added) => added.ok ? claudeServer(context) : added));
+    : claude(context, CLAUDE_TOOLING.addMarketplace(context.tools)).then((added) => added.ok ? claudeServer(context) : added));
 const claudeSkills = (context: HostContext, listed: string): Result<readonly DiscoveredSkill[]> => {
   const parsed = parseJson(listed);
   return parsed.ok ? ok([...claudeInstalledPlugins(parsed.value, context.canonical, claudeMarketplace(context))
     .flatMap(({ name, root }) => pluginSkills(root, name, CLAUDE_TOOLING.manifest)), ...bareSkills(context, CLAUDE_TOOLING.skills)]) : parsed;
 };
 const CLAUDE = Object.freeze<HostTooling>({
-  label: "Claude Code", changes: `Claude Code local settings (${CLAUDE_TOOLING.settings}), ${CLAUDE_TOOLING.servers}, ${CLAUDE_TOOLING.skills} and plugin installs for this project`,
+  label: "Claude Code", changes: `Claude Code local settings (${CLAUDE_TOOLING.settings}), ${CLAUDE_TOOLING.skills}, plugin installs and a local-scope knowledge server for this project`,
   frameworkDir: "hosts/claude", manifest: CLAUDE_TOOLING.manifest, bareSkills: CLAUDE_TOOLING.skills,
   catalog: claudeCatalog,
   register: claudeRegister,
   registered: (context) => Promise.all([claudeDeclared(context), claudeServerRegistered(context)])
     .then(([market, server]) => !market.ok ? market : !server.ok ? server : ok(market.value && server.value)),
-  activate: (context, plugin) => command("claude", CLAUDE_TOOLING.install(plugin.name, claudeMarketplace(context)), context.project),
-  discover: (context) => command("claude", CLAUDE_TOOLING.list, context.project).then((listed) => listed.ok ? claudeSkills(context, listed.value) : listed),
+  activate: (context, plugin) => claude(context, CLAUDE_TOOLING.install(plugin.name, claudeMarketplace(context))),
+  discover: (context) => claude(context, CLAUDE_TOOLING.list).then((listed) => listed.ok ? claudeSkills(context, listed.value) : listed),
 });
+
+/** Claude Code keeps its user state in `.claude.json` inside `CLAUDE_CONFIG_DIR` when set, otherwise in the home folder. */
+export const claudeStateFile = (home: string, configDir: string | undefined): string => join(configDir ?? home, CLAUDE_TOOLING.state);
 
 export const HOSTS: Readonly<Record<HostName, HostTooling>> = Object.freeze({ codex: CODEX, claude: CLAUDE });

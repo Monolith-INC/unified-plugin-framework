@@ -7,9 +7,9 @@ Bootstrap sets up Codex or Claude Code, chosen by the plan's `host`. Each host i
 | Host | Plugins | Knowledge server | Unnamespaced skills | Discovery check |
 | --- | --- | --- | --- | --- |
 | Codex | `.codex/config.toml` marketplace, `codex plugin add` | `.codex/config.toml` | `.agents/skills` | Codex app server `skills/list` |
-| Claude Code | a marketplace named for this project (`upf-<hash>`), declared and installed at local scope in `.claude/settings.local.json` | `.mcp.json` | `.claude/skills` | `claude plugin list --json` |
+| Claude Code | a marketplace named for this project (`upf-<hash>`), declared and installed at local scope in `.claude/settings.local.json` | local scope, via `claude mcp add-json --scope local` | `.claude/skills` | `claude plugin list --json` |
 
-Claude Code keeps known marketplaces per user, so each project's catalog has its own name and one project never repoints another's plugins. A knowledge-server entry written by another checkout of this framework is repointed to this one; any other entry is preserved and reported.
+Claude Code keeps known marketplaces per user, so each project's catalog has its own name and one project never repoints another's plugins. The knowledge server is private to this user and project, so it needs no approval prompt and no shared file holds its paths. A local-scope server left by another checkout of this framework is replaced; any other server of that name is preserved and reported.
 
 Artifact tests exercise the distribution, both framework payloads for every setup host, and dependency staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
