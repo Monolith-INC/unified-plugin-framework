@@ -20,13 +20,16 @@ const record = (seen, inspect, configure) => (host) => ({
 
 test("shared steps run once, selected host steps run per host, and setup is deferred", async () => {
   const seen = [];
-  const task = bootstrapHosts(record(seen), true, plan(["settings", "cli", "tracker", ...HOST_STEPS]));
+  const progress = [];
+  const task = bootstrapHosts(record(seen), true, plan(["settings", "cli", "tracker", ...HOST_STEPS]), (host, step) => progress.push([host, step]));
   assert.deepEqual(seen, []);
   const { value } = await task();
   assert.deepEqual(value.project.steps.map(({ step }) => step), ["settings", "cli", "tracker"]);
   assert.deepEqual(value.hosts.map(({ host, tooling }) => [host, tooling.steps.map(({ step }) => step)]),
     [["codex", HOST_STEPS], ["claude", HOST_STEPS]]);
   assert.equal(seen.filter(([, , step]) => step === "settings").length, 1);
+  assert.deepEqual(progress, [[undefined, "settings"], [undefined, "cli"], [undefined, "tracker"],
+    ...HOST_STEPS.map((step) => ["codex", step]), ...HOST_STEPS.map((step) => ["claude", step])]);
   assert.equal(seen.some(([, effect]) => effect === "configure"), false);
 });
 

@@ -1,19 +1,35 @@
 #!/usr/bin/env node
 // Standalone installation edge. It only places a verified distribution and invokes the shared bootstrap.
-import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {execFileSync, spawn, spawnSync} from 'node:child_process';
+import {createHash, randomUUID} from 'node:crypto';
 import {existsSync, lstatSync, readFileSync, readdirSync, readlinkSync} from 'node:fs';
-import {cp, mkdir, mkdtemp, readFile, rename, rm, writeFile} from 'node:fs/promises';
+import {appendFile, chmod, cp, mkdir, mkdtemp, readFile, rename, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {dirname, join, resolve} from 'node:path';
+import {dirname, join, relative, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
+import {createInterface} from 'node:readline/promises';
 import {pathToFileURL} from 'node:url';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const repo='Monolith-INC/unified-plugin-framework';
+const PYTHON_VERSION='3.12.16';
+const UV=Object.freeze({version:'0.13.7',archives:Object.freeze({
+ 'x86_64-unknown-linux-gnu':'c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83',
+ 'aarch64-unknown-linux-gnu':'71279f8d3c67241e807b9d8db872d1bf541579fb9f08b7d1eb1682196d1e57dc',
+ 'x86_64-unknown-linux-musl':'287491da03f2a785c70fa75b13e1f849918c2f2b5415fe84876b8214eeb792f9',
+ 'aarch64-unknown-linux-musl':'2d3ec076a0c4c0e8250bb6418c44080828b544f1a3be0b6e46adf9fb6923de45',
+ 'x86_64-apple-darwin':'20c47e4c1f630b8abaff8c291fa9b9aa300fef92c4fbff95adf198b55287cda7',
+ 'aarch64-apple-darwin':'81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731'})});
 const usage='Interactive: node install.mjs [--project <project>] [--version <version>]\nAutomation: node install.mjs --input <accepted-plan.json> --project <project> [--version <version>]\nLocal archive: --source <archive> --checksums <SHA256SUMS>\nPython executable: --python <python3.12+>';
 const stop=message=>{throw new Error(message);}; // Boundary: report installation failures once without partial activation.
-const options=()=>parseArgs({options:{help:{type:'boolean'},version:{type:'string'},dest:{type:'string'},project:{type:'string'},input:{type:'string'},source:{type:'string'},checksums:{type:'string'},python:{type:'string'}},strict:true}).values;
+const options=args=>parseArgs({args,options:{help:{type:'boolean'},strict:{type:'boolean'},version:{type:'string'},dest:{type:'string'},project:{type:'string'},input:{type:'string'},source:{type:'string'},checksums:{type:'string'},python:{type:'string'}},strict:true}).values;
+const NODE_IO=Object.freeze({env:process.env,platform:process.platform,arch:process.arch,libc:process.report?.getReport?.().header?.glibcVersionRuntime?'gnu':'musl',
+ nodeVersion:process.versions.node,stdinIsTTY:process.stdin.isTTY,
+ stdoutIsTTY:process.stdout.isTTY,cwd:()=>process.cwd(),fetch:(...args)=>fetch(...args),spawnSync:(...args)=>spawnSync(...args),
+ spawn:(...args)=>spawn(...args),execFileSync:(...args)=>execFileSync(...args),writeStdout:text=>process.stdout.write(text),writeStderr:text=>process.stderr.write(text),
+ ask:prompt=>{const terminal=createInterface({input:process.stdin,output:process.stdout});return terminal.question(prompt).finally(()=>terminal.close());},
+ sleep:milliseconds=>new Promise(resolve=>setTimeout(resolve,milliseconds)),now:()=>Date.now(),
+ processAlive:pid=>{try{process.kill(pid,0);return true;}catch(error){return error.code==='EPERM';}},killGroup:(pid,signal)=>process.kill(-pid,signal)});
 const inspectTree=root=>readdirSync(root).toSorted().flatMap(name=>{
  const path=join(root,name);const stat=lstatSync(path);
  return stat.isSymbolicLink() ? [[name,`link:${readlinkSync(path)}`]] : stat.isDirectory()
@@ -27,16 +43,24 @@ const checkedAncestors=(project,target)=>{
   return stat===undefined || stat.isDirectory() && !stat.isSymbolicLink();
  });
 };
-const get=async(url,accept='application/octet-stream')=>{
- const response=await fetch(url,{signal:AbortSignal.timeout(60_000),headers:{Accept:accept}});
- return response.ok ? Buffer.from(await response.arrayBuffer()) : stop(`Could not download ${url} (HTTP ${response.status}); nothing installed.`);
+const retryDelay=attempt=>[250,750][attempt] ?? 1500;
+const retryable=(error)=>error?.status===429 || error?.status>=500 || error instanceof TypeError || error?.name==='TimeoutError';
+const retryDownload=async(operation,url,accept,io,attempt=0)=>{
+ const result=await operation().then(response=>({response}),error=>({error}));
+ if(result.error===undefined && result.response.ok) return Buffer.from(await result.response.arrayBuffer());
+ const failure=result.error ?? Object.assign(new Error(`Could not download ${url} (HTTP ${result.response.status}).`),{status:result.response.status});
+ return attempt>=2 || !retryable(failure) ? stop(`Download failed after ${attempt+1} attempt(s): ${url} (${failure.status ?? failure.message}); nothing installed.`)
+  : io.sleep(retryDelay(attempt)).then(()=>retryDownload(operation,url,accept,io,attempt+1));
 };
-const latest=()=>get('https://api.github.com/repos/'+repo+'/releases/latest','application/vnd.github+json').then(bytes=>JSON.parse(bytes.toString('utf8')).tag_name);
-const download=async(version,scratch)=>{
+export const downloadBytes=(url,accept='application/octet-stream',io=NODE_IO)=>retryDownload(
+ ()=>io.fetch(url,{signal:AbortSignal.timeout(60_000),headers:{Accept:accept}}),url,accept,io);
+const get=downloadBytes;
+const latest=io=>get('https://api.github.com/repos/'+repo+'/releases/latest','application/vnd.github+json',io).then(bytes=>JSON.parse(bytes.toString('utf8')).tag_name);
+const download=async(version,scratch,io)=>{
  const base=`https://github.com/${repo}/releases/download/v${version}`;
  const archive=join(scratch,`unified-plugin-framework-${version}.tar.gz`);
  const checksums=join(scratch,'SHA256SUMS');
- await Promise.all([[archive,`${base}/unified-plugin-framework-${version}.tar.gz`],[checksums,`${base}/SHA256SUMS`]].map(async([path,url])=>writeFile(path,await get(url))));
+ await Promise.all([[archive,`${base}/unified-plugin-framework-${version}.tar.gz`],[checksums,`${base}/SHA256SUMS`]].map(async([path,url])=>writeFile(path,await get(url,'application/octet-stream',io))));
  return {archive,checksums};
 };
 const verify=async(files,version)=>{
@@ -45,15 +69,15 @@ const verify=async(files,version)=>{
  return /^[a-f0-9]{64}$/.test(expected) && digest(await readFile(files.archive))===expected
   ? files.archive : stop('Archive checksum mismatch or missing unique checksum; nothing installed.');
 };
-const pythonExecutable=preferred=>{
+const pythonExecutable=(preferred,io)=>{
  const candidates=preferred===undefined ? ['python3.12','python3','python3.13','python3.14'] : [preferred];
- const selected=candidates.find(program=>spawnSync(program,['-c','import sys; raise SystemExit(0 if sys.version_info >= (3,12) else 1)'],{stdio:'ignore'}).status===0);
- return selected ?? stop('Python 3.12+ is required. Install it or pass --python <executable>.');
+ const selected=candidates.find(program=>io.spawnSync(program,['-c','import sys; raise SystemExit(0 if sys.version_info >= (3,12) else 1)'],{stdio:'ignore',timeout:10_000}).status===0);
+ return selected ?? null;
 };
 // Python's data extraction filter validates member paths and link targets before writes.
-const extract=(python,archive,scratch,version)=>{
+const extract=(python,archive,scratch,version,io)=>{
  const destination=join(scratch,'extract');
- execFileSync(python,['-c',`import pathlib,sys,tarfile
+ io.execFileSync(python,['-c',`import pathlib,sys,tarfile
 archive,destination,version=sys.argv[1:]
 with tarfile.open(archive) as source:
  members=source.getmembers()
@@ -63,7 +87,7 @@ with tarfile.open(archive) as source:
  base=(pathlib.Path(destination)/expected).resolve()
  assert all(not m.issym() or (pathlib.Path(destination)/m.name).parent.joinpath(m.linkname).resolve().is_relative_to(base) for m in members), 'link escapes distribution'
  source.extractall(destination,filter='data')
-`,archive,destination,version],{stdio:'inherit'});
+`,archive,destination,version],{stdio:'inherit',timeout:120_000});
  return join(destination,`unified-plugin-framework-${version}`);
 };
 const publish=async(source,target)=>{
@@ -71,44 +95,119 @@ const publish=async(source,target)=>{
   : stop('Existing distribution differs from this verified release; preserve it and choose a clean installation location.')
   : mkdir(dirname(target),{recursive:true}).then(()=>rename(source,target)).then(()=>target);
 };
-const main=async()=>{
- const args=options();
- return args.help ? process.stdout.write(`${usage}\n`)
-  : Number(process.versions.node.split('.')[0])<22 ? stop('Node.js 22+ is required.')
-  : args.input===undefined && (!process.stdin.isTTY || !process.stdout.isTTY) ? stop('Interactive installation needs a terminal. Run the one-command installer in a terminal or supply --input for automation.')
-    : prepare(args);
+const runMain=async(args,io)=>{
+ const parsed=options(args);
+ return parsed.help ? {ok:true,message:`${usage}\n`,exitCode:0}
+  : Number(io.nodeVersion.split('.')[0])<22 ? stop('Node.js 22+ is required.')
+  : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? stop('Interactive installation needs a terminal. Run the one-command installer in a terminal or supply --input for automation.')
+    : prepare(parsed,io);
 };
-const prepare=async args=>{
- const version=String(args.version ?? process.env.UPF_VERSION ?? await latest()).replace(/^v/,'');
- return !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version) || args.project!==undefined && args.dest!==undefined
-  ? stop(usage) : install({...args,version,project:args.project ?? args.dest ?? process.cwd()});
+export const main=async(args,io=NODE_IO)=>{
+ try {
+  const result=await runMain(args,io);
+  io.writeStdout(`${JSON.stringify(result)}\n`);
+  return result.exitCode ?? 0;
+ } catch(error) {
+  io.writeStderr(`${error instanceof Error ? error.message : 'Unexpected installer failure.'}\n`);
+  return 1;
+ }
+};
+const prepare=async(args,io)=>{
+ const acceptedPlan=args.input===undefined ? null : await readFile(resolve(args.input),'utf8').then(JSON.parse).catch(()=>null);
+ const python=pythonExecutable(args.python ?? acceptedPlan?.python,io);
+ const consented=python!==null ? true : acceptedPlan?.consent?.privatePython===true || args.input===undefined && await privatePythonConsent(args,io);
+ if(!consented) return stop('A private Python 3.12 installation requires explicit consent; no project files were changed.');
+ const privateRuntime=python===null ? await installPrivatePython(args,io) : null;
+ try {
+  const version=String(args.version ?? io.env.UPF_VERSION ?? await latest(io)).replace(/^v/,'');
+  return !/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version) || args.project!==undefined && args.dest!==undefined
+   ? stop(usage) : await install({...args,version,python,privateRuntime,extractionPython:python ?? privateRuntime.python,project:args.project ?? args.dest ?? io.cwd()},io);
+ } finally {
+  if(privateRuntime!==null) await rm(privateRuntime.scratch,{recursive:true,force:true});
+ }
+};
+const privatePythonConsent=async(args,io)=>args.input!==undefined
+ ? readFile(resolve(args.input),'utf8').then(JSON.parse).then(plan=>plan.consent?.privatePython===true).catch(()=>false)
+ : io.ask('Python 3.12+ is unavailable. Allow the installer to add a private Python 3.12.16? yes/no: ').then(answer=>answer.trim().toLowerCase()==='yes');
+const uvTriple=io=>io.platform==='darwin' ? `${io.arch==='arm64'?'aarch64':'x86_64'}-apple-darwin`
+ : io.platform==='linux' ? `${io.arch==='arm64'?'aarch64':'x86_64'}-unknown-linux-${io.libc}` : null;
+const uvEnvironment=(base,scratch,pythonRoot)=>Object.freeze({
+ ...Object.fromEntries(Object.entries(base).filter(([key])=>['PATH','HOME','TMPDIR','SSL_CERT_FILE','SSL_CERT_DIR','SYSTEMROOT','WINDIR'].includes(key))),
+ UV_NO_CONFIG:'1',UV_CACHE_DIR:join(scratch,'cache'),UV_PYTHON_INSTALL_DIR:pythonRoot,
+ UV_PYTHON_BIN_DIR:pythonRoot,UV_PYTHON_PREFERENCE:'only-managed',
+});
+const installPrivatePython=async(args,io)=>{
+ const triple=uvTriple(io);
+ const expected=UV.archives[triple];
+ return triple===null || expected===undefined ? stop('Private Python is unsupported on this platform; no project files were changed.')
+  : installPinnedPython(triple,expected,io);
+};
+const installPinnedPython=async(triple,expected,io)=>{
+ const scratch=await mkdtemp(join(tmpdir(),'upf-private-python-'));
+ try {
+ const archive=join(scratch,`uv-${triple}.tar.gz`);
+ const url=`https://github.com/astral-sh/uv/releases/download/${UV.version}/uv-${triple}.tar.gz`;
+ const bytes=await downloadBytes(url,'application/octet-stream',io);
+ if(digest(bytes)!==expected) return stop('Pinned uv checksum mismatch; private Python was not installed.');
+ await writeFile(archive,bytes);
+ const extracted=join(scratch,'uv-extract');
+ const pythonRoot=join(scratch,'python');
+ await mkdir(extracted);
+ const env=uvEnvironment(io.env,scratch,pythonRoot);
+ io.execFileSync('tar',['-xzf',archive,'-C',extracted],{timeout:120_000,stdio:'ignore'});
+ const binary=join(extracted,`uv-${triple}`,'uv');
+ await chmod(binary,0o700);
+ const installed=io.spawnSync(binary,['python','install',PYTHON_VERSION,'--install-dir',pythonRoot],{encoding:'utf8',timeout:180_000,stdio:'pipe',env});
+ const located=installed.status===0 ? io.spawnSync(binary,['python','find',PYTHON_VERSION],{encoding:'utf8',timeout:20_000,stdio:'pipe',env}) : installed;
+ const python=located.status===0 ? located.stdout.trim() : '';
+ const verified=python.length>0 && resolve(python).startsWith(`${resolve(pythonRoot)}/`)
+  && io.spawnSync(python,['--version'],{encoding:'utf8',timeout:10_000,stdio:'pipe',env}).status===0;
+ return verified ? {scratch,pythonRoot,python} : stop('Pinned Python 3.12.16 could not be installed and verified.');
+ } catch(error) {
+  await rm(scratch,{recursive:true,force:true});
+  throw error;
+ }
 };
 const validTarget=(project,target)=>existsSync(project) && lstatSync(project).isDirectory() && !lstatSync(project).isSymbolicLink() && checkedAncestors(project,target);
-const install=async args=>{
+const install=async(args,io)=>{
  const scratch=await mkdtemp(join(tmpdir(),'upf-install-'));
- return stageArchive(args,scratch).finally(()=>rm(scratch,{recursive:true,force:true}));
+ return stageArchive(args,scratch,io).finally(()=>rm(scratch,{recursive:true,force:true}));
 };
-const stageArchive=async(args,scratch)=>{
+const stageArchive=async(args,scratch,io)=>{
  const project=resolve(args.project);
  const target=join(project,'.upf-tools/distributions',args.version);
- return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,target);
+ return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,target,io);
 };
-const prepareArchive=async(args,scratch,project,target)=>{
- const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : await download(args.version,scratch);
+const prepareArchive=async(args,scratch,project,target,io)=>{
+ const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : await download(args.version,scratch,io);
  const archive=await verify(files,args.version);
- const python=pythonExecutable(args.python);
- const extracted=extract(python,archive,scratch,args.version);
+ const python=args.extractionPython ?? pythonExecutable(args.python,io);
+ const extracted=extract(python,archive,scratch,args.version,io);
  const manifest=JSON.parse(await readFile(join(extracted,'distribution.json'),'utf8'));
  return manifest.format!=='upf-distribution/1' || manifest.version!==args.version ? stop('Distribution identity does not match the selected release.')
-  : chooseInstallation({...args,extractionPython:python},extracted,project,target);
+  : chooseInstallation({...args,extractionPython:python},extracted,project,target,io);
 };
-const chooseInstallation=async(args,extracted,project,target)=>{
- const wizard=await import(pathToFileURL(join(extracted,'packages/cli/scripts/installer-wizard.mjs')).href);
- const selection=args.input!==undefined ? await explicitPlan(args,extracted,project) : await wizard.interactiveInstallation({project,version:args.version,python:args.python,detectedPython:args.extractionPython});
- return !selection.ok ? reportFailure(selection) : activate(args,extracted,selection.value);
+const chooseInstallation=async(args,extracted,project,target,io)=>{
+ const [wizard,report]=await Promise.all([
+  import(pathToFileURL(join(extracted,'packages/cli/scripts/installer-wizard.mjs')).href),
+  import(pathToFileURL(join(extracted,'packages/cli/scripts/install-report.mjs')).href),
+ ]);
+ const selection=args.input!==undefined ? await explicitPlan(args,extracted,project) : await (io.wizard ?? wizard.interactiveInstallation)({project,version:args.version,python:args.python,detectedPython:args.extractionPython});
+ if(!selection.ok) return reportFailure(selection,io);
+ const log=await beginRunLog(extracted,project,args.version,io);
+ const lock=await acquireProjectLock(project,io);
+ try {
+  const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(project,args.privateRuntime,io);
+  const accepted={...selection.value,plan:{...selection.value.plan,python}};
+  await appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined);
+  await ignoreToolFolders(project,io);
+  return activate(args,extracted,accepted,io,report.finishInstall,log,lock);
+ } finally {
+  await releaseProjectLock(lock);
+ }
 };
-const reportFailure=result=>{
- process.stdout.write(`${JSON.stringify(result)}\n`);
+const reportFailure=(result,io)=>{
+ io.writeStdout(`${JSON.stringify(result)}\n`);
  return stop(`${result.error.message} ${result.error.recovery}`);
 };
 const explicitPlan=async(args,root,project)=>{
@@ -116,53 +215,109 @@ const explicitPlan=async(args,root,project)=>{
  const parsed=parseBootstrap(JSON.parse(await readFile(resolve(args.input),'utf8')));
  return parsed.ok ? {ok:true,value:{project,plan:parsed.value}} : parsed;
 };
-const activate=async(args,extracted,selection)=>{
+const persistPrivatePython=async(project,runtime,io)=>{
+ const target=join(project,'.upf-tools','python');
+ const relativePython=relative(runtime.pythonRoot,runtime.python);
+ return relativePython.startsWith('..') ? stop('The private Python path escaped its temporary installation directory.')
+  : existsSync(target) ? stop('An existing .upf-tools/python directory is preserved; move it before accepting a private Python installation.')
+    : mkdir(join(project,'.upf-tools'),{recursive:true,mode:0o700}).then(()=>chmod(join(project,'.upf-tools'),0o700))
+      .then(()=>cp(runtime.pythonRoot,target,{recursive:true,verbatimSymlinks:true,errorOnExist:true}))
+      .then(()=>join(target,relativePython));
+};
+const beginRunLog=async(root,project,version,io)=>{
+ const {writeInstallLog}=await import(pathToFileURL(join(root,'packages/cli/dist/install-log.js')).href);
+ const path=await writeInstallLog(project,[{type:'launcher',event:'accepted',version,at:new Date(io.now()).toISOString()}]);
+ return path ?? stop('Could not create the local setup log after confirmation.');
+};
+const acquireProjectLock=async(project,io)=>{
+ const parent=join(project,'.upf-tools');
+ const path=join(parent,'installer.lock');
+ await mkdir(parent,{recursive:true,mode:0o700});
+ await chmod(parent,0o700);
+ const id=randomUUID();
+ const ownerPath=join(path,'owner.json');
+ const owner={id,pid:process.pid,startedAt:new Date(io.now()).toISOString(),childPid:null};
+ const deadline=io.now()+120_000;
+ const attempt=async()=>{
+  const created=await mkdir(path,{mode:0o700}).then(()=>true).catch(error=>error.code==='EEXIST'?false:Promise.reject(error));
+  return created ? writeFile(ownerPath,JSON.stringify(owner),{mode:0o600}).then(()=>({path,ownerPath,id}))
+   : await reclaimOrWait(path,ownerPath,owner,deadline,io);
+ };
+ return attempt();
+};
+const reclaimOrWait=async(path,ownerPath,owner,deadline,io)=>{
+ const saved=await readFile(ownerPath,'utf8').then(JSON.parse).catch(()=>null);
+ return saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid)) ? rename(path,`${path}.stale-${randomUUID()}`)
+  .then(stale=>rm(stale,{recursive:true,force:true})).then(()=>acquireProjectLock(dirname(dirname(path)),io))
+  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
+    : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,owner,deadline,io));
+};
+const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
+ .then(owner=>owner.id===id ? rm(path,{recursive:true,force:true}) : undefined).catch(()=>undefined);
+const ignoreToolFolders=async(project,io)=>{
+ const resolved=io.spawnSync('git',['rev-parse','--git-path','info/exclude'],{cwd:project,encoding:'utf8',stdio:'pipe',timeout:10_000});
+ return resolved.status!==0 || resolved.stdout.trim()==='' ? undefined : appendExcludes(resolve(project,resolved.stdout.trim()));
+};
+const appendExcludes=async(path)=>{
+ const existing=await readFile(path,'utf8').catch(()=>null);
+ const rules=existing===null ? [] : ['/\.upf-tools/','/.project-knowledge/'].filter(rule=>!existing.split(/\r?\n/).includes(rule));
+ const stat=lstatSync(path,{throwIfNoEntry:false});
+ return stat===undefined || stat.isSymbolicLink() || !stat.isFile() || rules.length===0 ? undefined
+  : appendFile(path,`${existing.endsWith('\n')?'':'\n'}${rules.join('\n')}\n`);
+};
+const activate=async(args,extracted,selection,io,finishInstall,log,lock)=>{
  const {project,plan}=selection;
  const target=join(project,'.upf-tools/distributions',args.version);
- return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : activateSafe(args,extracted,project,target,plan);
+ return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : activateSafe(args,extracted,project,target,plan,io,finishInstall,log,lock);
 };
-const activateSafe=async(args,extracted,project,target,plan)=>{
+const activateSafe=async(args,extracted,project,target,plan,io,finishInstall,log,lock)=>{
  await mkdir(dirname(target),{recursive:true});
  const staging=await mkdtemp(join(dirname(target),'.install-'));
  return cp(extracted,join(staging,'distribution'),{recursive:true,verbatimSymlinks:true})
-  .then(()=>publish(join(staging,'distribution'),target)).then(root=>savePlanAndBootstrap(root,project,plan))
+  .then(()=>publish(join(staging,'distribution'),target)).then(root=>savePlanAndBootstrap(root,project,plan,args,io,finishInstall,log,lock))
   .finally(()=>rm(staging,{recursive:true,force:true}));
 };
-const savePlanAndBootstrap=async(root,project,plan)=>{
+const savePlanAndBootstrap=async(root,project,plan,args,io,finishInstall,log,lock)=>{
  const {directory,writeText,readText}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-files.js')).href);
  const {planFile}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-input.js')).href);
  const input=join(project,'.upf-tools/setup-plan.json');
  const previous=await readText(input);
  const created=previous.ok ? await directory(project,join(project,'.upf-tools')) : previous;
  const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),previous.value,plan.python) : created;
- return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input);
+ return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input,args,io,finishInstall,log,lock);
 };
-const bootstrap=(root,project,input)=>{
- const result=spawnSync(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply'],{encoding:'utf8',maxBuffer:16*1024*1024});
- process.stdout.write(result.stdout ?? '');
- process.stderr.write(result.stderr ?? '');
- return result.status===0 || result.status===2 ? bootstrapReport(result.stdout,root,project,result.status)
+const bootstrap=async(root,project,input,args,io,finishInstall,log,lock)=>{
+ const result=await runChild(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply','--log',log],project,io,lock);
+ return result.status===0 || result.status===2 ? bootstrapReport(result.stdout,root,project,result.status,args,io,finishInstall,log)
   : stop('Setup failed; resolve the reported recovery and rerun this accepted plan.');
 };
+const runChild=(command,arguments_,cwd,io,lock)=>new Promise((resolveResult,rejectResult)=>{
+ const child=io.spawn(command,arguments_,{cwd,stdio:['ignore','pipe','pipe'],detached:io.platform!=='win32',env:io.env});
+ const owner=readFile(lock.ownerPath,'utf8').then(JSON.parse).then(value=>writeFile(lock.ownerPath,JSON.stringify({...value,childPid:child.pid}),{mode:0o600})).catch(()=>undefined);
+ const chunks=[];let size=0;let settled=false;
+ const finish=result=>{if(settled)return;settled=true;clearTimeout(timer);resolveResult(result);};
+ const timer=setTimeout(()=>{io.killGroup(child.pid,'SIGTERM');setTimeout(()=>io.killGroup(child.pid,'SIGKILL'),5000).unref();finish({status:1,stdout:''});},15*60_000);timer.unref();
+ child.stdout.on('data',chunk=>{size+=chunk.length;if(size>16*1024*1024){child.kill('SIGTERM');return finish({status:1,stdout:''});}chunks.push(chunk);});
+ child.stderr.on('data',chunk=>io.writeStderr(chunk.toString()));
+ child.once('error',error=>{clearTimeout(timer);rejectResult(error);});
+ child.once('close',async(code,signal)=>{await owner;finish({status:code??1,signal,stdout:Buffer.concat(chunks).toString('utf8')});});
+});
 // Steps an agent completes after installation. A conflict in one of them, or any other unfinished step, means
 // installation itself did not finish and must not read like the routine follow-ups every fresh install reports.
 const FOLLOW_UPS=new Set(['knowledge-content','knowledge-server','review','tracker']);
 const followUp=({step,failure})=>FOLLOW_UPS.has(step) && failure.code!=='host-configuration-conflict';
 const listed=steps=>steps.map(({step,failure})=>`- ${step}: ${failure.message} ${failure.recovery}`).join('\n');
-const bootstrapReport=(output,root,project,exitCode)=>{
+const bootstrapReport=(output,root,project,exitCode,args,io,finishInstall,log)=>{
  const report=JSON.parse(output);
- const open=report.ok ? report.value.tooling.steps.filter(({status})=>status!=='ready') : [];
- const failed=open.filter(step=>!followUp(step));
  return !report.ok ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.')
-  : failed.length>0 ? stop(`\nSetup did not finish. The workflows will not work until these steps succeed:\n${listed(failed)}\nRerun the installer; completed steps are reused.`)
-  : announced(open,{ok:true,distribution:root,project,followUps:open.map(({step})=>step)},exitCode);
+  : finishStructured(report,root,project,args,io,finishInstall,log);
 };
-// Boundary: the follow-ups are for the person running the installer; stdout stays the machine-readable result.
-const announced=(open,result,exitCode)=>{
- if(open.length>0) process.stderr.write(`\nInstallation finished. Ask your agent to complete these follow-ups:\n${listed(open)}\n`);
- process.exitCode=exitCode;
- return result;
+const finishStructured=(report,root,project,args,io,finishInstall,log)=>{
+ const finished=finishInstall(JSON.stringify(report),{strict:args.strict});
+ const open=(report.value.tooling.steps??[]).filter(({status})=>status!=='ready');
+ const followUps=open.filter(followUp).map(({step})=>step);
+ io.writeStderr(`${finished.message}\n`);
+ const result={ok:true,distribution:root,project,followUps,log,status:report.value.status,result:report};
+ return {...result,exitCode:finished.exitCode};
 };
-await main().then(result=>result===undefined || typeof result==='boolean' ? undefined : process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error=>{
- process.stderr.write(`${error.message}\n`);process.exitCode=1;
-});
+if(process.argv[1] && pathToFileURL(resolve(process.argv[1])).href===import.meta.url) process.exitCode=await main(process.argv.slice(2));

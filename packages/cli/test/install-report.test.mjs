@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { finishInstall } from '../scripts/install-report.mjs';
@@ -56,6 +56,21 @@ test('Stop and Preserve outrank hand-off, while strict converts pending work to 
   assert.equal(finishInstall(envelope(steps)).exitCode, 1);
   assert.equal(finishInstall(envelope([steps[0]])).exitCode, 2);
   assert.equal(finishInstall(envelope([steps[0]]), { strict: true }).exitCode, 1);
+});
+
+test('report-to-process boundary propagates ready, hand-off, stop and strict exit codes', () => {
+  const cases = [
+    [envelope([] , { status: 'ready', hosts: [] }), false, 0],
+    [envelope([{ step: 'host-discovery', status: 'action-required', failure: { class: 'hand-off', message: 'Sign in' } }]), false, 2],
+    [envelope([{ step: 'settings', status: 'action-required', failure: { class: 'preserve', message: 'Conflict' } }]), false, 1],
+    [envelope([{ step: 'host-discovery', status: 'action-required', failure: { class: 'hand-off', message: 'Sign in' } }]), true, 1],
+  ];
+  cases.forEach(([input, strict, expected]) => {
+    const source = `import {finishInstall} from ${JSON.stringify(new URL('../scripts/install-report.mjs', import.meta.url).href)};\n` +
+      `process.exitCode=finishInstall(${JSON.stringify(input)},{strict:${strict}}).exitCode;`;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', source], { encoding: 'utf8' });
+    assert.equal(result.status, expected);
+  });
 });
 
 test('valid failure envelopes retain their recovery message and fail closed without a class', () => {

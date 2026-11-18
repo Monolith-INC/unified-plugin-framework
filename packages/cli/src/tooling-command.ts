@@ -41,7 +41,9 @@ const execute = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const environment = { claudeState: io.claudeState() };
   const ioFor = (host: HostName) => nodeToolingIO(project, forHost(plan, host), environment);
   const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
-  const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan)() : swept;
+  const progress = (host: HostName | undefined, step: typeof TOOLING_STEPS[number]): void =>
+    io.err(`[${host ?? "project"}] ${step}\n`); // fp-allow: no-void-return -- progress output boundary
+  const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan, apply ? progress : undefined)() : swept;
   return result.ok
     ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor) : result.value, logPath)
     : writeInstallLog(project, [{ type: "bootstrap-failure", failure: result.error }], logPath).then((log) => {

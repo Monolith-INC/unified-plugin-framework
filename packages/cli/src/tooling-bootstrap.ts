@@ -67,8 +67,10 @@ const recoverOutcome = async (io: ToolingIO, outcome: Extract<ToolingOutcome, { 
 const withRecovery = (failure: Failure, instruction: string): Failure =>
   failure.code === "tooling-missing" ? failure : { ...failure, recovery: instruction };
 
-const runPhase = (io: ToolingIO, apply: boolean, steps: readonly ToolingStep[], host?: HostName): Promise<ProjectPhase> =>
+const runPhase = (io: ToolingIO, apply: boolean, steps: readonly ToolingStep[], host?: HostName,
+  progress: (host: HostName | undefined, step: ToolingStep) => void = () => undefined): Promise<ProjectPhase> =>
   steps.reduce<Promise<ProjectPhase>>((pending, step) => pending.then(async (phase) => {
+    progress(host, step);
     const result = await recoveryStep(io, apply, step, host)();
     return result.ok
       ? { report: summarizeSteps([...phase.report.steps, result.value.step]), events: recoveryEvents.concat(phase.events, result.value.events) }
@@ -79,10 +81,11 @@ const selectedSteps = (plan: AcceptedPlan, host: HostName): readonly ToolingStep
   HOST_STEPS.filter((step) => plan.steps.includes(step) || (host !== plan.hosts[0] && step === "host-discovery" && plan.steps.includes("dependencies")));
 
 /** Describe one install without effects. Running the task sequences project work and each selected host. */
-export const bootstrapHosts = (ioFor: (host: HostName) => ToolingIO, apply: boolean, plan: AcceptedPlan): Task<HostSetup> => async () => {
-  const project = await runPhase(ioFor(plan.hosts[0]), apply, TOOLING_STEPS.filter((step) => plan.steps.includes(step) && !HOST_STEPS.includes(step)));
+export const bootstrapHosts = (ioFor: (host: HostName) => ToolingIO, apply: boolean, plan: AcceptedPlan,
+  progress?: (host: HostName | undefined, step: ToolingStep) => void): Task<HostSetup> => async () => {
+  const project = await runPhase(ioFor(plan.hosts[0]), apply, TOOLING_STEPS.filter((step) => plan.steps.includes(step) && !HOST_STEPS.includes(step)), undefined, progress);
   return ok(await plan.hosts.reduce<Promise<HostSetup>>((pending, host) => pending.then(async (setup) => {
-    const phase = await runPhase(ioFor(host), apply, selectedSteps(plan, host), host);
+    const phase = await runPhase(ioFor(host), apply, selectedSteps(plan, host), host, progress);
     return { ...setup, hosts: [...setup.hosts, { host, tooling: phase.report }], events: recoveryEvents.concat(setup.events, phase.events) };
   }), Promise.resolve({ project: project.report, hosts: [], events: project.events })));
 };
