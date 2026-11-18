@@ -6,6 +6,7 @@ import type { HostEnvironment } from "./host-table.js";
 import { requireHost, type BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
+import { DISCOVERY_MARKER } from "./tooling-recovery.js";
 import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
@@ -33,8 +34,8 @@ const inspect = async (project: string, input: BootstrapInput, resolved: Bootstr
       .then((result) => checked(result, "Project CLI runs the shared command entry point.", "Expose the existing framework CLI from the supported installation."));
     case "skills": return inspectSkills(project, input);
     case "dependencies": return inspectDependencies(project, input, resolved);
-    case "knowledge-runtime": return command(pythonRuntime(project), ["-c", "import importlib.metadata as m; assert m.version('upf-project-knowledge') == '0.1.1'"], project)
-      .then((result) => checked(result, "Isolated knowledge runtime 0.1.1 is installed.", "Install the owned knowledge runtime into the isolated project environment."));
+    case "knowledge-runtime": return command(pythonRuntime(project), ["-c", "import importlib.metadata as m; assert m.version('upf-project-knowledge') == '0.1.2'"], project)
+      .then((result) => checked(result, "Isolated knowledge runtime 0.1.2 is installed.", "Install the owned knowledge runtime into the isolated project environment."));
     case "knowledge-settings": return knowledgeSettings(project, input);
     case "knowledge-content": return inspectKnowledgeContent(project, input);
     case "knowledge-server": return inspectServer(project, input, environment);
@@ -85,8 +86,9 @@ const knowledgeSettings = async (project: string, input: BootstrapInput): Promis
 };
 const inspectKnowledgeContent = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const root = join(project, input.knowledge.knowledgeRoot);
-  const [manifest, catalog] = await Promise.all([readText(join(root, "manifest.md")), readText(join(root, "catalog.tsv"))]);
-  return manifest.ok && manifest.value !== null && catalog.ok && (catalog.value?.trim().split("\n").length ?? 0) > 1
+  const [manifest, marker, catalog] = await Promise.all([readText(join(root, "manifest.md")), readText(join(root, DISCOVERY_MARKER)), readText(join(root, "catalog.tsv"))]);
+  return ((manifest.ok && manifest.value !== null) || (marker.ok && marker.value === "verified\n"))
+    && catalog.ok && (catalog.value?.trim().split("\n").length ?? 0) > 1
     ? ready("Knowledge manifest and a nonempty catalog are present; server verification checks retrieval.")
     : missing("Run discover-project-knowledge to derive source-backed indexed units, then rerun bootstrap.");
 };

@@ -53,6 +53,8 @@ Example structure (replace the illustrative choices with accepted project choice
 
 Optional `answers` contains accepted project setup answers, using the existing project settings shape. No tracker is selected by this example. Optional `steps` limits an explicit repair to named capabilities; omit it for the complete plan. The capability names are `settings`, `cli`, `skills`, `dependencies`, `knowledge-runtime`, `knowledge-settings`, `knowledge-content`, `knowledge-server`, `review`, `host-discovery`, `tracker`.
 
+Set `consent.headlessDiscovery` to `true` only after the user accepts a model run that reads the project and writes to the accepted knowledge store. Setup attempts discovery after it verifies the host and knowledge runtime. When installation succeeds but discovery is still pending, it exits with code `2`. In the next agent session, say “Use the project-bootstrap skill to finish setup”.
+
 ```sh
 pnpm agent-plugin project bootstrap --input plan.json --project <target-project>
 # After the user accepts the reported plan:
@@ -67,7 +69,7 @@ Project settings remain in `.unified-plugin-framework.json`; knowledge/document 
 
 The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Bundled, fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
 
-The knowledge runtime is installed from a private source copy into an isolated environment. It uses the runtime's own configuration selection and a fresh protocol client for catalog/search/fetch verification. Populate an empty store with discover-project-knowledge; bootstrap does not invent its content. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
+The knowledge runtime is installed from a private source copy into an isolated environment. A fresh protocol client verifies catalog, search and fetch. If knowledge discovery remains pending, the bootstrap skill uses the installed discovery skill to derive source-backed units. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
 
 Dependency wrappers are published only after a private staging copy is complete, so interruption does not leave a half-installed final wrapper. Existing unmanaged directories remain conflicts to resolve explicitly. Marketplace additions preserve earlier workflow entries and unrelated metadata. Active discovered skill directories are compared with the pinned staged source, including references; a matching name or version marker alone never establishes readiness.
 

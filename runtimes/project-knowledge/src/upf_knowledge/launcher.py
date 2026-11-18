@@ -65,6 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--root")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--verify", action="store_true", help="Verify catalog, search and fetch over a fresh MCP connection.")
+    parser.add_argument("--read-repository", action="store_true", help="Expose only read-only repository tools over MCP.")
     return parser
 
 
@@ -74,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     if sys.platform not in {"linux", "darwin"}:
         return _error("unsupported_platform", "Project knowledge server supports Linux and macOS only.")
     project = args.project.expanduser().resolve()
+    if args.read_repository:
+        from upf_knowledge.repository import serve_repository
+        return serve_repository(project)
     try:
         configuration = _configuration(project, args.root)
     except ValueError as error:

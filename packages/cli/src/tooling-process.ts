@@ -25,6 +25,35 @@ const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[])
 const processFailure = (program: string): Result<never> => fail("tool-command-failed", `The ${program.split(/[\\/]/).at(-1) ?? "tool"} command did not finish successfully.`,
   "Check the executable, network and permissions; preserve completed setup and rerun the affected step. No automatic retry was made.");
 
+/** At the deadline, close the pipes and kill the private process group, including MCP children. */
+export const boundedOutput = (program: string, args: readonly string[], cwd: string, timeout: number, env: NodeJS.ProcessEnv): Promise<Result<string>> =>
+  new Promise((settle) => {
+    const child = spawn(program, [...args], { cwd, env, detached: true, stdio: ["ignore", "pipe", "ignore"] });
+    const stop = (): void => { // fp-allow: no-void-return -- process boundary callback
+      child.stdout.destroy();
+      try {
+        child.pid === undefined ? undefined : process.kill(-child.pid, "SIGKILL");
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
+      }
+    };
+    const timer = setTimeout(() => {
+      settle(processFailure(program));
+      stop();
+    }, timeout);
+    const output = collectBounded(child.stdout[Symbol.asyncIterator](), Buffer.alloc(0)).catch(() => null);
+    child.once("error", () => { clearTimeout(timer); settle(processFailure(program)); });
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      output.then((bytes) => settle(code === 0 && bytes !== null ? ok(bytes) : processFailure(program)));
+    });
+  });
+
+const collectBounded = async (stream: AsyncIterator<Buffer>, tail: Buffer): Promise<string> => {
+  const next = await stream.next();
+  return next.done ? tail.toString("utf8") : collectBounded(stream, Buffer.concat([tail, next.value]).subarray(-32_768));
+};
+
 /** Fresh host protocol connection; no model turn, user thread or inference cost. */
 export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }): Promise<Result<unknown>> => {
   const child = spawn("codex", ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });

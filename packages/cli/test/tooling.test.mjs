@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,readFile,mkdir,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
@@ -32,6 +32,21 @@ test('CLI plan is read-only; apply configures missing accepted choices and re-en
   assert.equal(run().value.tooling.steps.find(step=>step.step==='settings').status,'action-required');
   assert.equal(run(true).value.tooling.status,'ready');
   assert.equal(JSON.parse(await readFile(join(project,'.unified-plugin-framework.json'),'utf8')).language,'en');
+});
+
+test('bootstrap without discovery consent reports the knowledge hand-off with exit code 2',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-discovery-handoff-'));
+  const input=join(project,'plan.json');
+  await writeFile(input,JSON.stringify({...choices,steps:['knowledge-content']}));
+  const argv=[cli,'project','bootstrap','--input',input,'--project',project];
+  const dry=spawnSync(process.execPath,argv,{encoding:'utf8'});
+  assert.equal(dry.status,0,dry.stderr);
+  const apply=spawnSync(process.execPath,[...argv,'--apply'],{encoding:'utf8'});
+  assert.equal(apply.status,2,apply.stderr);
+  const {value}=JSON.parse(apply.stdout);
+  assert.equal(value.tooling.steps[0].failure.code,'knowledge-discovery-needed');
+  assert.match(value.next,/Use the project-bootstrap skill to finish setup/);
+  await assert.rejects(readFile(join(project,'knowledge','.upf-discovery-complete')));
 });
 
 test('review setup refuses incomplete bindings and preserves linked external configuration',{skip:process.platform==='win32'},async()=>{

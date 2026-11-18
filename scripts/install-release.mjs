@@ -141,24 +141,26 @@ const bootstrap=(root,project,input)=>{
  const result=spawnSync(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply'],{encoding:'utf8',maxBuffer:16*1024*1024});
  process.stdout.write(result.stdout ?? '');
  process.stderr.write(result.stderr ?? '');
- return result.status!==0 ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.') : bootstrapReport(result.stdout,root,project);
+ return result.status===0 || result.status===2 ? bootstrapReport(result.stdout,root,project,result.status)
+  : stop('Setup failed; resolve the reported recovery and rerun this accepted plan.');
 };
 // Steps an agent completes after installation. A conflict in one of them, or any other unfinished step, means
 // installation itself did not finish and must not read like the routine follow-ups every fresh install reports.
 const FOLLOW_UPS=new Set(['knowledge-content','knowledge-server','review','tracker']);
 const followUp=({step,failure})=>FOLLOW_UPS.has(step) && failure.code!=='host-configuration-conflict';
 const listed=steps=>steps.map(({step,failure})=>`- ${step}: ${failure.message} ${failure.recovery}`).join('\n');
-const bootstrapReport=(output,root,project)=>{
+const bootstrapReport=(output,root,project,exitCode)=>{
  const report=JSON.parse(output);
  const open=report.ok ? report.value.tooling.steps.filter(({status})=>status!=='ready') : [];
  const failed=open.filter(step=>!followUp(step));
  return !report.ok ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.')
   : failed.length>0 ? stop(`\nSetup did not finish. The workflows will not work until these steps succeed:\n${listed(failed)}\nRerun the installer; completed steps are reused.`)
-  : announced(open,{ok:true,distribution:root,project,followUps:open.map(({step})=>step)});
+  : announced(open,{ok:true,distribution:root,project,followUps:open.map(({step})=>step)},exitCode);
 };
 // Boundary: the follow-ups are for the person running the installer; stdout stays the machine-readable result.
-const announced=(open,result)=>{
+const announced=(open,result,exitCode)=>{
  if(open.length>0) process.stderr.write(`\nInstallation finished. Ask your agent to complete these follow-ups:\n${listed(open)}\n`);
+ process.exitCode=exitCode;
  return result;
 };
 await main().then(result=>result===undefined || typeof result==='boolean' ? undefined : process.stdout.write(`${JSON.stringify(result)}\n`)).catch(error=>{
