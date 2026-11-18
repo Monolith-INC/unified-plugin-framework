@@ -5,7 +5,7 @@ import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { bootstrapTooling, fail, type Result, type ToolingIO, type ToolingOutcome, type ToolingReport } from "@agent-plugins/project";
 import type { AcceptedPlan } from "./tooling-input.js";
 import type { HostName } from "./host-names.js";
-import { boundedOutput } from "./tooling-process.js";
+import { boundedOutput, selectEnvironment } from "./tooling-process.js";
 import { DISCOVERY_COMPLETE, DISCOVERY_MARKER, headlessDiscovery, PINS, recoveryFor } from "./tooling-recovery.js";
 import { readText, safePath, writeText } from "./tooling-files.js";
 import { knowledgeExecutable } from "./tooling-runtime.js";
@@ -24,10 +24,9 @@ const within = (root: string, path: string): boolean => {
   return child === "" || (!isAbsolute(child) && child !== ".." && !child.startsWith(`..${sep}`));
 };
 
-const cleanEnvironment = (): NodeJS.ProcessEnv => Object.fromEntries(
-  ["PATH", "HOME", "USERPROFILE", "LANG", "LC_ALL", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-    .flatMap((key) => process.env[key] === undefined ? [] : [[key, process.env[key]]]),
-);
+const DISCOVERY_ENV = [
+  "PATH", "HOME", "USERPROFILE", "LANG", "LC_ALL", "CODEX_HOME", "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "OPENAI_API_KEY",
+] as const;
 
 const executable = async (host: HostName, cwd: string, path: string | undefined): Promise<string | undefined> => {
   const candidates = await Promise.all((path ?? "").split(delimiter).filter(isAbsolute).map((dir) =>
@@ -42,7 +41,7 @@ const approved = (report: ToolingReport, plan: AcceptedPlan): boolean =>
     && ready(report, "host-discovery");
 
 const runHost = async (host: HostName, project: string, runtime: string, root: string, scratch: string): Promise<Result<string>> => {
-  const env = cleanEnvironment();
+  const env = selectEnvironment(process.env, DISCOVERY_ENV);
   const program = await executable(host, project, env.PATH);
   const run = (args: readonly string[], timeout: number) =>
     program === undefined ? Promise.resolve(pending()) : boundedOutput(program, args, scratch, timeout, env);
