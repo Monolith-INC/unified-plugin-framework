@@ -55,6 +55,7 @@ const finishValue = (value, strict) => {
   const lines = [
     value.status === 'ready' ? 'Setup is ready.' : 'Setup report',
     ...(hosts.length === 0 ? [] : [`Hosts: ${hosts.map(labelHost).join(', ')}`]),
+    ...((value.hostCliPaths ?? []).map(({ host, path }) => `${labelHost(host)} private CLI: ${clean(path)}. Add its directory to PATH to run it by name.`)),
     ...steps.filter((step) => step.status !== 'ready').flatMap(detailsFor),
     ...((value.backups ?? []).length === 0 ? [] : [`Backups saved: ${(value.backups ?? []).map(clean).join(', ')}`]),
     ...((value.handoffs ?? []).length === 0 ? [] : ['Next session: Use the project-bootstrap skill to finish setup']),

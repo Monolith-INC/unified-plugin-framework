@@ -7,6 +7,7 @@ import { requireHost, type BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
 import { DISCOVERY_MARKER } from "./tooling-recovery.js";
+import { HOST_STEPS } from "./tooling-bootstrap.js";
 import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
@@ -14,6 +15,11 @@ const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "re
 const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "missing", recovery });
 const checked = (result: Result<unknown>, evidence: string, recovery: string): Result<ToolingObservation> => result.ok ? ready(evidence) : missing(recovery);
 const inputNeeded = (code: string, message: string, recovery: string): Promise<Result<string>> => Promise.resolve(fail(code, message, recovery));
+const hostCliMissing = (input: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Result<never> | null =>
+  environment.hostCli?.kind === "missing" && HOST_STEPS.includes(step)
+    ? fail("host-cli-missing", environment.hostCli.attempted ? `The pinned ${input.host} CLI could not be installed.` : `The ${input.host} CLI is unavailable.`,
+      "Install the host's official CLI, add it to PATH, and rerun setup.")
+    : null;
 
 /** A per-host step runs only on one host's view of the plan; a whole plan is refused before any effect. */
 const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promise<Result<A>> =>
@@ -24,7 +30,8 @@ const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promi
  * accepted input and, once resolved, the same input with fetched dependency roots added.
  */
 export const nodeToolingIO = (project: string, input: BootstrapInput, environment: HostEnvironment): ToolingIO => ({
-  inspect: (step) => () => Promise.resolve().then(() => guarded(input, () => inspect(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
+  inspect: (step) => () => Promise.resolve().then(() => guarded(input, () =>
+    Promise.resolve(hostCliMissing(input, environment, step) ?? inspect(project, input, resolvedInput(project, input), environment, step)))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
   configure: (step) => () => Promise.resolve().then(() => guarded(input, () => configureStep(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
 });
 const inspect = async (project: string, input: BootstrapInput, resolved: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Promise<Result<ToolingObservation>> => {

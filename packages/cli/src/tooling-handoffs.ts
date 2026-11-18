@@ -7,6 +7,7 @@ import { bootstrapHosts } from "./tooling-bootstrap.js";
 import { directory, readText, safePath, writeText } from "./tooling-files.js";
 import { forHost, parseBootstrap, planFile, type AcceptedPlan } from "./tooling-input.js";
 import { nodeToolingIO } from "./tooling-node.js";
+import { prepareHostCli } from "./tooling-host-cli.js";
 import { TASK_KINDS, type TaskKind } from "./tooling-recovery.js";
 import type { HostEnvironment } from "./host-table.js";
 
@@ -176,6 +177,11 @@ const PROBES: Readonly<Record<TaskKind, readonly ToolingStep[]>> = {
 };
 export const handoffReady = (project: string, environment: HostEnvironment): Ready => async (task, plan) => {
   const steps = PROBES[task];
-  const report = await bootstrapHosts((host) => nodeToolingIO(project, forHost(plan, host), environment), false, { ...plan, steps })();
+  const programs = new Map(task === "review-setup" ? [] : await Promise.all(plan.hosts.map(async (host) =>
+    [host, await prepareHostCli(project, host, plan.python, false)] as const)));
+  const report = await bootstrapHosts((host) => {
+    const hostCli = programs.get(host);
+    return nodeToolingIO(project, forHost(plan, host), hostCli === undefined ? environment : { ...environment, hostCli });
+  }, false, { ...plan, steps })();
   return report.ok && report.value.project.status === "ready" && report.value.hosts.every(({ tooling }) => tooling.status === "ready");
 };

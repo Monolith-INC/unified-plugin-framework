@@ -53,7 +53,7 @@ The installer creates its setup plan internally. The release bundles all five de
   - Codex: plugins register through `.codex/config.toml` and `codex plugin add`.
   - Claude Code: plugins come from a marketplace named for this project and install at local scope (`.claude/settings.local.json`), and the knowledge server is registered at local scope too (`claude mcp add-json --scope local`), so this machine's paths stay out of shared files and Claude Code needs no approval prompt for it.
 - **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. If Python is unavailable, the launcher can download a pinned private Python after you consent.
-- Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
+- Network access to GitHub Releases, the Python package index for isolated knowledge setup, and the npm registry if you authorize installation of a missing host CLI.
 - Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
 
 The supported project trackers are repository-local files and Linear. For a new Linear setup, enter the team and project names or URLs; the connector resolves their identifiers. Your existing choices are reused on subsequent runs.

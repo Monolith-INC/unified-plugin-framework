@@ -8,6 +8,7 @@ import type { HostName } from "./host-names.js";
 import { NODE_PLUGIN_FACTS_IO, skillNames } from "./plugin-reader.js";
 import { codexAppServerRequest, command } from "./tooling-process.js";
 import { readText, readToml, writeText } from "./tooling-files.js";
+import type { HostCli } from "./tooling-host-cli.js";
 
 export interface DiscoveredSkill { readonly name: string; readonly path: string }
 /** A plugin directory the host should load, under the name its skills are namespaced by. */
@@ -17,6 +18,7 @@ export interface HostPlugin { readonly name: string; readonly root: string; read
  * `claudeState` is Claude Code's user state file, where it keeps local-scope servers per project.
  */
 export interface HostContext {
+  readonly program?: string;
   readonly project: string;
   readonly canonical: string;
   readonly claudeState: string;
@@ -26,7 +28,7 @@ export interface HostContext {
 }
 
 /** What setup needs from the user's environment, read once at the program edge. */
-export interface HostEnvironment { readonly claudeState: string }
+export interface HostEnvironment { readonly claudeState: string; readonly hostCli?: HostCli }
 
 /** One host's names, paths and commands; setup steps stay host-neutral and ask this record. */
 export interface HostTooling {
@@ -114,8 +116,8 @@ const CODEX = Object.freeze<HostTooling>({
   register: (context) => codexRegistration(context).then((found) => !found.ok ? found : found.value.addition === "" ? ok(CODEX_CONFIG)
     : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old, context.python)),
   registered: (context) => codexRegistration(context).then((found) => found.ok ? ok(found.value.addition === "") : found),
-  activate: (context, plugin) => command("codex", CODEX_TOOLING.install(plugin.name), context.project),
-  discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project)).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
+  activate: (context, plugin) => command(context.program ?? "codex", CODEX_TOOLING.install(plugin.name), context.project),
+  discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project), undefined, context.program).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
 });
 
 // Claude Code: a directory marketplace named for this project, declared and installed at local scope; plugins load in place.
@@ -135,7 +137,7 @@ const declared = (context: HostContext, settings: unknown): Result<boolean> => {
 };
 const claudeDeclared = (context: HostContext): Promise<Result<boolean>> =>
   readDocument(join(context.project, CLAUDE_TOOLING.settings)).then((document) => document.ok ? declared(context, document.value.value) : document);
-const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command("claude", args, context.canonical);
+const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command(context.program ?? "claude", args, context.canonical);
 const claudeLocal = (context: HostContext): Promise<Result<unknown>> =>
   readDocument(context.claudeState).then((document) => document.ok ? ok(claudeLocalServer(document.value.value, context.canonical)) : document);
 const applyServer = (context: HostContext, entry: ClaudeServerEntry, old: unknown): Promise<Result<string>> => {

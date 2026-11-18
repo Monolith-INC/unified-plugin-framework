@@ -45,9 +45,10 @@ const signedIn = (host: HostName, auth: Result<string>): boolean => {
   return status.ok && object(status.value) && status.value.loggedIn === true;
 };
 
-const runHost = async (host: HostName, project: string, runtime: string, root: string, scratch: string): Promise<Result<string> | null> => {
+const runHost = async (host: HostName, project: string, runtime: string, root: string, scratch: string,
+  privateProgram?: string): Promise<Result<string> | null> => {
   const env = selectEnvironment(process.env, DISCOVERY_ENV);
-  const program = await executable(host, project, env.PATH);
+  const program = privateProgram ?? await executable(host, project, env.PATH);
   const run = (args: readonly string[], timeout: number) =>
     program === undefined ? Promise.resolve(pending()) : boundedOutput(program, args, scratch, timeout, env);
   const version = await run(["--version"], 5_000);
@@ -59,13 +60,15 @@ const runHost = async (host: HostName, project: string, runtime: string, root: s
     : pending();
 };
 
-const tryEligibleHosts = async (candidates: readonly HostName[], project: string, runtime: string, root: string, scratch: string): Promise<Result<string>> => {
+const tryEligibleHosts = async (candidates: readonly HostName[], project: string, runtime: string, root: string, scratch: string,
+  privatePrograms: ReadonlyMap<HostName, string>): Promise<Result<string>> => {
   const [host, ...remaining] = candidates;
   return host === undefined ? pending()
-    : (await runHost(host, project, runtime, root, scratch)) ?? tryEligibleHosts(remaining, project, runtime, root, scratch);
+    : (await runHost(host, project, runtime, root, scratch, privatePrograms.get(host))) ?? tryEligibleHosts(remaining, project, runtime, root, scratch, privatePrograms);
 };
 
-const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: readonly HostName[]): Promise<Result<string>> => {
+const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: readonly HostName[],
+  privatePrograms: ReadonlyMap<HostName, string>): Promise<Result<string>> => {
   const canonical = await realpath(project);
   const temp = await realpath(tmpdir());
   const runtime = knowledgeExecutable(canonical);
@@ -76,7 +79,7 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: re
   if (!previous.ok || within(canonical, temp)) return pending();
   const scratch = await mkdtemp(join(temp, "upf-discovery-"));
   try {
-    const verified = await tryEligibleHosts(candidates, canonical, runtime, root, scratch);
+    const verified = await tryEligibleHosts(candidates, canonical, runtime, root, scratch, privatePrograms);
     return verified.ok ? writeText(canonical, marker, "verified\n", previous.value, plan.python) : verified;
   } finally {
     await rmdir(scratch).catch(() => undefined);
@@ -85,9 +88,10 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: re
 
 /** Run once after host verification. An unavailable host or incomplete run leaves the manual hand-off. */
 export const finishKnowledge = async (report: ToolingReport, project: string, plan: AcceptedPlan, tooling: ToolingIO,
-  candidates: readonly HostName[] = ready(report, "host-discovery") ? plan.hosts : []): Promise<ToolingReport> => {
+  candidates: readonly HostName[] = ready(report, "host-discovery") ? plan.hosts : [],
+  privatePrograms: ReadonlyMap<HostName, string> = new Map()): Promise<ToolingReport> => {
   if (!missing(report)) return report;
-  const acquired = approved(report, plan, candidates) ? await verifyAndMark(project, plan, candidates).catch(pending) : pending();
+  const acquired = approved(report, plan, candidates) ? await verifyAndMark(project, plan, candidates, privatePrograms).catch(pending) : pending();
   const server = acquired.ok && report.steps.some(({ step }) => step === SERVER)
     ? await bootstrapTooling(tooling, false, [SERVER])() : undefined;
   const steps = report.steps.map((outcome): ToolingOutcome => {

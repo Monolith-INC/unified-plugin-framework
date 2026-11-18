@@ -170,7 +170,9 @@ const pinnedVersion = (name: string): string => {
 
 /** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
 const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
-  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python,
+  ...(environment.hostCli?.kind === "available" ? { program: environment.hostCli.program } : {}),
+  ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
 const realProject = (project: string): string => {
   try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
 };

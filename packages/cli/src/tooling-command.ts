@@ -11,6 +11,7 @@ import { bootstrapHosts, HOST_STEPS, pendingTasks, summarizeSteps, type HostRun,
 import type { HostName } from "./host-names.js";
 import { writeInstallLog } from "./install-log.js";
 import { handoffStateRoot, recordHandoffs } from "./tooling-handoffs.js";
+import { prepareHostCli, type HostCli } from "./tooling-host-cli.js";
 
 const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>] [--log <path>]";
 const pairs = (args: readonly string[]): readonly string[] => args.filter((entry) => entry !== "--apply");
@@ -39,14 +40,20 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
     : execute(project, parsed.value, args.includes("--apply"), request.value, io, option(args, "--log"));
 };
 const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, logPath?: string): Promise<number> => {
-  const environment = { claudeState: io.claudeState() };
-  const ioFor = (host: HostName) => nodeToolingIO(project, forHost(plan, host), environment);
   const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
+  const hostClis = new Map<HostName, HostCli>(swept.ok && apply && HOST_STEPS.some((step) => plan.steps.includes(step))
+    ? await Promise.all(plan.hosts.map(async (host) => [host, await prepareHostCli(project, host, plan.python, plan.consent.installHostClis)] as const))
+    : []);
+  const claudeState = io.claudeState();
+  const ioFor = (host: HostName) => {
+    const hostCli = hostClis.get(host);
+    return nodeToolingIO(project, forHost(plan, host), hostCli === undefined ? { claudeState } : { claudeState, hostCli });
+  };
   const progress = (host: HostName | undefined, step: typeof TOOLING_STEPS[number]): void =>
     io.err(`[${host ?? "project"}] ${step}\n`); // fp-allow: no-void-return -- progress output boundary
   const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan, apply ? progress : undefined)() : swept;
   return result.ok
-    ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor) : result.value, logPath)
+    ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor, hostClis) : result.value, hostClis, logPath)
     : writeInstallLog(project, [{ type: "bootstrap-failure", failure: result.error }], logPath).then((log) => {
       io.out(JSON.stringify({ ...result, log }, null, 2)); // fp-allow: no-void-return -- CLI output boundary
       return 1;
@@ -60,10 +67,13 @@ const refreshServer = async (run: HostRun, ioFor: (host: HostName) => ToolingIO)
     step.step === "knowledge-server" ? refreshed.value.steps[0] ?? step : step)) } : run;
 };
 
-const acquire = async (setup: HostSetup, project: string, plan: AcceptedPlan, ioFor: (host: HostName) => ToolingIO): Promise<HostSetup> => {
+const acquire = async (setup: HostSetup, project: string, plan: AcceptedPlan, ioFor: (host: HostName) => ToolingIO,
+  hostClis: ReadonlyMap<HostName, HostCli>): Promise<HostSetup> => {
   const candidates = setup.hosts.filter(({ tooling }) => tooling.steps.some((step) =>
     step.step === "host-discovery" && step.status === "ready")).map(({ host }) => host);
-  const shared = await finishKnowledge(setup.project, project, plan, ioFor(plan.hosts[0]), candidates);
+  const privatePrograms = new Map([...hostClis].flatMap(([host, cli]) => cli.kind === "available" && cli.source === "private"
+    ? [[host, cli.program] as const] : []));
+  const shared = await finishKnowledge(setup.project, project, plan, ioFor(plan.hosts[0]), candidates, privatePrograms);
   const acquired = shared !== setup.project && shared.steps.some((step) => step.step === "knowledge-content" && step.status === "ready");
   return { ...setup, project: shared, hosts: acquired ? await Promise.all(setup.hosts.map((run) => refreshServer(run, ioFor))) : setup.hosts };
 };
@@ -80,7 +90,7 @@ const backupPaths = (project: string): Promise<readonly string[]> => readdir(joi
   .catch(() => []);
 const fullHost = (run: HostRun) => HOST_STEPS.every((step) => run.tooling.steps.some((entry) => entry.step === step));
 const respond = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo,
-  setup: HostSetup, logPath?: string): Promise<number> => {
+  setup: HostSetup, hostClis: ReadonlyMap<HostName, HostCli>, logPath?: string): Promise<number> => {
   const report = summarizeSteps([...setup.project.steps, ...setup.hosts.flatMap(({ tooling }) => tooling.steps)]);
   const backups = await backupPaths(project);
   const complete = TOOLING_STEPS.every((step) => plan.steps.includes(step));
@@ -90,6 +100,7 @@ const respond = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: classified(report), request,
     project: classified(setup.project), backups, hosts: setup.hosts.map((run) => ({ ...run, tooling: classified(run.tooling), status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
     handoffs, pendingTasks: handoff.ok ? handoff.value : null, events: setup.events,
+    hostCliPaths: [...hostClis].flatMap(([host, cli]) => cli.kind === "available" && cli.source === "private" ? [{ host, path: cli.program }] : []),
     status: report.status === "action-required" || complete ? report.status : "not-verified",
     next: !handoff.ok ? handoff.error.recovery : handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
       : report.status === "action-required" ? "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused."
@@ -99,6 +110,7 @@ const respond = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const result = resumed === null ? ok(common) : resumed.ok ? ok({ ...common, ...resumed.value }) : resumed;
   const stored = await writeInstallLog(project, [
     ...setup.events.map((event) => ({ type: "recovery", ...event })),
+    ...[...hostClis].map(([host, cli]) => ({ type: "host-cli", host, ...cli })),
     { type: "bootstrap", mode: common.mode, status: common.status, project: common.project, hosts: common.hosts, handoffs: common.handoffs },
   ], logPath);
   return output(io, result.ok ? ok({ ...result.value, log: stored }) : result, handoff.ok ? reportExit(report, apply) : 1);

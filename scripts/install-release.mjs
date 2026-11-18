@@ -292,8 +292,8 @@ const savePlanAndBootstrap=async(root,project,plan,args,io,finishInstall,log,loc
 };
 const bootstrap=async(root,project,input,args,io,finishInstall,log,lock)=>{
  const result=await runChild(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply','--log',log],project,io,lock);
- return result.status===0 || result.status===2 ? bootstrapReport(result.stdout,root,project,result.status,args,io,finishInstall,log)
-  : stop('Setup failed; resolve the reported recovery and rerun this accepted plan.');
+ return [0,1,2].includes(result.status) ? bootstrapReport(result.stdout,root,project,result.status,args,io,finishInstall,log)
+  : stop(`Setup stopped before returning a report. Log: ${log}`);
 };
 const runChild=(command,arguments_,cwd,io,lock)=>new Promise((resolveResult,rejectResult)=>{
  const child=io.spawn(command,arguments_,{cwd,stdio:['ignore','pipe','pipe'],detached:io.platform!=='win32',env:io.env});
@@ -312,16 +312,23 @@ const FOLLOW_UPS=new Set(['knowledge-content','knowledge-server','review','track
 const followUp=({step,failure})=>FOLLOW_UPS.has(step) && failure.code!=='host-configuration-conflict';
 const listed=steps=>steps.map(({step,failure})=>`- ${step}: ${failure.message} ${failure.recovery}`).join('\n');
 const bootstrapReport=(output,root,project,exitCode,args,io,finishInstall,log)=>{
- const report=JSON.parse(output);
- return !report.ok ? stop('Setup failed; resolve the reported recovery and rerun this accepted plan.')
-  : finishStructured(report,root,project,args,io,finishInstall,log);
+ const report=decodeReport(output);
+ if(report?.ok!==true) {
+  const finished=finishInstall(output,{strict:args.strict});
+  io.writeStderr(`${finished.message}\nLog: ${log}\n`);
+  return {ok:false,project,log,result:report,exitCode:1};
+ }
+ return finishStructured(report,root,project,args,io,finishInstall,log,exitCode);
 };
-const finishStructured=(report,root,project,args,io,finishInstall,log)=>{
+const decodeReport=output=>{
+ try { return JSON.parse(output); } catch { return null; }
+};
+const finishStructured=(report,root,project,args,io,finishInstall,log,exitCode)=>{
  const finished=finishInstall(JSON.stringify(report),{strict:args.strict});
  const open=(report.value.tooling.steps??[]).filter(({status})=>status!=='ready');
  const followUps=open.filter(followUp).map(({step})=>step);
- io.writeStderr(`${finished.message}\n`);
+ io.writeStderr(`${finished.message}\nLog: ${log}\n`);
  const result={ok:true,distribution:root,project,followUps,log,status:report.value.status,result:report};
- return {...result,exitCode:finished.exitCode};
+ return {...result,exitCode:exitCode===1 ? 1 : finished.exitCode};
 };
 if(process.argv[1] && pathToFileURL(resolve(process.argv[1])).href===import.meta.url) process.exitCode=await main(process.argv.slice(2));

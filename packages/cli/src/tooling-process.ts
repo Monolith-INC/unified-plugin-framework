@@ -116,11 +116,12 @@ const replyWithId = async (lines: AsyncIterator<string>, id: number): Promise<un
 };
 
 /** Probe the host protocol without starting a model turn or user thread. */
-export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }, timeout = 25_000): Promise<Result<unknown>> =>
-  runProcess("codex", ["app-server", "--stdio"], cwd, { timeout }, async (child, output) => {
+export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }, timeout = 25_000, program = "codex"): Promise<Result<unknown>> =>
+  runProcess(program, ["app-server", "--stdio"], cwd, { timeout }, async (child, output) => {
     const lines = createInterface({ input: output })[Symbol.asyncIterator]();
     const send = (value: unknown): boolean => child.stdin.write(`${JSON.stringify(value)}\n`);
-    send({ id: 1, method: "initialize", params: { clientInfo: { name: "upf-bootstrap", version: "1.0.0" } } });
+    send({ id: 1, method: "initialize", params: { clientInfo: { name: "upf-bootstrap", version: "1.0.0" },
+      capabilities: { experimentalApi: false, requestAttestation: false } } });
     await replyWithId(lines, 1);
     send({ method: "initialized", params: {} });
     send({ id: 2, ...request });
