@@ -2,7 +2,7 @@
 
 One accepted setup plan coordinates the existing project service, transactional payload installer, knowledge runtime and host configuration. Invoke it explicitly, or when a required capability is missing. Ordinary skills use working adapters directly; bootstrap adds no periodic session scan or repeated setup interview.
 
-Bootstrap sets up Codex or Claude Code, chosen by the plan's `host`. Each host installs its own build of the framework plugins; the pinned dependency sources are staged once and given each host's manifest beside them. Host differences live in one table (`packages/cli/src/host-table.ts`); each host's file names, commands and pure merge rules live in its adapter package:
+Bootstrap sets up Codex, Claude Code, or both, chosen by the plan's `hosts` list. Existing plans with a single `host` still work. Bootstrap runs shared setup once and checks each selected host separately. Each host installs its own build of the framework plugins and uses the same pinned dependency sources. The host table and adapter packages define the configuration and discovery details.
 
 | Host | Plugins | Knowledge server | Unnamespaced skills | Discovery check |
 | --- | --- | --- | --- | --- |
@@ -15,11 +15,11 @@ Artifact tests exercise the distribution, both framework payloads for every setu
 
 ## Interactive installation
 
-The release's `install.sh` launcher starts a terminal wizard that collects these choices and creates the plan internally. It uses the same bootstrap described below, preserving saved project settings and reporting remaining setup actions. No user-written JSON is required for this interactive path. The launcher starts with v0.2.2; see the [installation guide](../vendor-payload-installation.md#complete-framework-installation) for release availability and automation.
+The release's `install.sh` launcher starts a terminal wizard that creates the plan internally. Use arrows to move, Space to check a row, and Enter to confirm. **All** selects every row, and **a** toggles all. On terminals without raw input, enter the listed numbers. Review the summary and choose **Install** to apply it. [Installation guide](../vendor-payload-installation.md#complete-framework-installation)
 
 ## Prepare and accept one plan (automation or agent-driven setup)
 
-Run `project describe` to reuse project choices. Collect only missing tracker/language/document choices through project-bootstrap. Download/install authorization applies to the concrete plan, including its selected host, the dependency sources it fetches and the isolated runtime.
+Run `project describe` to reuse project choices. Collect missing tracker, language, and document choices through `project-bootstrap`. Confirm the selected hosts, any dependency sources the setup will fetch, and the isolated runtime before applying the plan.
 
 ## Dependency plugins come with the release
 
@@ -37,10 +37,15 @@ Example structure (replace the illustrative choices with accepted project choice
 
 ```json
 {
-  "host": "codex",
+  "hosts": ["codex", "claude"],
   "python": "python3.12",
   "workflows": ["project-tracking"],
   "pluginRoots": [],
+  "consent": {
+    "privatePython": false,
+    "installHostClis": false,
+    "headlessDiscovery": false
+  },
   "knowledge": {
     "knowledgeRoot": ".project-knowledge/knowledge",
     "documentMode": "shared",
@@ -53,7 +58,7 @@ Example structure (replace the illustrative choices with accepted project choice
 
 Optional `answers` contains accepted project setup answers, using the existing project settings shape. No tracker is selected by this example. Optional `steps` limits an explicit repair to named capabilities; omit it for the complete plan. The capability names are `settings`, `cli`, `skills`, `dependencies`, `knowledge-runtime`, `knowledge-settings`, `knowledge-content`, `knowledge-server`, `review`, `host-discovery`, `tracker`.
 
-Set `consent.headlessDiscovery` to `true` only after the user accepts a model run that reads the project and writes to the accepted knowledge store. Setup attempts discovery after it verifies the host and knowledge runtime. When installation succeeds but discovery is still pending, it exits with code `2`. In the next agent session, say “Use the project-bootstrap skill to finish setup”.
+All consent flags default to `false`. Set `privatePython` to `true` only to let the release launcher download a pinned private runtime when it cannot find Python 3.12+. Set `headlessDiscovery` to `true` only to allow a model run that reads the project and writes to the accepted knowledge store. Setup attempts discovery after verifying the host and runtime. The plan records consent for host CLI installation in `installHostClis`. For a missing host executable, follow the recovery instruction in the report.
 
 ```sh
 pnpm agent-plugin project bootstrap --input plan.json --project <target-project>
@@ -62,6 +67,10 @@ pnpm agent-plugin project bootstrap --input plan.json --apply --project <target-
 ```
 
 Use `--resume request.json` for a saved neutral project request. Resume runs once in that invocation only when every selected capability has verification evidence. An incomplete report preserves the request and identifies its remaining recovery. After an uncertain work-item write, resolve its outcome before running the saved request again.
+
+The bootstrap apply command and release launcher use `0` for completed selected checks, `2` for pending hand-offs or user actions, and `1` for a stop or preserved conflict. The release launcher accepts `--strict` to convert `2` to `1`. [CI example](../vendor-payload-installation.md#automation-and-local-files)
+
+When the installer reports a hand-off, say **Use the project-bootstrap skill to finish setup** in a new agent session. The CLI verifies `.upf-tools/pending-tasks.json` against an installer receipt outside the checkout, under `$XDG_STATE_HOME/unified-plugin-framework/handoffs` or `~/.local/state/unified-plugin-framework/handoffs`. Use the same operating-system account and state location. The skill claims a task before working and records completion after verification.
 
 ## What setup owns
 

@@ -40,25 +40,47 @@ Run from the consuming project in a terminal:
 bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/releases/latest/download/install.sh)
 ```
 
-The launcher keeps your current project directory and downloads the release installer. The wizard confirms the project, asks which host to set up (Codex or Claude Code), offers the workflows, reuses saved settings, and asks for missing tracker/language/document/knowledge choices with recommended defaults. It shows the proposed changes and asks before changing project files. No prerequisite JSON file is needed.
+The launcher downloads and verifies the release installer. The wizard defaults to the current project, reuses saved settings, and lets you choose Codex, Claude Code, or both and select your workflows. Only hosts found on PATH start checked. Move with **↑/↓**, toggle a row with **Space**, select all rows with **All**, or toggle all with **a**. Press **Enter** to confirm a nonempty selection. Limited terminals show numbered choices. The final confirmation starts on **Cancel**, and **Ctrl+C** or **Ctrl+D** cancels a picker.
 
-Supported complete setup: Codex or Claude Code on Linux, Bash/curl, Node.js 22+ and Python 3.12+. Set `UPF_VERSION=<version>` to pin a release. The wizard can choose the Python executable. GitHub CLI is not a general installation prerequisite; a user's selected SCM tooling may still require it. Python packages are installed by the existing isolated runtime setup.
+Complete setup supports Codex and Claude Code on Linux and requires Bash, curl, Node.js 22+ and Python 3.12+. Set `UPF_VERSION=<version>` to pin a release. If Python is missing, the launcher asks before downloading a checksum-verified `uv` and a pinned private Python. The wizard shows proposed changes, possible backups, and consent choices before applying setup. Headless knowledge discovery requires separate consent. A selected SCM tool may require GitHub CLI.
 
 For Linear, set the credential environment required by the existing adapter (normally `LINEAR_API_KEY`); never enter the token into setup answers. New team/project selections use names or URLs resolved by the connector. Unavailable authentication or ambiguous scope is reported explicitly. A local tracker can be verified by a read-only search even when empty; setup never creates test work items.
 
 The complete archive contains the CLI and production Node dependencies, canonical framework/knowledge sources and lock, all five unchanged pinned upstream repositories with supporting files/licenses, and the knowledge runtime source. Installed releases stage bundled plugins locally; missing or changed bundled content fails rather than downloading plugin repositories.
 
-After confirmation, a verified distribution is placed under `.upf-tools/distributions/<version>`. The accepted internal plan is saved at `.upf-tools/setup-plan.json` through the existing guarded file boundary. The shared bootstrap configures and verifies each capability. Missing knowledge content, provider bindings, credentials or host activation remain visible follow-up actions. An incomplete setup exits unsuccessfully and preserves completed steps for rerunning the installer.
+After confirmation, the installer places the verified distribution under `.upf-tools/distributions/<version>` and saves the accepted plan at `.upf-tools/setup-plan.json`. The report shows shared results once and verification for each selected host. It includes a local log and recovery instructions when available. Rerunning setup reuses completed steps.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | The selected checks passed. |
+| `2` | A hand-off or user action remains. Follow the report. For a hand-off, say **Use the project-bootstrap skill to finish setup** in the next agent session. |
+| `1` | Setup stopped, or the installer preserved a conflicting file or directory. Follow the recovery instruction. |
+
+Use `--strict` to convert `2` to `1`. For automated readiness checks, also read the JSON `status` when using a plan that restricts `steps`.
 
 The installed CLI depends on that distribution remaining available. Different/edited existing distributions and unsafe linked target paths are preserved by refusal. Archive checksum and link/path validation remain active.
 
 ### Automation and local files
 
-An explicit plan file bypasses all prompts. Use the existing [setup plan format](workflows/tooling-bootstrap.md):
+An explicit plan file bypasses all prompts. Include the chosen `hosts` and explicit consent flags for optional actions. [Setup plan format](workflows/tooling-bootstrap.md#prepare-and-accept-one-plan-automation-or-agent-driven-setup)
 
 ```sh
 node install.mjs --version <version> --project <existing-project> --input <accepted-plan.json>
 ```
+
+In CI, use `install.mjs` from a verified release and set `UPF_VERSION` to that release's version. To allow pending hand-offs while failing on a stop, use this Bash step.
+
+```bash
+status=0
+node ./install.mjs --version "$UPF_VERSION" --project "$PWD" --input ./accepted-plan.json || status=$?
+case "$status" in
+  0) ;;
+  2) printf '%s\n' 'Setup requires follow-up. See the installer report.' ;;
+  *) exit "$status" ;;
+esac
+```
+
+If CI requires setup to finish in the job, pass `--strict` and let the command's exit code fail the step.
 
 For a local artifact:
 

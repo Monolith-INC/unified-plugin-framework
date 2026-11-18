@@ -36,21 +36,23 @@ bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/relea
 The interactive installer will:
 
 1. Confirm your project folder, using the current directory as its default.
-2. Confirm the supported host and ask which workflows you want.
+2. Let you select Codex, Claude Code, or both, and choose your workflows. Only hosts found on your PATH start checked.
 3. Reuse existing project settings and ask for missing tracker, language and document locations.
-4. Show the selected setup and ask for confirmation.
-5. Install the complete distribution, configure the selected tooling and verify its readiness.
+4. Show what setup will install, what it may back up, and whether you allowed headless discovery. The final selection starts on **Cancel**.
+5. Install the verified distribution, run shared setup once, and verify each selected host separately.
 
-The installer creates its setup plan internally. You do not need to write JSON or clone UPF. All five dependency plugins are included in the release; installation does not download their repositories separately.
+Use **↑/↓** to move, **Space** to check a row, and **Enter** to confirm at least one selection. The **All** row selects every item, and **a** toggles all. Terminals without raw keyboard input show numbered choices. **Ctrl+C** or **Ctrl+D** cancels.
+
+The installer creates its setup plan internally. The release bundles all five dependency plugins.
 
 **Release availability:** interactive installation starts with v0.2.2, whose release assets include `install.sh`. v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
 
 ### Requirements and current support
 
-- **Linux**, with one of the supported agent hosts: **Codex** or **Claude Code**. The wizard asks which one to set up.
+- **Linux**, with **Codex**, **Claude Code**, or both.
   - Codex: plugins register through `.codex/config.toml` and `codex plugin add`.
   - Claude Code: plugins come from a marketplace named for this project and install at local scope (`.claude/settings.local.json`), and the knowledge server is registered at local scope too (`claude mcp add-json --scope local`), so this machine's paths stay out of shared files and Claude Code needs no approval prompt for it.
-- **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. The wizard lets you choose the Python executable.
+- **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. If Python is unavailable, the launcher can download a pinned private Python after you consent.
 - Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
 - Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
 
@@ -60,9 +62,9 @@ Individual payloads are also published for Claude, Cursor and Codex. Their avail
 
 ### After installation
 
-Read the verification report. Missing authentication, review-provider bindings or project knowledge content appear as actions to complete, not a successful full setup. Completed steps are preserved when you rerun the installer.
+Read the report for each host and for shared setup. The installer exits `0` when the selected checks pass, `2` when hand-offs or user actions remain, and `1` when setup stops or preserves a conflicting file. `--strict` converts `2` to `1`. Rerunning setup reuses completed steps.
 
-Project knowledge must come from your repository and recorded decisions; installation does not invent it. Restart the agent session when instructed so newly registered skills and tools can load.
+If the report lists a hand-off, open a session in a selected host and say **Use the project-bootstrap skill to finish setup**. Headless discovery runs only with consent and derives knowledge from repository evidence. Restart the host session when the report calls for a reload.
 
 The project CLI lives under `.upf-tools/`:
 
@@ -70,7 +72,7 @@ The project CLI lives under `.upf-tools/`:
 ./.upf-tools/bin/agent-plugin project describe --project "$PWD"
 ```
 
-For a pinned release, set `UPF_VERSION` in the environment before running the installer. For unattended setup, use the explicit `--input` plan-file option. Local archives and advanced recovery are covered in the [installation guide](docs/vendor-payload-installation.md).
+For a pinned release, set `UPF_VERSION` in the environment before running the installer. For unattended setup, pass an accepted plan with `--input`. The installation guide includes a CI example that handles exit `2` explicitly. [CI example and local archives](docs/vendor-payload-installation.md#automation-and-local-files)
 
 ## Work with your agent
 
