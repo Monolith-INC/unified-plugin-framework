@@ -1,0 +1,1 @@
+Stop hung child processes and their children reliably, cap output, make timeouts configurable and scrub the environment. Done when a hung child, an ignored stop signal and a grandchild holding output all end within their limit.

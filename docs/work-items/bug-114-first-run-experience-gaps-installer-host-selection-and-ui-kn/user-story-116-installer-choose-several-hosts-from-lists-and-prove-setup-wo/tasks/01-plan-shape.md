@@ -1,0 +1,1 @@
+Accept a list of hosts, workflows and consent choices in the setup plan, read old single-host plans, and give each per-host step its own single-host view. Done when invalid lists are rejected with their own message, legacy plans read as one host, and consent defaults to off.

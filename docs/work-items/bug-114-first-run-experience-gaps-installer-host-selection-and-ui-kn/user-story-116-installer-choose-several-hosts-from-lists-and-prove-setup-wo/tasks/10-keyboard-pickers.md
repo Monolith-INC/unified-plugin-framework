@@ -1,0 +1,1 @@
+Add the checklist and single-choice list: arrows, space, "All", `a`, Enter, minimum one, confirm starting on "Cancel"; hand the terminal over safely and restore it on cancel or hang-up; fall back to numbered prompts. Done when reducer and fake-terminal tests pass.

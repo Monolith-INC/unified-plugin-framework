@@ -1,0 +1,1 @@
+Add one table that gives every setup failure a class (Auto, Hand-off, User action, Stop, Preserve), an exit code, an action, a fallback and an attempt cap, plus pinned versions and the headless command per host. Done when every row's exit code is tested and every failure code the setup can produce has a row.

@@ -1,0 +1,1 @@
+Write a structured, redacted, private log per run, keep the last 10, fall back safely when the folder is not writable, and show the last run with `agent-plugin project status`. Done when a fake secret never reaches the log and logging failures never stop setup.
