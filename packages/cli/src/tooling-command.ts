@@ -1,5 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { bootstrapTooling, fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, resumeTooling, TOOLING_STEPS, type Request, type Result, type ToolingIO, type ToolingReport } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
 import { forHost, parseBootstrap, type AcceptedPlan } from "./tooling-input.js";
@@ -69,14 +69,21 @@ const reportExit = (report: ToolingReport, apply: boolean): number => {
   const codes = report.steps.flatMap((step) => step.status === "ready" ? [] : [exitCodeOf(recoveryFor(step.step, step.failure.code).onFailure.class)]);
   return !apply ? 0 : codes.includes(1) ? 1 : codes.includes(2) ? 2 : 0;
 };
+const classified = (report: ToolingReport) => ({ ...report, steps: report.steps.map((step) => step.status === "ready" ? step
+  : { ...step, failure: { ...step.failure, class: recoveryFor(step.step, step.failure.code).onFailure.class } }) });
+const backupPaths = (project: string): Promise<readonly string[]> => readdir(join(project, ".upf-tools", "bin"), { withFileTypes: true })
+  .then((entries) => entries.filter((entry) => entry.isFile() && entry.name.startsWith("agent-plugin.upf-backup-"))
+    .map((entry) => join(project, ".upf-tools", "bin", entry.name)).sort())
+  .catch(() => []);
 const fullHost = (run: HostRun) => HOST_STEPS.every((step) => run.tooling.steps.some((entry) => entry.step === step));
 const respond = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo,
   setup: HostSetup, logPath?: string): Promise<number> => {
   const report = summarizeSteps([...setup.project.steps, ...setup.hosts.flatMap(({ tooling }) => tooling.steps)]);
+  const backups = await backupPaths(project);
   const complete = TOOLING_STEPS.every((step) => plan.steps.includes(step));
   const handoffs = apply ? pendingTasks(report) : [];
-  const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: report, request,
-    project: setup.project, hosts: setup.hosts.map((run) => ({ ...run, status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
+  const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: classified(report), request,
+    project: classified(setup.project), backups, hosts: setup.hosts.map((run) => ({ ...run, tooling: classified(run.tooling), status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
     handoffs, events: setup.events,
     status: report.status === "action-required" || complete ? report.status : "not-verified",
     next: handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
