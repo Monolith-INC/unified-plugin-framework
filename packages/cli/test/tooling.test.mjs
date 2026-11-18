@@ -12,7 +12,7 @@ import {nodeToolingIO} from '../dist/tooling-node.js';
 import {stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
 
-const choices={host:'codex',python:'python3.12',workflows:[],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'},steps:['settings','knowledge-settings'],answers:{language:'en',artifactsPath:'docs/work-items',tracker:{adapter:'local',values:{}}}};
+const choices={host:'codex',python:'python3.12',workflows:['continuity'],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'},steps:['settings','knowledge-settings'],answers:{language:'en',artifactsPath:'docs/work-items',tracker:{adapter:'local',values:{}}}};
 const cli=fileURLToPath(new URL('../dist/index.js',import.meta.url));
 test('bootstrap parses supported choices and rejects escaping roots, unknown workflows and hosts',()=>{
   assert.equal(parseBootstrap(choices).ok,true);

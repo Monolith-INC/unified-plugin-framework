@@ -8,7 +8,7 @@ import {HOST_NAMES} from '../dist/host-names.js';
 import {HOSTS} from '../dist/host-table.js';
 import {parseBootstrap} from '../dist/tooling-input.js';
 
-const plan={python:'python3.12',workflows:[],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
+const plan={python:'python3.12',workflows:['continuity'],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
 const context=async(extra={})=>{
   const root=await mkdtemp(join(tmpdir(),'upf-hosts-'));
   const project=join(root,'project');

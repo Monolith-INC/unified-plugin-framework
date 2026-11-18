@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, probeProjectRead, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
 import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 import type { HostEnvironment } from "./host-table.js";
-import type { BootstrapInput } from "./tooling-input.js";
+import { requireHost, type BootstrapInput } from "./tooling-input.js";
 import { command } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
 import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
@@ -14,13 +14,17 @@ const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "
 const checked = (result: Result<unknown>, evidence: string, recovery: string): Result<ToolingObservation> => result.ok ? ready(evidence) : missing(recovery);
 const inputNeeded = (code: string, message: string, recovery: string): Promise<Result<string>> => Promise.resolve(fail(code, message, recovery));
 
+/** A per-host step runs only on one host's view of the plan; a whole plan is refused before any effect. */
+const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promise<Result<A>> =>
+  ((host: Result<true>) => host.ok ? run() : Promise.resolve(host))(requireHost(input));
+
 /**
  * Node edge interpreter; setup has one shared lifecycle and no provider-specific workflow logic. Each step sees the
  * accepted input and, once resolved, the same input with fetched dependency roots added.
  */
 export const nodeToolingIO = (project: string, input: BootstrapInput, environment: HostEnvironment): ToolingIO => ({
-  inspect: (step) => () => Promise.resolve().then(() => inspect(project, input, resolvedInput(project, input), environment, step)).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
-  configure: (step) => () => Promise.resolve().then(() => configureStep(project, input, resolvedInput(project, input), environment, step)).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
+  inspect: (step) => () => Promise.resolve().then(() => guarded(input, () => inspect(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
+  configure: (step) => () => Promise.resolve().then(() => guarded(input, () => configureStep(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
 });
 const inspect = async (project: string, input: BootstrapInput, resolved: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Promise<Result<ToolingObservation>> => {
   switch (step) {

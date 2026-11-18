@@ -130,10 +130,11 @@ const activateSafe=async(args,extracted,project,target,plan)=>{
 };
 const savePlanAndBootstrap=async(root,project,plan)=>{
  const {directory,writeText,readText}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-files.js')).href);
+ const {planFile}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-input.js')).href);
  const input=join(project,'.upf-tools/setup-plan.json');
  const previous=await readText(input);
  const created=previous.ok ? await directory(project,join(project,'.upf-tools')) : previous;
- const saved=created.ok ? await writeText(project,input,JSON.stringify(plan,null,2),previous.value) : created;
+ const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),previous.value) : created;
  return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input);
 };
 const bootstrap=(root,project,input)=>{

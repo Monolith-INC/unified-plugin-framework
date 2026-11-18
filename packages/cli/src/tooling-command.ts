@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { bootstrapTooling, fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, resumeTooling, type Request, type Result } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
-import { parseBootstrap, type BootstrapInput } from "./tooling-input.js";
+import { forHost, parseBootstrap, type AcceptedPlan } from "./tooling-input.js";
 import { nodeToolingIO } from "./tooling-node.js";
 
 const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>]";
@@ -31,10 +31,10 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
   return !parsed.ok ? output(io, parsed) : !request.ok ? output(io, request)
     : execute(project, parsed.value, args.includes("--apply"), request.value, io);
 };
-const execute = async (project: string, input: BootstrapInput, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
-  const result = await bootstrapTooling(nodeToolingIO(project, input, { claudeState: io.claudeState() }), apply, input.steps)();
+const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
+  const result = await bootstrapTooling(nodeToolingIO(project, forHost(plan, plan.hosts[0]), { claudeState: io.claudeState() }), apply, plan.steps)();
   return !result.ok ? output(io, result) : !apply || request === null || result.value.status !== "ready"
-    ? output(io, ok({ mode: apply ? "apply" : "plan", host: input.host, workflows: input.workflows,
+    ? output(io, ok({ mode: apply ? "apply" : "plan", host: plan.hosts[0], hosts: plan.hosts, workflows: plan.workflows,
       tooling: result.value, request, next: result.value.status === "ready" ? "Selected tooling is verified. Continue the original work."
         : "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused." }))
     : resumeTooling(result.value, operate(nodeProjectIO(project), request))().then((resumed) => output(io, resumed));
