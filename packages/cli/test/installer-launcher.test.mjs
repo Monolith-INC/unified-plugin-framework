@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync,spawnSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,realpathSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
@@ -12,7 +12,7 @@ test('shell launcher keeps working directory, forwards args/version and propagat
  writeFileSync(join(bin,'curl'),'#!/bin/sh\nprintf "%s\\n" "$@" > "$UPF_TEST_LOG.curl"\n',{mode:0o755});
  writeFileSync(join(bin,'node'),'#!/bin/sh\npwd > "$UPF_TEST_LOG.cwd"\nprintf "%s\\n" "$@" > "$UPF_TEST_LOG.node"\nexit 7\n',{mode:0o755});
  const result=spawnSync('bash',[launcher,'--dest',project,'--input','accepted.json'],{cwd:project,env:{...process.env,PATH:`${bin}:${process.env.PATH}`,UPF_VERSION:'v0.2.2',UPF_TEST_LOG:log},encoding:'utf8'});
- assert.equal(result.status,7);assert.equal(readFileSync(`${log}.cwd`,'utf8').trim(),project);
+ assert.equal(result.status,7);assert.equal(realpathSync(readFileSync(`${log}.cwd`,'utf8').trim()),realpathSync(project),'same folder, whether or not the temp root is a link (macOS /var is /private/var)');
  assert.match(readFileSync(`${log}.curl`,'utf8'),/releases\/download\/v0.2.2\/install.mjs/);
  assert.match(readFileSync(`${log}.node`,'utf8'),/--dest\n.*\n--input\naccepted.json/);
 });
