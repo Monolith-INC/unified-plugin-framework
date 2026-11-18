@@ -2,7 +2,15 @@
 
 One accepted setup plan coordinates the existing project service, transactional payload installer, knowledge runtime and host configuration. Invoke it explicitly, or when a required capability is missing. Ordinary skills use working adapters directly; bootstrap adds no periodic session scan or repeated setup interview.
 
-Artifact tests exercise the distribution and Codex staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Other hosts retain their existing host-payload commands and receive an explicit unsupported-host recovery for full bootstrap. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
+Bootstrap sets up Codex, Claude Code or Cursor, chosen by the plan's `host`. Each host installs its own build of the framework plugins; the pinned dependency sources are staged once and given each host's manifest beside them. Host differences live in one table (`packages/cli/src/tooling-hosts.ts`):
+
+| Host | Plugins | Knowledge server | Unnamespaced skills | Discovery check |
+| --- | --- | --- | --- | --- |
+| Codex | `.codex/config.toml` marketplace, `codex plugin add` | `.codex/config.toml` | `.agents/skills` | Codex app server `skills/list` |
+| Claude Code | project-scoped marketplace and installs in `.claude/settings.json` | `.mcp.json` | `.claude/skills` | `claude plugin list --json` |
+| Cursor | links in `~/.cursor/plugins/local/` to this project's plugins | `.cursor/mcp.json` | `.cursor/skills` | the linked plugin folders |
+
+Artifact tests exercise the distribution and Codex staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
 ## Interactive installation
 

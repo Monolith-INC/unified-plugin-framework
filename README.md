@@ -47,14 +47,17 @@ The installer creates its setup plan internally. You do not need to write JSON o
 
 ### Requirements and current support
 
-- **Codex on Linux** for complete automated setup. Other hosts are not offered as working wizard choices.
+- **Linux**, with one of the supported agent hosts: **Codex**, **Claude Code** or **Cursor**. The wizard asks which one to set up.
+  - Codex: plugins register through `.codex/config.toml` and `codex plugin add`.
+  - Claude Code: plugins install at project scope (`.claude/settings.json`), and the knowledge server goes in `.mcp.json`.
+  - Cursor: Cursor has no project-scoped plugins, so each plugin is linked from `~/.cursor/plugins/local/` to this project's copy, and the knowledge server goes in `.cursor/mcp.json`. A plugin of the same name already linked there is preserved and reported.
 - **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. The wizard lets you choose the Python executable.
 - Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
 - Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
 
 The supported project trackers are repository-local files and Linear. For a new Linear setup, enter the team and project names or URLs; the connector resolves their identifiers. Your existing choices are reused on subsequent runs.
 
-Individual payloads are also published for Claude, Cursor and Codex. Their availability does not mean complete setup is automated on every host and operating system. macOS qualification remains deferred.
+Individual payloads are also published for Claude, Cursor and Codex. macOS qualification remains deferred.
 
 ### After installation
 

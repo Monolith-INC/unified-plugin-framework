@@ -5,6 +5,7 @@ import {createInterface} from 'node:readline/promises';
 import {configure,fail,ok,object,resolveLinearScope} from '@agent-plugins/project';
 import {WORKFLOWS} from '@agent-plugins/workflows';
 import {parseBootstrap} from '../dist/tooling-input.js';
+import {HOST_NAMES,HOSTS} from '../dist/tooling-hosts.js';
 
 const readJson=path=>readFile(path,'utf8').then(JSON.parse).then(ok).catch(error=>error.code==='ENOENT' ? ok(null)
  : fail('unreadable-settings',`Could not read ${path}.`,'Preserve the existing file and correct it before rerunning the installer.'));
@@ -38,8 +39,8 @@ const knowledgeChoices=async(io,current)=>{
  return {documentMode,docsRoot,vaultRoot,knowledgeRoot};
 };
 const choose=async(io,project,settings,knowledge,options)=>{
- await io.say('Supported automated host: Codex on Linux. Existing project choices will be reused.');
- const host=await value(io,'Agent host','codex',oneOf(['codex']));
+ await io.say(`Supported hosts: ${HOST_NAMES.map(name=>`${name} (${HOSTS[name].label})`).join(', ')}. Existing project choices will be reused.`);
+ const host=await value(io,`Agent host: ${HOST_NAMES.join(', ')}`,options.savedPlan?.host ?? 'codex',oneOf(HOST_NAMES));
  const workflows=workflowNames(await value(io,'Workflows (comma-separated)',options.savedPlan?.workflows?.join(',') ?? defaultWorkflows,validWorkflows));
  const python=await value(io,'Python 3.12+ executable',options.python ?? options.savedPlan?.python ?? options.detectedPython ?? 'python3.12',nonempty);
  const language=settings?.language ?? await value(io,'Language for communication and documents','en',raw=>typeof raw==='string' && /^[a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*$/.test(raw));
@@ -53,8 +54,13 @@ const complete=async(io,project,settings,plan,version)=>{
  const parsed=answers.ok ? parseBootstrap({...plan,answers:answers.value}) : answers;
  return !parsed.ok ? parsed : confirm(io,project,parsed.value,version);
 };
+const HOST_CHANGES=Object.freeze({
+ codex:'Codex configuration (.codex/config.toml) and plugin registrations',
+ claude:'Claude Code project settings (.claude/settings.json, .mcp.json, .claude/skills) and project-scoped plugin installs',
+ cursor:'Cursor project settings (.cursor/mcp.json, .cursor/skills) and plugin links in ~/.cursor/plugins/local',
+});
 const confirm=async(io,project,plan,version)=>{
- await io.say(`\nInstall UPF ${version} into ${project}\nHost: ${plan.host}\nWorkflows: ${plan.workflows.join(', ')}\nTracker: ${plan.answers.tracker.adapter}\nLanguage: ${plan.answers.language}\nDocuments: ${plan.knowledge.docsRoot}\nVault: ${plan.knowledge.vaultRoot}\nKnowledge: ${plan.knowledge.knowledgeRoot}\n\nChanges: .upf-tools/ (bundled CLI/plugins), project settings, .project-knowledge/ runtime, Codex configuration and selected plugin/skill registrations. Existing valid choices are reused. Python runtime packages may be downloaded. No plugin repositories are downloaded.\nKnowledge content, provider bindings or authentication may still need follow-up; the report will name each action.`);
+ await io.say(`\nInstall UPF ${version} into ${project}\nHost: ${HOSTS[plan.host].label}\nWorkflows: ${plan.workflows.join(', ')}\nTracker: ${plan.answers.tracker.adapter}\nLanguage: ${plan.answers.language}\nDocuments: ${plan.knowledge.docsRoot}\nVault: ${plan.knowledge.vaultRoot}\nKnowledge: ${plan.knowledge.knowledgeRoot}\n\nChanges: .upf-tools/ (bundled CLI/plugins), project settings, .project-knowledge/ runtime, ${HOST_CHANGES[plan.host]}. Existing valid choices are reused. Python runtime packages may be downloaded. No plugin repositories are downloaded.\nKnowledge content, provider bindings or authentication may still need follow-up; the report will name each action.`);
  const accepted=await value(io,'Apply this setup? yes/no','no',oneOf(['yes','no']));
  return accepted==='yes' ? ok({project,plan}) : fail('installation-canceled','Installation canceled; project files were not changed.','Rerun the installer when ready.');
 };
@@ -73,7 +79,7 @@ export const collectInstallation=async(io,options={})=>{
 };
 /** Terminal boundary: EOF, cancellation and absent TTY never imply acceptance. */
 export const interactiveInstallation=async options=>{
- return process.platform!=='linux' ? fail('unsupported-host','Complete interactive setup currently supports Codex on Linux.','Use the documented host payload path for this platform; existing configuration is preserved.')
+ return process.platform!=='linux' ? fail('unsupported-platform','Interactive setup currently runs on Linux.','Use the documented host payload path for this platform; existing configuration is preserved.')
   : !process.stdin.isTTY || !process.stdout.isTTY ? fail('terminal-required','Interactive installation needs a terminal.',
   'Run bash <(curl -fsSL …/install.sh) in a terminal, or supply --input for automation.') : terminal(options);
 };

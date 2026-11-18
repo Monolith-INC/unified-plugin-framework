@@ -40,9 +40,9 @@ Run from the consuming project in a terminal:
 bash <(curl -fsSL https://github.com/Monolith-INC/unified-plugin-framework/releases/latest/download/install.sh)
 ```
 
-The launcher keeps your current project directory and downloads the release installer. The wizard confirms the project, offers the supported Codex host and workflows, reuses saved settings, and asks for missing tracker/language/document/knowledge choices with recommended defaults. It shows the proposed changes and asks before changing project files. No prerequisite JSON file is needed.
+The launcher keeps your current project directory and downloads the release installer. The wizard confirms the project, asks which host to set up (Codex, Claude Code or Cursor), offers the workflows, reuses saved settings, and asks for missing tracker/language/document/knowledge choices with recommended defaults. It shows the proposed changes and asks before changing project files. No prerequisite JSON file is needed.
 
-Supported complete setup: Codex on Linux, Bash/curl, Node.js 22+ and Python 3.12+. Set `UPF_VERSION=<version>` to pin a release. The wizard can choose the Python executable. GitHub CLI is not a general installation prerequisite; a user's selected SCM tooling may still require it. Python packages are installed by the existing isolated runtime setup.
+Supported complete setup: Codex, Claude Code or Cursor on Linux, Bash/curl, Node.js 22+ and Python 3.12+. Set `UPF_VERSION=<version>` to pin a release. The wizard can choose the Python executable. GitHub CLI is not a general installation prerequisite; a user's selected SCM tooling may still require it. Python packages are installed by the existing isolated runtime setup.
 
 For Linear, set the credential environment required by the existing adapter (normally `LINEAR_API_KEY`); never enter the token into setup answers. New team/project selections use names or URLs resolved by the connector. Unavailable authentication or ambiguous scope is reported explicitly. A local tracker can be verified by a read-only search even when empty; setup never creates test work items.
 

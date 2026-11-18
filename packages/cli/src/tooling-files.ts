@@ -22,7 +22,8 @@ const safeParts = (base: string, parts: readonly string[]): Promise<boolean> => 
     stat.isSymbolicLink() ? false : safeParts(join(base, part), rest))
     .catch((error: unknown) => code(error) === "ENOENT");
 };
-export const directory = (project: string, path: string): Promise<Result<string>> => safePath(project, path).then((safe) => safe
+/** The project root itself is the accepted base, so files such as `.mcp.json` may live directly in it. */
+export const directory = (project: string, path: string): Promise<Result<string>> => safePath(project, path).then((safe) => safe || resolve(path) === resolve(project)
   ? mkdir(path, { recursive: true }).then(() => ok(path)).catch(() => setupFailure("Cannot create the accepted tooling directory."))
   : setupFailure("The tooling path escapes the project or follows a symbolic link."));
 
