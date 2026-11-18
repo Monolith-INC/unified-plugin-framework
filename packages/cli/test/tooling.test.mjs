@@ -38,16 +38,28 @@ test('CLI plan is read-only; apply configures missing accepted choices and re-en
 
 test('bootstrap without discovery consent reports the knowledge hand-off with exit code 2',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-discovery-handoff-'));
+  const state=await mkdtemp(join(tmpdir(),'upf-discovery-receipts-'));
+  const options={encoding:'utf8',env:{...process.env,XDG_STATE_HOME:state}};
   const input=join(project,'plan.json');
   await writeFile(input,JSON.stringify({...choices,steps:['knowledge-content']}));
   const argv=[cli,'project','bootstrap','--input',input,'--project',project];
-  const dry=spawnSync(process.execPath,argv,{encoding:'utf8'});
+  const dry=spawnSync(process.execPath,argv,options);
   assert.equal(dry.status,0,dry.stderr);
-  const apply=spawnSync(process.execPath,[...argv,'--apply'],{encoding:'utf8'});
+  const apply=spawnSync(process.execPath,[...argv,'--apply'],options);
   assert.equal(apply.status,2,apply.stderr);
   const {value}=JSON.parse(apply.stdout);
   assert.equal(value.tooling.steps[0].failure.code,'knowledge-discovery-needed');
   assert.match(value.next,/Use the project-bootstrap skill to finish setup/);
+  const handoffs=[cli,'project','handoffs','--project',project];
+  const runHandoffs=(...extra)=>JSON.parse(execFileSync(process.execPath,[...handoffs,...extra],options)).value;
+  assert.deepEqual(runHandoffs().tasks,['knowledge-discovery']);
+  const claimed=runHandoffs('--claim','knowledge-discovery');
+  assert.equal(claimed.status,'claimed');
+  assert.equal(runHandoffs('--task','knowledge-discovery','--finish',claimed.token).status,'not-ready');
+  assert.equal(runHandoffs('--claim','knowledge-discovery').status,'busy');
+  assert.equal(spawnSync(process.execPath,[...handoffs,'--claim','unrecognized'],options).status,1);
+  await writeFile(value.pendingTasks,JSON.stringify({version:1,tasks:['review-setup']}));
+  assert.equal(runHandoffs().status,'ignored');
   await assert.rejects(readFile(join(project,'knowledge','.upf-discovery-complete')));
 });
 

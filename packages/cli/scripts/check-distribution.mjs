@@ -26,7 +26,7 @@ const root=join(project,'.upf-tools/distributions',version);
 const importFromArchive=path=>import(pathToFileURL(join(root,path)).href);
 const load=name=>importFromArchive('packages/cli/dist/'+name+'.js');
 await Promise.all(['installer-wizard','install-report','installer-picker'].map(name=>importFromArchive('packages/cli/scripts/'+name+'.mjs')));
-await Promise.all(['install-log','tooling-bootstrap','tooling-command','tooling-recovery'].map(load));
+await Promise.all(['install-log','tooling-bootstrap','tooling-command','tooling-handoffs','tooling-recovery'].map(load));
 const {parseBootstrap,forHost}=await load('tooling-input');
 const parsed=parseBootstrap(multiHostPlan);
 const legacy=parseBootstrap(legacyPlan);

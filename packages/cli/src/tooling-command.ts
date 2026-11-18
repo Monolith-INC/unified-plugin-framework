@@ -10,6 +10,7 @@ import { exitCodeOf, recoveryFor } from "./tooling-recovery.js";
 import { bootstrapHosts, HOST_STEPS, pendingTasks, summarizeSteps, type HostRun, type HostSetup } from "./tooling-bootstrap.js";
 import type { HostName } from "./host-names.js";
 import { writeInstallLog } from "./install-log.js";
+import { handoffStateRoot, recordHandoffs } from "./tooling-handoffs.js";
 
 const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>] [--log <path>]";
 const pairs = (args: readonly string[]): readonly string[] => args.filter((entry) => entry !== "--apply");
@@ -84,11 +85,13 @@ const respond = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const backups = await backupPaths(project);
   const complete = TOOLING_STEPS.every((step) => plan.steps.includes(step));
   const handoffs = apply ? pendingTasks(report) : [];
+  const handoff = handoffs.length === 0 ? ok(null) : await recordHandoffs(project, handoffStateRoot(), plan, handoffs);
+  if (!handoff.ok) io.err(`${handoff.error.message} ${handoff.error.recovery}\n`);
   const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: classified(report), request,
     project: classified(setup.project), backups, hosts: setup.hosts.map((run) => ({ ...run, tooling: classified(run.tooling), status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
-    handoffs, events: setup.events,
+    handoffs, pendingTasks: handoff.ok ? handoff.value : null, events: setup.events,
     status: report.status === "action-required" || complete ? report.status : "not-verified",
-    next: handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
+    next: !handoff.ok ? handoff.error.recovery : handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
       : report.status === "action-required" ? "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused."
         : complete ? "Selected tooling is verified. Continue the original work." : "The selected steps passed. Other setup capabilities were not verified." };
   const resumed = apply && request !== null && report.status === "ready" && report.steps.length > 0
@@ -98,5 +101,5 @@ const respond = async (project: string, plan: AcceptedPlan, apply: boolean, requ
     ...setup.events.map((event) => ({ type: "recovery", ...event })),
     { type: "bootstrap", mode: common.mode, status: common.status, project: common.project, hosts: common.hosts, handoffs: common.handoffs },
   ], logPath);
-  return output(io, result.ok ? ok({ ...result.value, log: stored }) : result, reportExit(report, apply));
+  return output(io, result.ok ? ok({ ...result.value, log: stored }) : result, handoff.ok ? reportExit(report, apply) : 1);
 };
