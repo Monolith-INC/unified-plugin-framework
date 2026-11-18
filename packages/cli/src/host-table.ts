@@ -1,4 +1,4 @@
-import { join, relative } from "node:path";
+import { join, posix, relative, sep } from "node:path";
 import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeMarketplaceName, mergeClaudeMarketplace, mergeClaudeServer, sameServer, type ClaudeServerEntry, type JsonEdit } from "@agent-plugins/adapter-claude/tooling";
 import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
 import type { Result as PlanResult } from "@agent-plugins/compiler";
@@ -116,7 +116,9 @@ const claudeMarketplace = (context: HostContext): string => claudeMarketplaceNam
 const serverEntry = (context: HostContext, knowledgeCommand: string): ClaudeServerEntry => ({ command: knowledgeCommand, args: ["--project", context.project] });
 const claudeCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Promise<Result<string>> =>
   editJson(context.project, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
-    plugins.map(({ name, root }) => ({ name, source: `./${relative(context.tools, root)}` }))));
+    plugins.map(({ name, root }) => ({ name, source: catalogSource(context.tools, root) }))));
+/** Claude Code reads catalog sources as `./`-relative paths with forward slashes on every platform. */
+const catalogSource = (tools: string, root: string): string => `./${relative(tools, root).split(sep).join(posix.sep)}`;
 const declared = (context: HostContext, settings: unknown): Result<boolean> => {
   switch (claudeDeclaration(settings, claudeMarketplace(context), context.tools)) {
     case "absent": return ok(false);
