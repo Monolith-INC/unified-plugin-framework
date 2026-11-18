@@ -120,7 +120,7 @@ test("a fresh project without plugin roots reports its dependencies as missing, 
   const project = mkdtempSync(join(tmpdir(), "upf-fresh-"));
   const input = { host: "codex", python: "python3.12", workflows: ["code-review"], pluginRoots: [],
     knowledge: { knowledgeRoot: "knowledge", documentMode: "shared", docsRoot: "docs", vaultRoot: "docs" } };
-  const observed = await nodeToolingIO(project, input).inspect("dependencies")();
+  const observed = await nodeToolingIO(project, input, { claudeState: join(project, '.claude.json') }).inspect("dependencies")();
   assert.equal(observed.ok, true, JSON.stringify(observed));
   assert.equal(observed.value.status, "missing");
   assert.match(observed.value.recovery, /monolithic-code-review-toolkit/);

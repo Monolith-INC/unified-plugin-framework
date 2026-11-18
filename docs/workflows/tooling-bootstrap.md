@@ -2,7 +2,16 @@
 
 One accepted setup plan coordinates the existing project service, transactional payload installer, knowledge runtime and host configuration. Invoke it explicitly, or when a required capability is missing. Ordinary skills use working adapters directly; bootstrap adds no periodic session scan or repeated setup interview.
 
-Artifact tests exercise the distribution and Codex staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Other hosts retain their existing host-payload commands and receive an explicit unsupported-host recovery for full bootstrap. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
+Bootstrap sets up Codex or Claude Code, chosen by the plan's `host`. Each host installs its own build of the framework plugins; the pinned dependency sources are staged once and given each host's manifest beside them. Host differences live in one table (`packages/cli/src/host-table.ts`); each host's file names, commands and pure merge rules live in its adapter package:
+
+| Host | Plugins | Knowledge server | Unnamespaced skills | Discovery check |
+| --- | --- | --- | --- | --- |
+| Codex | `.codex/config.toml` marketplace, `codex plugin add` | `.codex/config.toml` | `.agents/skills` | Codex app server `skills/list` |
+| Claude Code | a marketplace named for this project (`upf-<hash>`), declared and installed at local scope in `.claude/settings.local.json` | local scope, via `claude mcp add-json --scope local` | `.claude/skills` | `claude plugin list --json` |
+
+Claude Code keeps known marketplaces per user, so each project's catalog has its own name and one project never repoints another's plugins. The knowledge server is private to this user and project, so it needs no approval prompt and no shared file holds its paths. A local-scope server left by another checkout of this framework is replaced; any other server of that name is preserved and reported.
+
+Artifact tests exercise the distribution, both framework payloads for every setup host, and dependency staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
 ## Interactive installation
 

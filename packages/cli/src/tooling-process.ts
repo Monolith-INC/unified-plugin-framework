@@ -3,9 +3,10 @@ import { createInterface } from "node:readline";
 import { fail, ok, type Result } from "@agent-plugins/project";
 
 /** Process boundary: argv is passed directly; output and credentials never enter failure messages. */
-export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env: NodeJS.ProcessEnv = process.env): Promise<Result<string>> =>
+/** Without `env` the child inherits this process's environment, as `spawn` does by default. */
+export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env?: NodeJS.ProcessEnv): Promise<Result<string>> =>
   new Promise((resolve) => {
-    const child = spawn(program, [...args], { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(program, [...args], { cwd, ...(env === undefined ? {} : { env }), stdio: ["ignore", "pipe", "pipe"] });
     const stdout = collect(child.stdout[Symbol.asyncIterator](), []);
     child.stderr.resume();
     const timer = setTimeout(() => child.kill(), timeout);
@@ -25,7 +26,7 @@ const processFailure = (program: string): Result<never> => fail("tool-command-fa
   "Check the executable, network and permissions; preserve completed setup and rerun the affected step. No automatic retry was made.");
 
 /** Fresh host protocol connection; no model turn, user thread or inference cost. */
-export const hostRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }): Promise<Result<unknown>> => {
+export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }): Promise<Result<unknown>> => {
   const child = spawn("codex", ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
   const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
   child.stderr.resume();

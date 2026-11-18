@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {cp,mkdtemp,readFile,writeFile,rename} from 'node:fs/promises';
-import {join,resolve} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 const output=resolve(process.argv[2] ?? 'release-assets');
@@ -22,8 +22,19 @@ const host=await load('tooling-host');const runtime=await load('tooling-runtime'
 const denied={fetch:async()=>assert.fail('An installed distribution must never fetch plugin repositories')};
 assert.equal((await host.pendingSources(project,plan)).ok,true);
 assert.deepEqual((await host.pendingSources(project,plan)).value,[]);
-assert.equal((await runtime.installSkills(project)).ok,true);
-assert.equal(await runtime.installedSkills(project),true);
+const {HOST_NAMES}=await load('host-names');
+const servedSkills=async name=>{
+ assert.equal((await runtime.installSkills(project,name)).ok,true,name);
+ assert.equal(await runtime.installedSkills(project,name),true,name);
+ const served=host.frameworkSkills(project,name).map(({name,source})=>({name,path:join(source,'SKILL.md')}));
+ assert.equal(served.some(({name})=>name==='unified-plugin-framework:implement-work'),true,name);
+ assert.equal(host.frameworkSkillsMatch(project,served,name),true,name);
+ assert.equal(host.frameworkSkillsMatch(project,served.slice(1),name),false,`${name}: a framework skill the host does not serve is not ready`);
+ const cached=join(await mkdtemp(join(tmpdir(),'upf-cached-')),'skill');
+ await cp(dirname(served[0].path),cached,{recursive:true});await writeFile(join(cached,'SKILL.md'),'earlier release');
+ assert.equal(host.frameworkSkillsMatch(project,[{...served[0],path:join(cached,'SKILL.md')},...served.slice(1)],name),false,`${name}: a stale cached framework skill is not ready`);
+};
+await HOST_NAMES.reduce((previous,name)=>previous.then(()=>servedSkills(name)),Promise.resolve());
 const staged=await host.stageDependencies(project,plan,denied);
 assert.equal(staged.ok,true,JSON.stringify(staged));
 assert.equal(host.stagedBindings(project,plan).ok,true);
@@ -51,4 +62,4 @@ assert.equal((await host.pendingSources(project,plan)).ok,false);
 assert.equal((await host.stageDependencies(project,plan,denied)).ok,false);
 await rename(join(root,'distribution.json'),join(root,'distribution.hidden'));
 assert.equal((await host.pendingSources(project,plan)).ok,false);
-process.stdout.write(`Artifact install, CLI, both payloads, all five dependencies, re-entry and drift refusal passed: ${project}\n`);
+process.stdout.write(`Artifact install, CLI, both payloads for every setup host, all five dependencies, re-entry and drift refusal passed: ${project}\n`);

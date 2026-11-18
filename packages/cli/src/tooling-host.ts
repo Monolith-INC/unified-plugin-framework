@@ -1,23 +1,24 @@
+import { realpathSync } from "node:fs";
 import { cp, readdir, rename } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
-import { fail, nodeProjectFiles, object, ok, type Result } from "@agent-plugins/project";
+import { fail, object, ok, type Result } from "@agent-plugins/project";
 import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinMatches, type BindingFacts } from "@agent-plugins/workflows";
 import { rootArg, rootPluginName, selectedPlugins, sourcesFor, verifySource, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
 import { fetchSources, GIT_FETCHER, unfetched, type FetchContext } from "./dependency-fetch.js";
 import { bundledRoots } from "./distribution.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
-import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
+import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
 import { checkPluginBinding } from "@agent-plugins/workflows";
-import { command, hostRequest, sequence } from "./tooling-process.js";
-import { directory, readText, readToml, safePath, setupFailure, writeText } from "./tooling-files.js";
+import { sequence } from "./tooling-process.js";
+import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment, type HostPlugin } from "./host-table.js";
+import type { HostName } from "./host-names.js";
+import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
 
 export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 export const toolsRoot = (project: string): string => join(project, ".upf-tools");
-export const marketplaceRoot = toolsRoot;
 export const pluginTarget = (project: string, name: string): string => join(toolsRoot(project), "plugins", name);
 export const pluginNames = (input: BootstrapInput): readonly string[] => selectedPlugins(input.workflows);
 const FRAMEWORK_PLUGIN = join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework");
@@ -87,18 +88,29 @@ const dependencyRefs = (adapter: BindingFacts["adapter"]) => [...Object.values(a
   ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup }))];
 
 /** Validate the content the host actually discovered, including cache copies and bare skills. */
-export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly {readonly name: string; readonly path: string}[]): boolean => {
+export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): boolean => {
   const bindings = stagedBindings(project, input);
-  return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) => {
-    const name = adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`;
-    const matches = discovered.filter((entry) => entry.name === name);
-    const source = readContentTree(join(pluginTarget(project, plugin), "source/skills", skill));
-    return source.ok && matches.length > 0 && matches.every((entry) => {
-      const active = readContentTree(dirname(entry.path));
-      return active.ok && active.value === source.value;
-    });
-  }));
+  return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) =>
+    activeMatches(discovered, adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`, join(pluginTarget(project, plugin), "source/skills", skill))));
 };
+const activeMatches = (discovered: readonly DiscoveredSkill[], name: string, sourceDir: string): boolean => {
+  const matches = discovered.filter((entry) => entry.name === name);
+  const source = readContentTree(sourceDir);
+  return source.ok && matches.length > 0 && matches.every((entry) => {
+    const active = readContentTree(dirname(entry.path));
+    return active.ok && active.value === source.value;
+  });
+};
+
+/** Plugins this framework ships itself, rather than pinned dependencies. */
+export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework", "project-knowledge"]);
+/** Every skill the installed framework plugins provide, under the name the host discovers it by. */
+export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly source: string }[] =>
+  FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(frameworkTarget(project, host, plugin), "skills"))
+    .map((skill) => ({ name: `${plugin}:${skill}`, source: join(frameworkTarget(project, host, plugin), "skills", skill) })));
+/** The host serves its own cached copy, current only once activation succeeds; an earlier install's copy can share every name, so compare bytes. */
+export const frameworkSkillsMatch = (project: string, discovered: readonly DiscoveredSkill[], host: HostName): boolean =>
+  frameworkSkills(project, host).every(({ name, source }) => activeMatches(discovered, name, source));
 
 /** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
 export const stageDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher = GIT_FETCHER): Promise<Result<string>> =>
@@ -142,13 +154,11 @@ const markerMatches = (raw: string, source: string): boolean => {
 const copySource = async (project: string, target: string, source: string, name: string, marker: string): Promise<Result<string>> => {
   const staged = join(toolsRoot(project), "staging", randomUUID());
   const sourceTree = join(staged, "source");
-  const manifest = await readText(join(target, ".codex-plugin/plugin.json"));
+  const occupied = await readdir(target).then((entries) => entries.length > 0).catch(() => false);
   const safe = await safePath(project, target);
-  return !manifest.ok ? manifest : !safe || manifest.value !== null ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
+  return !safe || occupied ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
     : directory(project, staged).then((created) => created.ok ? cp(source, sourceTree, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
-      .then(() => writeText(project, join(staged, ".codex-plugin/plugin.json"), JSON.stringify({ name,
-        version: pinnedVersion(name), skills: "./source/skills/" }, null, 2), null))
-      .then((written) => written.ok ? writeText(project, join(staged, "upf-source.json"), marker, null) : written)
+      .then(() => writeText(project, join(staged, "upf-source.json"), marker, null))
       .then((written) => written.ok ? rename(staged, target).then(() => ok(target)) : written) : created)
       .catch(() => setupFailure(`Could not stage ${name}; preserve existing source and wrapper, then inspect the partial installation.`));
 };
@@ -158,23 +168,41 @@ const pinnedVersion = (name: string): string => {
   return lock?.ok ? lock.lock.plugins.find((pin) => pin.plugin === name)?.version ?? "0.0.0" : "0.0.0";
 };
 
-export const registerHost = async (project: string, input: BootstrapInput, knowledgeCommand?: string): Promise<Result<string>> => {
-  const path = join(project, ".codex/config.toml");
-  const [old, parsed] = await Promise.all([readText(path), readToml(input.python, path, project)]);
-  const registration = parsed.ok ? codexToolingRegistration(parsed.value, { project, marketplace: marketplaceRoot(project),
-    ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) }) : undefined;
-  return !old.ok ? old : !parsed.ok ? parsed : registration?.ok !== true ? setupFailure(registration?.diagnostics.map((d) => d.message).join(" ") ?? "Host registration unavailable.")
-    : registration.value === "" ? ok(path) : writeText(project, path, `${old.value ?? ""}\n${registration.value}\n`, old.value);
+/** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
+const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
+  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+const realProject = (project: string): string => {
+  try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
 };
+/** Framework payloads are built per host, so each host has its own copy; dependency sources are shared and wrapped per host. */
+export const frameworkTarget = (project: string, host: HostName, name: string): string => join(toolsRoot(project), HOSTS[host].frameworkDir, name);
+const hostPlugins = (project: string, input: BootstrapInput, names: readonly string[]): readonly HostPlugin[] => names.map((name) =>
+  FRAMEWORK_PLUGINS.includes(name) ? { name, root: frameworkTarget(project, input.host, name), kind: "framework" } : { name, root: pluginTarget(project, name), kind: "dependency" });
+const wrapperManifest = (name: string): string => JSON.stringify({ name, version: pinnedVersion(name), skills: "./source/skills/" }, null, 2);
+/** A staged dependency gets the selected host's manifest beside its unmodified source; a different existing manifest is preserved. */
+const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Promise<Result<string>> => {
+  switch (plugin.kind) {
+    case "framework": return Promise.resolve(ok(plugin.root));
+    case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name);
+  }
+};
+const ensureWrapper = (project: string, path: string, name: string): Promise<Result<string>> => readText(path).then((existing) => !existing.ok ? existing
+  : existing.value === null ? writeText(project, path, wrapperManifest(name), null)
+    : existing.value === wrapperManifest(name) ? ok(path) : setupFailure(`An existing ${name} host manifest differs from its pinned wrapper; preserve and reconcile it.`));
 
-export const installHostPlugins = async (project: string, input: BootstrapInput, names: readonly string[]): Promise<Result<string>> => {
-  const catalog = join(marketplaceRoot(project), ".agents/plugins/marketplace.json");
-  const [old, parsed] = await Promise.all([readText(catalog), nodeProjectFiles.read(catalog)()]);
-  const merged = parsed.ok ? mergeCodexMarketplace(parsed.value, ["unified-plugin-framework", "project-knowledge", ...pluginNames(input)]) : undefined;
-  return !old.ok ? old : !parsed.ok ? parsed : merged?.ok !== true ? setupFailure(merged?.diagnostics.map((d) => d.message).join(" ") ?? "The marketplace could not be read.")
-    : writeText(project, catalog, JSON.stringify(merged.value, null, 2), old.value).then((written) => written.ok ? registerHost(project, input) : written)
-    .then((registered) => registered.ok ? sequence(names.filter((name) => !barePlugins(project, input).includes(name)),
-      (name) => command("codex", CODEX_TOOLING.install(name), project), "Host plugins activated.") : registered)
+export const registerHost = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<string>> =>
+  HOSTS[input.host].register(hostContext(project, input, environment, knowledgeCommand));
+export const hostRegistered = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<boolean>> =>
+  HOSTS[input.host].registered(hostContext(project, input, environment, knowledgeCommand));
+
+export const installHostPlugins = (project: string, input: BootstrapInput, environment: HostEnvironment, names: readonly string[]): Promise<Result<string>> => {
+  const host = HOSTS[input.host];
+  const context = hostContext(project, input, environment);
+  const bare = barePlugins(project, input);
+  return host.catalog(context, hostPlugins(project, input, [...FRAMEWORK_PLUGINS, ...pluginNames(input)].filter((name) => !bare.includes(name))))
+    .then((listed) => listed.ok ? host.register(context) : listed)
+    .then((registered) => registered.ok ? sequence(hostPlugins(project, input, names.filter((name) => !bare.includes(name))),
+      (plugin) => wrapped(project, input, plugin).then((manifest) => manifest.ok ? host.activate(context, plugin) : manifest), "Host plugins activated.") : registered)
     .then((installed) => installed.ok ? activateBare(project, input, names) : installed);
 };
 const barePlugins = (project: string, input: BootstrapInput): readonly string[] => {
@@ -186,11 +214,11 @@ const activateBare = (project: string, input: BootstrapInput, names: readonly st
   const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog]
     .filter(({ plugin }) => names.includes(plugin) && adapter.bareSkillPlugins.includes(plugin))) : [];
   return sequence([...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()],
-    (ref) => copyBare(project, ref.plugin, ref.skill), "Bare dependency skills activated.");
+    (ref) => copyBare(project, HOSTS[input.host].bareSkills, ref.plugin, ref.skill), "Bare dependency skills activated.");
 };
-const copyBare = async (project: string, plugin: string, skill: string): Promise<Result<string>> => {
+const copyBare = async (project: string, folder: string, plugin: string, skill: string): Promise<Result<string>> => {
   const source = join(pluginTarget(project, plugin), "source/skills", skill);
-  const target = join(project, ".agents/skills", skill);
+  const target = join(project, folder, skill);
   const expected = `${plugin}/${skill}@${pinnedVersion(plugin)}`;
   const marker = await readText(join(target, ".upf-source"));
   const sourceDigest = readContentTree(source);
@@ -205,13 +233,5 @@ const copyBare = async (project: string, plugin: string, skill: string): Promise
         .then(() => writeText(project, join(target, ".upf-source"), expected, null)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
 };
 
-export const discoverHost = (project: string): Promise<Result<readonly {readonly name: string; readonly path: string}[]>> =>
-  hostRequest(project, CODEX_TOOLING.discovery(project)).then((reply) => !reply.ok ? reply : hostSkills(reply.value));
-const hostSkills = (reply: unknown): Result<readonly { readonly name: string; readonly path: string }[]> => {
-  const result = object(reply) && object(reply.result) ? reply.result : {};
-  const entries = Array.isArray(result.data) ? result.data : [];
-  const errors = entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.errors) ? entry.errors : []);
-  return errors.length > 0 ? fail("host-skill-errors", "The host reported skill discovery errors.", "Correct the reported skill installation through its supported installer; then repeat discovery.")
-    : ok(entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.skills) ? entry.skills : [])
-      .filter((skill: unknown): skill is {readonly name: string; readonly path: string} => object(skill) && typeof skill.name === "string" && typeof skill.path === "string"));
-};
+export const discoverHost = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<readonly DiscoveredSkill[]>> =>
+  HOSTS[input.host].discover(hostContext(project, input, environment));

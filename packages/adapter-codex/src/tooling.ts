@@ -1,4 +1,5 @@
 import { failure, success, type JsonValue, type Result } from "@agent-plugins/compiler";
+import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 
 const record = (value: unknown): Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : {};
@@ -13,7 +14,7 @@ export interface CodexToolingInput {
 /** Codex owns its configuration names, plugin namespacing and command protocol. */
 export const CODEX_TOOLING = Object.freeze({
   marketplace: "upf-project",
-  server: "project-knowledge",
+  server: KNOWLEDGE_SERVER,
   install: (name: string): readonly string[] => ["plugin", "add", `${name}@upf-project`, "--json"],
   discovery: (project: string) => ({ method: "skills/list", params: { cwds: [project], forceReload: true } }),
   skillManifest: (name: string, version: string): JsonValue => ({ name, version, skills: "./skills/" }),

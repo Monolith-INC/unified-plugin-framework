@@ -11,11 +11,12 @@ const invalid = (): Result<never> => fail("distribution-incomplete", "The bundle
   "Reinstall a verified complete release; plugin repositories are never fetched by an installed distribution.");
 const portable = (path: string): boolean => path.length > 0 && path.split("/").every((part) => part !== "" && part !== "." && part !== "..") && !path.includes("\\");
 
-/** Boundary: inventory regular source files byte for byte; links cannot escape the packaged dependency root. */
+/** Boundary: inventory regular source files byte for byte; links cannot escape the packaged dependency root.
+ * Both sides are real paths, so a root reached through a link (macOS `/var` is `/private/var`) still contains its own links. */
 const linkDigest = (root: string, path: string): string => {
   const target = readlinkSync(join(root, path));
   const resolved = realpathSync(resolve(dirname(join(root, path)), target));
-  return !isAbsolute(target) && !relative(root, resolved).startsWith("..")
+  return !isAbsolute(target) && !relative(realpathSync(root), resolved).startsWith("..")
     ? sha256(`link:${target}`) : "unsupported-link";
 };
 export const distributionFiles = (root: string, prefix = ""): readonly DistributionFile[] => sortedNames(readdirSync(join(root, prefix))).flatMap((name) => {

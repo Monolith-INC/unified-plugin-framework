@@ -47,7 +47,9 @@ The installer creates its setup plan internally. You do not need to write JSON o
 
 ### Requirements and current support
 
-- **Codex on Linux** for complete automated setup. Other hosts are not offered as working wizard choices.
+- **Linux**, with one of the supported agent hosts: **Codex** or **Claude Code**. The wizard asks which one to set up.
+  - Codex: plugins register through `.codex/config.toml` and `codex plugin add`.
+  - Claude Code: plugins come from a marketplace named for this project and install at local scope (`.claude/settings.local.json`), and the knowledge server is registered at local scope too (`claude mcp add-json --scope local`), so this machine's paths stay out of shared files and Claude Code needs no approval prompt for it.
 - **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. The wizard lets you choose the Python executable.
 - Network access to GitHub Releases and, for isolated knowledge-runtime setup, the Python package index.
 - Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.

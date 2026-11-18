@@ -60,7 +60,7 @@ export const readContentTree = (root: string): Result<string> => {
 };
 
 /** The skill folders under `skills/` that hold a `SKILL.md`, in name order. */
-const skillNames = (skillsDir: string): readonly string[] =>
+export const skillNames = (skillsDir: string): readonly string[] =>
   existsSync(skillsDir) ? sortedNames(readdirSync(skillsDir).filter((name) => existsSync(join(skillsDir, name, "SKILL.md")))) : [];
 
 const manifestField = (file: JsonFile, key: string): string | undefined => {

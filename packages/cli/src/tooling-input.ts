@@ -1,8 +1,9 @@
 import { fail, object, ok, text, TOOLING_STEPS, type Result, type ToolingStep } from "@agent-plugins/project";
 import { WORKFLOWS } from "@agent-plugins/workflows";
+import { isHostName, type HostName } from "./host-names.js";
 
 export interface BootstrapInput {
-  readonly host: "codex";
+  readonly host: HostName;
   readonly python: string;
   readonly workflows: readonly string[];
   readonly pluginRoots: readonly string[];
@@ -20,11 +21,11 @@ const knowledge = (value: unknown): value is BootstrapInput["knowledge"] => obje
   && (value.documentMode !== "shared" || value.docsRoot === value.vaultRoot);
 
 /** Accepted choices are parsed once; unsupported hosts and arbitrary setup steps cannot appear later. */
-export const parseBootstrap = (value: unknown): Result<BootstrapInput> => object(value) && value.host === "codex"
+export const parseBootstrap = (value: unknown): Result<BootstrapInput> => object(value) && isHostName(value.host)
   && text(value.python) && knowledge(value.knowledge) && strings(value.pluginRoots)
   && strings(value.workflows) && value.workflows.every((name) => Object.hasOwn(WORKFLOWS, name))
   && (value.steps === undefined || strings(value.steps) && value.steps.every((step) => (TOOLING_STEPS as readonly string[]).includes(step)))
   && (value.trackerRef === undefined || text(value.trackerRef))
   ? ok({ ...value, steps: value.steps ?? TOOLING_STEPS } as unknown as BootstrapInput)
   : fail("invalid-bootstrap", "Choose a supported host, Python executable, workflows, plugin roots and project-relative knowledge/document paths.",
-    "Use project-bootstrap to prepare the concrete setup plan. Only Codex setup is automated in this release; preserve other hosts' configuration.");
+    "Use project-bootstrap to prepare the concrete setup plan for Codex or Claude Code; preserve other hosts' configuration.");

@@ -55,7 +55,7 @@ const codes = (result) => result.diagnostics.map(({ code }) => code);
 
 const recordingIo = () => {
   const lines = { out: [], err: [] };
-  return { lines, io: { out: (line) => lines.out.push(line), err: (line) => lines.err.push(line), cwd: () => repo } };
+  return { lines, io: { out: (line) => lines.out.push(line), err: (line) => lines.err.push(line), claudeState: () => join(repo, '.claude.json'), cwd: () => repo } };
 };
 
 test("a packed bundle unpacks to the same bundle only under its published digest", () => {
