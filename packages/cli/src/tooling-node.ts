@@ -59,7 +59,7 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
   switch (step) {
     case "settings": return input.answers === undefined ? inputNeeded("answers-required", "Project choices are incomplete.", "Collect missing choices and include accepted answers; do not infer a tracker.")
       : setup(nodeProjectIO(project), input.answers)().then((result) => result.ok ? ok("Settings saved.") : result);
-    case "cli": return wireCli(project).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
+    case "cli": return wireCli(project, undefined, input.python).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
     case "skills": return installSkills(project, input.host).then((installed) => installed.ok ? installHostPlugins(project, input, environment, FRAMEWORK_PLUGINS) : installed);
     case "dependencies": return stageDependencies(project, input).then((staged) => staged.ok ? installHostPlugins(project, resolved, environment, pluginNames(input)) : staged);
     case "knowledge-runtime": return process.platform === "win32" ? inputNeeded("unsupported-runtime", "The knowledge runtime currently supports Linux and macOS.", "Use a supported runtime host; preserve this host's existing configuration.") : installKnowledge(project, input);

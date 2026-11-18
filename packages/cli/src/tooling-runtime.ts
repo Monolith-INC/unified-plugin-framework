@@ -1,14 +1,15 @@
-import { cp, readFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "@agent-plugins/compiler";
 import { installVendorBundle } from "@agent-plugins/installer";
 import { nodeProjectFiles, object, ok, fail, type Result } from "@agent-plugins/project";
 import type { BootstrapInput } from "./tooling-input.js";
 import { command, sequence } from "./tooling-process.js";
-import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
+import { backupOwnedText, directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
 import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, frameworkTarget, toolsRoot } from "./tooling-host.js";
 import type { HostName } from "./host-names.js";
 import { resolveSourceBundle } from "./bundle-source.js";
+import { readOwnership, recordOwnership, type OwnershipLedger } from "./tooling-ownership.js";
 
 export const pythonRuntime = (project: string): string => join(project, ".project-knowledge/runtime", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 export const knowledgeExecutable = (project: string): string => join(project, ".project-knowledge/runtime/bin/upf-project-knowledge");
@@ -37,18 +38,57 @@ const installPlugin = (project: string, host: HostName, name: string): Promise<R
 
 /** Install from a private source copy so package builders cannot modify dependency source. */
 export const installKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
-  const runtime = join(project, ".project-knowledge/runtime");
-  const created = await directory(project, runtime);
-  return !created.ok ? created : command(input.python, ["-m", "venv", runtime], project).then((venv) => venv.ok ? copyRuntime(project) : venv)
-    .then((source) => source.ok ? command(pythonRuntime(project), ["-m", "pip", "install", "--disable-pip-version-check", source.value], project, 180_000) : source);
+  const runtime = await prepareKnowledgeRuntime(project, input.python);
+  return !runtime.ok ? runtime : command(input.python, ["-m", "venv", runtime.value], project).then((venv) => venv.ok
+    ? withSetupStage(project, input.python, (stage) => copyRuntime(join(stage, "source"))
+      .then((source) => source.ok ? command(pythonRuntime(project), ["-m", "pip", "install", "--disable-pip-version-check", source.value], project, 180_000) : source))
+    : venv);
 };
-const copyRuntime = (project: string): Promise<Result<string>> => {
-  const source = join(toolsRoot(project), "runtime-source");
-  return directory(project, source).then((created) => created.ok
-    ? cp(join(FRAMEWORK_ROOT, "runtimes/project-knowledge"), source, { recursive: true, dereference: false,
-      filter: (path) => !["build", "dist", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) }).then(() => ok(source))
-      .catch(() => setupFailure("Knowledge runtime source could not be staged.")) : created);
+
+const RUNTIME_ENTRY = ".project-knowledge/runtime";
+const directoryIdentity = (path: string): Promise<Result<string | null>> =>
+  lstat(path, { bigint: true }).then((stat) => stat.isDirectory() ? ok(`${stat.dev}:${stat.ino}`) : unmanagedRuntime())
+    .catch((error: unknown) => object(error) && error.code === "ENOENT" ? ok(null) : setupFailure("Could not inspect the knowledge runtime directory."));
+const unmanagedRuntime = (): Result<never> => fail("unmanaged-file", "The knowledge runtime directory is not installer-owned.",
+  "Preserve the current directory and reconcile its ownership before setup.");
+
+/** Reuse an interrupted runtime only while its directory still matches the recorded owner. */
+export const prepareKnowledgeRuntime = async (project: string, python: string): Promise<Result<string>> => {
+  const runtime = join(project, RUNTIME_ENTRY);
+  const [found, ledger, safe] = await Promise.all([directoryIdentity(runtime), readOwnership(project), safePath(project, runtime)]);
+  return !safe ? unmanagedRuntime() : !found.ok ? found : !ledger.ok ? ledger
+    : found.value === null ? createOwnedRuntime(project, runtime, ledger.value, python)
+      : ledger.value.entries[RUNTIME_ENTRY] === found.value ? ok(runtime) : reuseLegacyRuntime(project, runtime, found.value, ledger.value, python);
 };
+
+const saveRuntimeOwner = (project: string, runtime: string, identity: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> =>
+  recordOwnership(project, ledger, RUNTIME_ENTRY, identity, python).then((saved) => saved.ok ? ok(runtime) : saved);
+
+const createOwnedRuntime = (project: string, runtime: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> =>
+  directory(project, join(project, ".project-knowledge")).then((parent) => !parent.ok ? parent
+    : mkdir(runtime, { mode: 0o700 }).then(() => directoryIdentity(runtime))
+      .then((created) => !created.ok ? created : created.value === null ? unmanagedRuntime()
+        : saveRuntimeOwner(project, runtime, created.value, ledger, python)).catch(unmanagedRuntime));
+
+const reuseLegacyRuntime = async (project: string, runtime: string, identity: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> => {
+  const legacy = ledger.entries[RUNTIME_ENTRY] === undefined && await legacyRuntimeInstalled(project, runtime);
+  return legacy ? saveRuntimeOwner(project, runtime, identity, ledger, python) : unmanagedRuntime();
+};
+
+const legacyRuntimeInstalled = async (project: string, runtime: string): Promise<boolean> => {
+  const lib = join(runtime, "lib");
+  const safe = await safePath(project, lib);
+  const versions = safe ? await readdir(lib).catch(() => []) : [];
+  const candidates = versions.filter((name) => /^python3\.\d+$/.test(name)).flatMap((name) =>
+    ["0.1.1", "0.1.2"].map((version) => join(lib, name, "site-packages", `upf_project_knowledge-${version}.dist-info`, "METADATA")));
+  return (await Promise.all(candidates.map((path) => safePath(project, path).then((inside) =>
+    inside ? readText(path).then((read) => read.ok && /^Name: upf-project-knowledge\s*$/m.test(read.value ?? "")) : false)))).some(Boolean);
+};
+const copyRuntime = (source: string): Promise<Result<string>> =>
+  cp(join(FRAMEWORK_ROOT, "runtimes/project-knowledge"), source, { recursive: true, dereference: false,
+    filter: (path) => !["build", "dist", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
+    .then(() => ok(source)).catch(() => fail("partial-step", "Knowledge runtime source could not be staged.",
+      "Rerun setup to use a fresh installer staging directory."));
 
 export const configureKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
   const path = join(project, ".project-knowledge.json");
@@ -103,14 +143,26 @@ export const installedCli = async (project: string, entry = new URL("./index.js"
   const current = await readText(cliPath(project));
   return current.ok && current.value === cliContent(entry);
 };
+const CLI_ENTRY = ".upf-tools/bin/agent-plugin";
 /** A digest receipt permits replacing only a previously owned, unmodified CLI launcher. */
-export const wireCli = async (project: string, entry = new URL("./index.js", import.meta.url)): Promise<Result<string>> => {
+export const wireCli = async (project: string, entry = new URL("./index.js", import.meta.url), python = "python3"): Promise<Result<string>> => {
   const path = cliPath(project);
-  const [old, receipt] = await Promise.all([readText(path), readText(`${path}.sha256`)]);
+  const [old, legacy, ledger] = await Promise.all([readText(path), readText(`${path}.sha256`), readOwnership(project)]);
   const content = cliContent(entry);
-  return !old.ok ? old : !receipt.ok ? receipt
-    : old.value !== null && old.value !== content && receipt.value !== sha256(old.value) ? setupFailure("Existing project CLI is unmanaged or modified; preserve it and reconcile its ownership before upgrading.")
-      : old.value === null && receipt.value !== null ? setupFailure("A CLI receipt exists without its launcher; reconcile the interrupted installation.")
-        : writeText(project, path, content, old.value).then((written) => written.ok
-          ? writeText(project, `${path}.sha256`, sha256(content), receipt.value).then((saved) => saved.ok ? ok(path) : saved) : written);
+  return !old.ok ? old : !legacy.ok ? legacy : !ledger.ok ? ledger
+    : replaceOwnedCli(project, path, content, old.value, legacy.value, ledger.value, python);
+};
+
+const replaceOwnedCli = (project: string, path: string, content: string, old: string | null, legacy: string | null, ledger: OwnershipLedger, python: string): Promise<Result<string>> => {
+  const receipt = Object.hasOwn(ledger.entries, CLI_ENTRY) ? ledger.entries[CLI_ENTRY] : legacy;
+  return old !== null && old !== content && receipt !== sha256(old)
+    ? Promise.resolve(fail(receipt === null ? "unmanaged-file" : "modified-file", "The existing project CLI cannot be replaced automatically.", "Preserve the launcher and reconcile its ownership before upgrading."))
+    : old === null && receipt !== null ? Promise.resolve(fail("partial-step", "A CLI receipt exists without its launcher.", "Reconcile the interrupted installation before rerunning."))
+    : replaceCli(project, path, content, old, ledger, python);
+};
+
+const replaceCli = async (project: string, path: string, content: string, old: string | null, ledger: OwnershipLedger, python: string): Promise<Result<string>> => {
+  const backup = old !== null && old !== content ? await backupOwnedText(project, path, old, python) : ok(null);
+  return !backup.ok ? backup : writeText(project, path, content, old, python).then((written) => written.ok
+    ? recordOwnership(project, ledger, CLI_ENTRY, sha256(content), python).then((saved) => saved.ok ? ok(path) : saved) : written);
 };

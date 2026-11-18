@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,readFile,mkdir,symlink} from 'node:fs/promises';
+import {mkdtemp,writeFile,readFile,mkdir,readdir,rename,stat,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {execFileSync,spawnSync} from 'node:child_process';
+import {execFileSync,spawn,spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {once} from 'node:events';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
-import {safePath,writeText} from '../dist/tooling-files.js';
-import {configureReview,reviewBindingsValid,wireCli,installedCli} from '../dist/tooling-runtime.js';
+import {safePath,sweepSetupWrites,writeText} from '../dist/tooling-files.js';
+import {configureReview,reviewBindingsValid,wireCli,installedCli,prepareKnowledgeRuntime} from '../dist/tooling-runtime.js';
 import {nodeToolingIO} from '../dist/tooling-node.js';
 import {stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
@@ -73,6 +75,16 @@ test('interrupted staging cannot leave the final wrapper partial and retry can p
   assert.equal(await readFile(join(result.value,'source','skills','one','SKILL.md'),'utf8'),'Original');
 });
 
+test('dependency staging reports an unmanaged wrapper and preserves its files',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-stage-preserve-'));
+  const target=join(project,'.upf-tools/plugins/fixture');
+  const existing=join(target,'notes.md');
+  await mkdir(target,{recursive:true});
+  await writeFile(existing,'user contents');
+  assert.equal((await stageDependency(project,'fixture',join(project,'source'))).error.code,'unmanaged-file');
+  assert.equal(await readFile(existing,'utf8'),'user contents');
+});
+
 test('active skill verification covers referenced files and ignores only the owned marker',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-active-skill-'));
   await writeFile(join(project,'SKILL.md'),'Original');await writeFile(join(project,'reference.md'),'Rule');
@@ -85,7 +97,7 @@ test('active skill verification covers referenced files and ignores only the own
 test('setup writes reject stale content and preserve unrelated configuration',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-bootstrap-write-'));
   const path=join(project,'config','settings.txt');await mkdir(join(project,'config'));await writeFile(path,'original');
-  assert.equal((await writeText(project,path,'new','stale')).ok,false);
+  assert.equal((await writeText(project,path,'new','stale')).error.code,'modified-file');
   assert.equal(await readFile(path,'utf8'),'original');
   assert.equal((await writeText(project,path,'new','original')).ok,true);
   assert.equal(await readFile(path,'utf8'),'new');
@@ -96,6 +108,114 @@ test('setup paths cannot traverse a linked directory',{skip:process.platform==='
   const outside=await mkdtemp(join(tmpdir(),'upf-bootstrap-outside-'));
   await symlink(outside,join(project,'linked'));
   assert.equal(await safePath(project,join(project,'linked','file')),false);
+  assert.equal((await writeText(project,join(project,'linked','file'),'unsafe',null)).error.code,'symlink-escape');
+  await assert.rejects(readFile(join(outside,'file')));
+});
+
+test('an existing setup lock reports a busy write and preserves the file',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-write-busy-'));
+  const path=join(project,'settings.json');
+  await writeFile(path,'original');
+  await writeFile(`${path}.upf.lock`,'owner');
+  assert.equal((await writeText(project,path,'new','original')).error.code,'write-busy');
+  assert.equal(await readFile(path,'utf8'),'original');
+});
+
+test('a killed lock owner releases its lease without deleting user files',{skip:process.platform==='win32',timeout:10000},async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-write-restart-'));
+  const path=join(project,'settings.json');
+  const neighbor=join(project,'settings.json.upf-user.tmp');
+  const locks=join(project,'.upf-tools','write-locks');
+  const key=createHash('sha256').update('settings.json').digest('hex');
+  await mkdir(locks,{recursive:true,mode:0o700});
+  await Promise.all([writeFile(path,'original'),writeFile(neighbor,'user contents')]);
+  const child=spawn('python3',['-I','-c','import fcntl,sys,time; lock=open(sys.argv[1],"w"); fcntl.flock(lock,fcntl.LOCK_EX); print("locked",flush=True); time.sleep(30)',join(locks,key)],{stdio:['ignore','pipe','inherit']});
+  const exited=once(child,'exit');
+  try {
+    await once(child.stdout,'data');
+    assert.equal((await writeText(project,path,'new','original')).error.code,'write-busy');
+    assert.equal(await readFile(path,'utf8'),'original');
+  } finally {
+    child.kill('SIGKILL');
+    await exited;
+  }
+  assert.equal((await writeText(project,path,'new','original')).ok,true);
+  assert.equal(await readFile(path,'utf8'),'new');
+  assert.equal(await readFile(neighbor,'utf8'),'user contents');
+});
+
+test('rerun sweeps an interrupted writer temporary file with a matching receipt',{skip:process.platform==='win32',timeout:10000},async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-interrupted-write-'));
+  const path=join(project,'settings.json');
+  const neighbor=join(project,'settings.json.upf-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tmp');
+  const writer=fileURLToPath(new URL('../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py',import.meta.url));
+  await Promise.all([writeFile(path,'original'),writeFile(neighbor,'user contents')]);
+  const delayed=`import importlib.util, os, sys, time
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("setup_writer", sys.argv[1])
+writer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(writer)
+def pause(*args, **kwargs):
+    print("staged", flush=True)
+    time.sleep(30)
+os.replace = pause
+writer.update(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), "new", "original")
+`;
+  const child=spawn('python3',['-IB','-c',delayed,writer,project,path],{stdio:['ignore','pipe','inherit']});
+  const exited=once(child,'exit');
+  try {
+    await once(child.stdout,'data');
+    assert.equal(await readFile(path,'utf8'),'original');
+    assert.equal((await readdir(project)).filter(name=>name.endsWith('.tmp')).length,2);
+  } finally {
+    child.kill('SIGKILL');
+    await exited;
+  }
+  assert.equal((await sweepSetupWrites(project,'python3')).ok,true);
+  assert.deepEqual((await readdir(project)).filter(name=>name.endsWith('.tmp')),[neighbor.split('/').at(-1)]);
+  assert.equal(await readFile(path,'utf8'),'original');
+  assert.equal((await writeText(project,path,'new','original')).ok,true);
+  assert.equal(await readFile(neighbor,'utf8'),'user contents');
+});
+
+test('startup moves an interrupted stage aside and preserves its contents',{skip:process.platform==='win32',timeout:10000},async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-stage-restart-'));
+  const writer=fileURLToPath(new URL('../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py',import.meta.url));
+  const staging=join(project,'.upf-tools','staging');
+  await mkdir(staging,{recursive:true});
+  const unrelated=join(staging,'unmanaged');
+  await mkdir(unrelated);
+  const child=spawn('python3',['-I',writer,project,'--stage'],{stdio:['pipe','pipe','inherit']});
+  const exited=once(child,'exit');
+  try {
+    const [bytes]=await once(child.stdout,'data');
+    const stage=join(staging,bytes.toString().trim());
+    await writeFile(join(stage,'partial-copy.md'),'keep these bytes');
+    assert.equal((await sweepSetupWrites(project,'python3')).ok,true);
+    assert.equal(await readFile(join(stage,'partial-copy.md'),'utf8'),'keep these bytes');
+  } finally {
+    child.kill('SIGKILL');
+    await exited;
+  }
+  assert.equal((await sweepSetupWrites(project,'python3')).ok,true);
+  const entries=await readdir(staging);
+  assert.equal(entries.some(name=>name.startsWith('stage-')),false);
+  const moved=entries.find(name=>name.startsWith('recovered-'));
+  assert.equal(await readFile(join(staging,moved,'partial-copy.md'),'utf8'),'keep these bytes');
+  assert.deepEqual(await readdir(unrelated),[]);
+});
+
+test('a marked runtime resumes, but a replacement directory is preserved',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-runtime-ownership-'));
+  const first=await prepareKnowledgeRuntime(project,'python3');
+  assert.equal(first.ok,true,JSON.stringify(first));
+  await writeFile(join(first.value,'interrupted.txt'),'installer progress');
+  assert.deepEqual(await prepareKnowledgeRuntime(project,'python3'),first);
+  await rename(first.value,`${first.value}-previous`);
+  await mkdir(first.value);
+  await writeFile(join(first.value,'notes.md'),'user contents');
+  assert.equal((await prepareKnowledgeRuntime(project,'python3')).error.code,'unmanaged-file');
+  assert.equal(await readFile(join(first.value,'notes.md'),'utf8'),'user contents');
 });
 
 test('bootstrap holds a saved request while incomplete and applies it once after required setup',async()=>{
@@ -115,13 +235,33 @@ test('owned CLI can move to a new release while unmanaged or edited launchers ar
   const project=await mkdtemp(join(tmpdir(),'upf-cli-upgrade-'));
   const first=new URL('file:///first-release/index.js');const second=new URL('file:///second-release/index.js');
   assert.equal((await wireCli(project,first)).ok,true);
+  const old=await readFile(join(project,'.upf-tools/bin/agent-plugin'));
   assert.equal(await installedCli(project,first),true);
   assert.equal(await installedCli(project,second),false);
   assert.equal((await wireCli(project,second)).ok,true);
   assert.equal(await installedCli(project,second),true);
+  const bin=join(project,'.upf-tools/bin');
+  const ledger=JSON.parse(await readFile(join(project,'.upf-tools/owned.json'),'utf8'));
+  assert.equal(ledger.entries['.upf-tools/bin/agent-plugin'],createHash('sha256').update(await readFile(join(bin,'agent-plugin'))).digest('hex'));
+  const backups=(await readdir(bin)).filter(name=>name.startsWith('agent-plugin.upf-backup-'));
+  assert.equal(backups.length,1);
+  assert.deepEqual(await readFile(join(bin,backups[0])),old);
+  if(process.platform!=='win32') assert.equal((await stat(join(bin,backups[0]))).mode & 0o777,0o600);
   const path=join(project,'.upf-tools/bin/agent-plugin');await writeFile(path,'unmanaged');
   assert.equal((await wireCli(project,first)).ok,false);
   assert.equal(await readFile(path,'utf8'),'unmanaged');
+});
+
+test('the ownership ledger can migrate an existing valid launcher receipt',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-legacy-receipt-'));
+  const bin=join(project,'.upf-tools/bin');
+  const path=join(bin,'agent-plugin');
+  const prior='previously installed launcher\n';
+  await mkdir(bin,{recursive:true});
+  await Promise.all([writeFile(path,prior),writeFile(`${path}.sha256`,createHash('sha256').update(prior).digest('hex'))]);
+  assert.equal((await wireCli(project,new URL('file:///new-release/index.js'))).ok,true);
+  const {entries}=JSON.parse(await readFile(join(project,'.upf-tools/owned.json'),'utf8'));
+  assert.equal(entries['.upf-tools/bin/agent-plugin'],createHash('sha256').update(await readFile(path)).digest('hex'));
 });
 
 test('an empty local tracker is verified by read-only search without creating a work item',async()=>{

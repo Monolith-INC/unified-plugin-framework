@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,9 +37,10 @@ fs.writeFileSync(${JSON.stringify(verification)}, "verified");
     { step: "knowledge-content", status: "action-required", failure: { code: "knowledge-discovery-needed" } },
   ] };
   const originalPath = process.env.PATH;
+  const python = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
   process.env.PATH = bin;
   try {
-    const plan = { hosts: ["codex"], knowledge: { knowledgeRoot: "knowledge" }, consent: { headlessDiscovery: true } };
+    const plan = { hosts: ["codex"], python, knowledge: { knowledgeRoot: "knowledge" }, consent: { headlessDiscovery: true } };
     const result = await finishKnowledge(report, project, plan, {});
     assert.equal(result.status, "ready");
     const recorded = JSON.parse(await readFile(invocation, "utf8"));

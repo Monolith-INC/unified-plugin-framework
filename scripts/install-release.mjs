@@ -134,7 +134,7 @@ const savePlanAndBootstrap=async(root,project,plan)=>{
  const input=join(project,'.upf-tools/setup-plan.json');
  const previous=await readText(input);
  const created=previous.ok ? await directory(project,join(project,'.upf-tools')) : previous;
- const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),previous.value) : created;
+ const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),previous.value,plan.python) : created;
  return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input);
 };
 const bootstrap=(root,project,input)=>{

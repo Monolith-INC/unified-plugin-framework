@@ -66,7 +66,7 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan): Promise<Resul
   const scratch = await mkdtemp(join(temp, "upf-discovery-"));
   try {
     const verified = await runHost(plan.hosts[0], canonical, runtime, root, scratch);
-    return verified.ok ? writeText(canonical, marker, "verified\n", previous.value) : verified;
+    return verified.ok ? writeText(canonical, marker, "verified\n", previous.value, plan.python) : verified;
   } finally {
     await rmdir(scratch).catch(() => undefined);
   }

@@ -5,6 +5,7 @@ import type { CliIo } from "./index.js";
 import { forHost, parseBootstrap, type AcceptedPlan } from "./tooling-input.js";
 import { nodeToolingIO } from "./tooling-node.js";
 import { finishKnowledge } from "./tooling-acquisition.js";
+import { sweepSetupWrites } from "./tooling-files.js";
 import { exitCodeOf, recoveryFor } from "./tooling-recovery.js";
 
 const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>]";
@@ -35,7 +36,8 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
 };
 const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
   const tooling = nodeToolingIO(project, forHost(plan, plan.hosts[0]), { claudeState: io.claudeState() });
-  const result = await bootstrapTooling(tooling, apply, plan.steps)();
+  const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
+  const result = swept.ok ? await bootstrapTooling(tooling, apply, plan.steps)() : swept;
   return result.ok
     ? respond(project, plan, apply, request, io, apply ? await finishKnowledge(result.value, project, plan, tooling) : result.value)
     : output(io, result);

@@ -55,18 +55,18 @@ interface JsonDocument { readonly text: string | null; readonly value: unknown }
 const readDocument = (path: string): Promise<Result<JsonDocument>> => readText(path).then((read) => !read.ok ? read
   : read.value === null ? ok({ text: null, value: null }) : withText(read.value, parseJson(read.value)));
 const withText = (text: string, parsed: Result<unknown>): Result<JsonDocument> => parsed.ok ? ok({ text, value: parsed.value }) : parsed;
-const written = (project: string, path: string, previous: string | null, edit: JsonEdit): Promise<Result<string>> => {
+const written = (context: HostContext, path: string, previous: string | null, edit: JsonEdit): Promise<Result<string>> => {
   switch (edit.kind) {
     case "unchanged": return Promise.resolve(ok(path));
-    case "write": return writeText(project, path, `${JSON.stringify(edit.document, null, 2)}\n`, previous);
+    case "write": return writeText(context.project, path, `${JSON.stringify(edit.document, null, 2)}\n`, previous, context.python);
   }
 };
 /** Read once, plan the edit purely, then write only a changed document. */
-const editJson = (project: string, path: string, label: string, plan: (value: unknown) => PlanResult<JsonEdit>): Promise<Result<string>> =>
+const editJson = (context: HostContext, path: string, label: string, plan: (value: unknown) => PlanResult<JsonEdit>): Promise<Result<string>> =>
   readDocument(path).then((document) => {
     const planned = document.ok ? plan(document.value.value) : undefined;
     return !document.ok ? document : planned?.ok !== true ? conflict(label, path, planned === undefined ? "" : planDetail(planned))
-      : written(project, path, document.value.text, planned.value);
+      : written(context, path, document.value.text, planned.value);
   });
 const knowledge = <A>(context: HostContext, absent: A, present: (command: string) => Promise<Result<A>>): Promise<Result<A>> =>
   context.knowledgeCommand === undefined ? Promise.resolve(ok(absent)) : present(context.knowledgeCommand);
@@ -96,7 +96,7 @@ const codexCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Pro
   return readDocument(path).then((document) => {
     const merged = document.ok ? mergeCodexMarketplace(document.value.value, plugins.map(({ name }) => name)) : undefined;
     return !document.ok ? document : merged?.ok !== true ? conflict("Codex marketplace", path, merged === undefined ? "" : planDetail(merged))
-      : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text);
+      : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text, context.python);
   });
 };
 const codexSkills = (reply: unknown): Result<readonly DiscoveredSkill[]> => {
@@ -112,7 +112,7 @@ const CODEX = Object.freeze<HostTooling>({
   frameworkDir: "plugins", manifest: ".codex-plugin/plugin.json", bareSkills: ".agents/skills",
   catalog: codexCatalog,
   register: (context) => codexRegistration(context).then((found) => !found.ok ? found : found.value.addition === "" ? ok(CODEX_CONFIG)
-    : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old)),
+    : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old, context.python)),
   registered: (context) => codexRegistration(context).then((found) => found.ok ? ok(found.value.addition === "") : found),
   activate: (context, plugin) => command("codex", CODEX_TOOLING.install(plugin.name), context.project),
   discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project)).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
@@ -122,7 +122,7 @@ const CODEX = Object.freeze<HostTooling>({
 const claudeMarketplace = (context: HostContext): string => claudeMarketplaceName(context.canonical);
 const serverEntry = (context: HostContext, knowledgeCommand: string): ClaudeServerEntry => ({ command: knowledgeCommand, args: ["--project", context.project] });
 const claudeCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Promise<Result<string>> =>
-  editJson(context.project, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
+  editJson(context, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
     plugins.map(({ name, root }) => ({ name, source: catalogSource(context.tools, root) }))));
 /** Claude Code reads catalog sources as `./`-relative paths with forward slashes on every platform. */
 const catalogSource = (tools: string, root: string): string => `./${relative(tools, root).split(sep).join(posix.sep)}`;
