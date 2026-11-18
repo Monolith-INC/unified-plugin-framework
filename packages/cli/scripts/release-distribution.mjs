@@ -36,7 +36,7 @@ const localizeSelfLink=async(root)=>{
  await symlink(relative(dirname(link),cli),link,'dir');
 };
 const copyContents=async(root,scratch,sources)=>{
- await Promise.all(['plugins','runtimes/project-knowledge','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
+ await Promise.all(['plugins','runtimes/project-knowledge','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
   cp(join(repository,path),join(root,path),{recursive:true,filter:path=>!['node_modules','.venv','__pycache__','build','dist'].some(part=>path.split(/[\\/]/).includes(part))})));
  const copied=await sequence(sources,source=>cp(join(scratch,'fetched',`${source.plugin}@${source.version}`),join(root,'dependencies',`${source.plugin}@${source.version}`),{recursive:true,verbatimSymlinks:true})
   .then(()=>ok(source.plugin)),'Dependencies included.');
