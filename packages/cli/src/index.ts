@@ -42,7 +42,7 @@ Commands:
                                     Check a workflow adapter's readiness (declared, installed, bound)
   upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
-  project describe|setup|request|bootstrap
+  project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
 `;
 

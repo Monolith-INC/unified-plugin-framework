@@ -9,13 +9,14 @@ import { sweepSetupWrites } from "./tooling-files.js";
 import { exitCodeOf, recoveryFor } from "./tooling-recovery.js";
 import { bootstrapHosts, HOST_STEPS, pendingTasks, summarizeSteps, type HostRun, type HostSetup } from "./tooling-bootstrap.js";
 import type { HostName } from "./host-names.js";
+import { writeInstallLog } from "./install-log.js";
 
-const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>]";
+const USAGE = "agent-plugin project bootstrap --input <accepted-plan.json> [--apply] [--resume <request.json>] [--project <directory>] [--log <path>]";
 const pairs = (args: readonly string[]): readonly string[] => args.filter((entry) => entry !== "--apply");
 const option = (args: readonly string[], key: string): string | undefined => args.includes(key) ? args[args.indexOf(key) + 1] : undefined;
 const valid = (args: readonly string[]): boolean => args.filter((entry) => entry === "--apply").length <= 1
   && pairs(args).length % 2 === 0 && pairs(args).every((entry, index) => index % 2 === 0
-    ? ["--input", "--resume", "--project"].includes(entry) : entry.length > 0 && !entry.startsWith("--"))
+    ? ["--input", "--resume", "--project", "--log"].includes(entry) : entry.length > 0 && !entry.startsWith("--"))
   && new Set(pairs(args).filter((_, index) => index % 2 === 0)).size === pairs(args).length / 2 && option(args, "--input") !== undefined;
 const inputFile = (project: string, path: string): Promise<Result<unknown>> => readFile(resolve(project, path), "utf8").then(parseJson)
   .catch(() => fail("unreadable-input", "Bootstrap input could not be read.", "Preserve the accepted setup plan and original request; correct the input path and retry."));
@@ -34,16 +35,19 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
   const resumePath = option(args, "--resume");
   const request = resumePath === undefined ? ok(null) : await inputFile(project, resumePath).then((value) => flatMap(value, parseRequest));
   return !parsed.ok ? output(io, parsed) : !request.ok ? output(io, request)
-    : execute(project, parsed.value, args.includes("--apply"), request.value, io);
+    : execute(project, parsed.value, args.includes("--apply"), request.value, io, option(args, "--log"));
 };
-const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo): Promise<number> => {
+const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, logPath?: string): Promise<number> => {
   const environment = { claudeState: io.claudeState() };
   const ioFor = (host: HostName) => nodeToolingIO(project, forHost(plan, host), environment);
   const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
   const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan)() : swept;
   return result.ok
-    ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor) : result.value)
-    : output(io, result);
+    ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor) : result.value, logPath)
+    : writeInstallLog(project, [{ type: "bootstrap-failure", failure: result.error }], logPath).then((log) => {
+      io.out(JSON.stringify({ ...result, log }, null, 2)); // fp-allow: no-void-return -- CLI output boundary
+      return 1;
+    });
 };
 
 const refreshServer = async (run: HostRun, ioFor: (host: HostName) => ToolingIO): Promise<HostRun> => {
@@ -66,19 +70,24 @@ const reportExit = (report: ToolingReport, apply: boolean): number => {
   return !apply ? 0 : codes.includes(1) ? 1 : codes.includes(2) ? 2 : 0;
 };
 const fullHost = (run: HostRun) => HOST_STEPS.every((step) => run.tooling.steps.some((entry) => entry.step === step));
-const respond = (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, setup: HostSetup): Promise<number> => {
+const respond = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo,
+  setup: HostSetup, logPath?: string): Promise<number> => {
   const report = summarizeSteps([...setup.project.steps, ...setup.hosts.flatMap(({ tooling }) => tooling.steps)]);
   const complete = TOOLING_STEPS.every((step) => plan.steps.includes(step));
   const handoffs = apply ? pendingTasks(report) : [];
   const common = { mode: apply ? "apply" : "plan", host: plan.hosts[0], workflows: plan.workflows, tooling: report, request,
     project: setup.project, hosts: setup.hosts.map((run) => ({ ...run, status: run.tooling.status === "action-required" || fullHost(run) ? run.tooling.status : "not-verified" })),
-    handoffs, events: setup.events, log: null,
+    handoffs, events: setup.events,
     status: report.status === "action-required" || complete ? report.status : "not-verified",
     next: handoffs.includes("knowledge-discovery") ? recoveryFor("knowledge-content", "knowledge-discovery-needed").onFailure.instruction
       : report.status === "action-required" ? "Complete the reported recoveries and rerun this accepted plan. Successful capabilities are reused."
         : complete ? "Selected tooling is verified. Continue the original work." : "The selected steps passed. Other setup capabilities were not verified." };
-  return apply && request !== null && report.status === "ready" && report.steps.length > 0
-    ? resumeTooling(report, operate(nodeProjectIO(project), request))().then((resumed) =>
-      output(io, resumed.ok ? ok({ ...common, ...resumed.value }) : resumed))
-    : Promise.resolve(output(io, ok(common), reportExit(report, apply)));
+  const resumed = apply && request !== null && report.status === "ready" && report.steps.length > 0
+    ? await resumeTooling(report, operate(nodeProjectIO(project), request))() : null;
+  const result = resumed === null ? ok(common) : resumed.ok ? ok({ ...common, ...resumed.value }) : resumed;
+  const stored = await writeInstallLog(project, [
+    ...setup.events.map((event) => ({ type: "recovery", ...event })),
+    { type: "bootstrap", mode: common.mode, status: common.status, project: common.project, hosts: common.hosts, handoffs: common.handoffs },
+  ], logPath);
+  return output(io, result.ok ? ok({ ...result.value, log: stored }) : result, reportExit(report, apply));
 };

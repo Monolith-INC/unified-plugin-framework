@@ -3,8 +3,9 @@ import { resolve } from "node:path";
 import { fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, setup, type ProjectIO, type ProjectReply, type Request, type Result } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
 import { runTooling } from "./tooling-command.js";
+import { readLastInstallLog } from "./install-log.js";
 
-const USAGE = "agent-plugin project describe | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
+const USAGE = "agent-plugin project describe | status [--project <directory>] | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
 const option = (args: readonly string[], name: string): string | undefined => args[args.indexOf(name) + 1];
 const argument = (args: readonly string[], name: string): string | undefined => args.includes(name) ? option(args, name) : undefined;
 
@@ -57,6 +58,10 @@ const runAction = (args: readonly string[], io: CliIo): Promise<number> => {
   const runtime = nodeProjectIO(root);
   switch (args[0]) {
     case "describe": return operate(runtime, null)().then((reply) => respond(io, reply));
+    case "status": return readLastInstallLog(root).then((log) => {
+      io.out(JSON.stringify({ ok: true, value: { log } }, null, 2)); // fp-allow: no-void-return -- CLI output boundary
+      return 0;
+    });
     case "request": return requestCommand(root, argument(args, "--input"), runtime, io);
     case "setup": return setupCommand(root, args, runtime, io);
     default: return Promise.resolve(respond(io, fail("usage", USAGE, "Choose describe, request or setup.")));
