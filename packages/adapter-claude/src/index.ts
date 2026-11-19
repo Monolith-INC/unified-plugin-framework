@@ -1,4 +1,4 @@
-import type { Diagnostic, PluginMcpServer } from "@agent-plugins/core";
+import { isPluginAuthor, type Diagnostic, type PluginMcpServer } from "@agent-plugins/core";
 import {
   createJsonPayloadFile,
   createMarkdownPayloadFile,
@@ -17,7 +17,7 @@ import {
   type VendorBundle,
   type VendorBundleDraft,
 } from "@agent-plugins/compiler";
-import { andThen, concatAll, type Monoid } from "@agent-plugins/compiler/railway";
+import { andThen, concatAll, isRecord, type Monoid } from "@agent-plugins/compiler/railway";
 
 export const CLAUDE_ADAPTER_VERSION = "1.0.0" as const;
 export const CLAUDE_SCHEMA_VERSION = "claude-code-plugins-2026-08-10" as const;
@@ -214,23 +214,36 @@ function mcpEntry(server: PluginMcpServer, name: string): Result<JsonValue> {
   }
 }
 
+/** One manifest field's rule: the field, whether its value is acceptable, and the problem reported when it is not. */
+type FieldRule = readonly [field: string, accepts: (value: unknown) => boolean, code: string, message: string];
+
+const optional = (accepts: (value: unknown) => boolean) => (value: unknown): boolean => value === undefined || accepts(value);
+
+const MANIFEST_RULES: readonly FieldRule[] = [
+  ["name", (value) => typeof value === "string" && NAME.test(value), "claude.manifest.name", "Claude manifest name is invalid."],
+  ["version", (value) => typeof value === "string" && SEMVER.test(value), "claude.manifest.version", "Claude manifest version must be semantic."],
+  ["author", optional(isPluginAuthor), "claude.manifest.author", "Claude manifest author needs a non-empty name and string email and url when present."],
+  ["license", optional((value) => typeof value === "string"), "claude.manifest.license", "Claude manifest license must be a string."],
+];
+
+const MANIFEST_FIELDS: readonly string[] = ["description", "skills", "hooks", "mcpServers", ...MANIFEST_RULES.map(([field]) => field)];
+
+/**
+ * Claude Code loads skills/, hooks/hooks.json and .mcp.json from their default locations, so current payloads do not
+ * declare them. Bundles released before that declared each one; such a declaration must name its default and its files.
+ */
+const componentDeclarations = (paths: ReadonlySet<string>): readonly (readonly [string, string, boolean])[] => [
+  ["skills", "./skills/", [...paths].some((path) => path.startsWith("skills/"))],
+  ["hooks", `./${HOOKS_PATH}`, paths.has(HOOKS_PATH)],
+  ["mcpServers", `./${MCP_PATH}`, paths.has(MCP_PATH)],
+];
+
 function validateManifest(value: unknown, paths: ReadonlySet<string>): readonly Diagnostic[] {
   if (!isRecord(value)) return [diagnostic("claude.manifest.invalid", "Claude manifest must be an object.", MANIFEST_PATH)];
-  const allowed = ["name", "version", "description", "author", "license", "skills", "hooks", "mcpServers"];
-  // Claude Code loads skills/, hooks/hooks.json and .mcp.json from their default locations, so current payloads do not
-  // declare them. Bundles released before that declared each one; such a declaration must still name its default.
-  const components: readonly (readonly [string, string, boolean])[] = [
-    ["skills", "./skills/", [...paths].some((path) => path.startsWith("skills/"))],
-    ["hooks", `./${HOOKS_PATH}`, paths.has(HOOKS_PATH)],
-    ["mcpServers", `./${MCP_PATH}`, paths.has(MCP_PATH)],
-  ];
   return [
-    ...Object.keys(value).filter((key) => !allowed.includes(key)).map((key) => diagnostic("claude.manifest.unknown_field", "Unknown Claude manifest field.", key)),
-    ...(typeof value["name"] !== "string" || !NAME.test(value["name"]) ? [diagnostic("claude.manifest.name", "Claude manifest name is invalid.", "name")] : []),
-    ...(typeof value["version"] !== "string" || !SEMVER.test(value["version"]) ? [diagnostic("claude.manifest.version", "Claude manifest version must be semantic.", "version")] : []),
-    ...(value["author"] === undefined || hasAuthorName(value["author"]) ? [] : [diagnostic("claude.manifest.author", "Claude manifest author needs a non-empty name.", "author")]),
-    ...(value["license"] === undefined || typeof value["license"] === "string" ? [] : [diagnostic("claude.manifest.license", "Claude manifest license must be a string.", "license")]),
-    ...components.filter(([field, expected, present]) => value[field] !== undefined && (!present || value[field] !== expected))
+    ...Object.keys(value).filter((key) => !MANIFEST_FIELDS.includes(key)).map((key) => diagnostic("claude.manifest.unknown_field", "Unknown Claude manifest field.", key)),
+    ...MANIFEST_RULES.filter(([field, accepts]) => !accepts(value[field])).map(([field, , code, message]) => diagnostic(code, message, field)),
+    ...componentDeclarations(paths).filter(([field, expected, present]) => value[field] !== undefined && (!present || value[field] !== expected))
       .map(([field]) => diagnostic("claude.manifest.component", "Claude component declaration does not match payload contents.", field)),
   ];
 }
@@ -284,11 +297,3 @@ function fail(code: string, message: string, path?: string): Result<never> {
 function diagnostic(code: string, message: string, path?: string): Diagnostic {
   return { severity: "error", code, message, ...(path === undefined ? {} : { path }) };
 }
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** Claude Code requires `author.name`; `email` and `url` are optional. */
-const hasAuthorName = (value: unknown): boolean =>
-  isRecord(value) && typeof value["name"] === "string" && value["name"].trim().length > 0;

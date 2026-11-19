@@ -26,6 +26,11 @@ test('catalog merge keeps earlier entries and metadata and refuses malformed or 
   assert.equal(described.value.kind,'write');
   assert.deepEqual(described.value.document,{...custom});
   assert.equal(mergeClaudeMarketplace({...custom,description:'Mine'},'upf-1',entries).value.kind,'unchanged');
+  const knowledge=[{name:'knowledge',source:'./hosts/claude/knowledge'}];
+  assert.equal(mergeClaudeMarketplace({...custom,description:'Mine'},'upf-1',knowledge).value.document.description,'Mine');
+  const blank=mergeClaudeMarketplace({...custom,description:null},'upf-1',entries);
+  assert.equal(blank.value.kind,'write');
+  assert.equal(blank.value.document.description,first.value.document.description);
   [ {...custom,name:'upf-2'}, {...custom,plugins:'none'}, {...custom,plugins:['bad']}, {...custom,plugins:[{name:'framework',source:'./moved'}]}, [] ]
     .map(existing=>assert.equal(mergeClaudeMarketplace(existing,'upf-1',entries).ok,false));
 });

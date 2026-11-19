@@ -123,7 +123,7 @@ Installed releases use bundled dependencies locally. Missing or changed bundled 
 
 ## Develop UPF
 
-To change the framework itself, clone this repository and use Node.js 22+ with pnpm 10.14.0:
+To change the framework itself, clone this repository and use Node.js 22+ with pnpm 10.14.0. `pnpm payloads:verify` also needs the Claude Code CLI (`claude`), because it runs Claude Code's own validator on the Claude payloads; CI uses version 2.1.318.
 
 ```sh
 git clone https://github.com/Monolith-INC/unified-plugin-framework.git

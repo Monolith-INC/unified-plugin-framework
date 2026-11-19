@@ -12,7 +12,10 @@ import {
 } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
+import { isPluginAuthor, type PluginAuthor } from "./author.js";
 import { onboardedDiagnosticCodes, readOnboardedPlugins, type OnboardedPlugin } from "./onboarded.js";
+
+export { isPluginAuthor, type PluginAuthor } from "./author.js";
 
 export {
   UPF_EXTENSION,
@@ -75,13 +78,6 @@ export interface Diagnostic {
   readonly message: string;
   readonly path?: string;
 }
-
-/** Who maintains a plugin: a non-empty name, plus an optional contact email and URL. */
-export type PluginAuthor = {
-  readonly name: string;
-  readonly email?: string;
-  readonly url?: string;
-};
 
 export interface PluginManifest {
   readonly name: string;
@@ -855,18 +851,6 @@ function readOptionalString(
         ],
       };
 }
-
-const AUTHOR_FIELDS: ReadonlySet<string> = new Set(["name", "email", "url"]);
-const optionalString = (entry: unknown): boolean => entry === undefined || typeof entry === "string";
-
-/** An author object with a non-empty name, string contacts when present, and no other keys. */
-const isPluginAuthor = (entry: unknown): entry is PluginAuthor =>
-  isRecord(entry) &&
-  typeof entry["name"] === "string" &&
-  entry["name"].trim().length > 0 &&
-  optionalString(entry["email"]) &&
-  optionalString(entry["url"]) &&
-  Object.keys(entry).every((key) => AUTHOR_FIELDS.has(key));
 
 function readAuthor(value: Record<string, unknown>): ReadResult<PluginAuthor> {
   const entry = value["author"];

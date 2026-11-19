@@ -112,7 +112,8 @@ test("Claude adapter carries the portable author and license into the manifest",
   assert.deepEqual(manifestOf(bundle.value), { author, description: "Claude fixture.", license: "Apache-2.0", name: "hello-world", version: "1.0.0" });
   assert.deepEqual(validateClaudeBundle(bundle.value), []);
   const codes = (manifest) => validateClaudeBundle(withManifest(bundle.value, { ...manifestOf(bundle.value), ...manifest })).map(({ code }) => code);
-  assert.deepEqual(codes({ author: { name: " " } }), ["claude.manifest.author"]);
+  [{ name: " " }, { name: "A", email: 1 }, { name: "A", url: 1 }, { name: "A", email: null }, ["A"], "A"]
+    .map((bad) => assert.deepEqual(codes({ author: bad }), ["claude.manifest.author"], JSON.stringify(bad)));
   assert.deepEqual(codes({ license: 2 }), ["claude.manifest.license"]);
 });
 
@@ -126,6 +127,14 @@ test("Claude adapter still accepts released bundles that declared default compon
   assert.deepEqual(
     validateClaudeBundle(withManifest(bundle.value, { ...legacy, skills: "./elsewhere/" })).map(({ code, path }) => [code, path]),
     [["claude.manifest.component", "skills"]],
+  );
+  const withoutHooks = compileClaudePayload(richCanonical({ hookIntents: [] }));
+  assert.equal(withoutHooks.ok, true);
+  const hookless = finalizeVendorBundle(withoutHooks.value);
+  assert.equal(hookless.ok, true);
+  assert.deepEqual(
+    validateClaudeBundle(withManifest(hookless.value, { ...manifestOf(hookless.value), hooks: "./hooks/hooks.json" })).map(({ code, path }) => [code, path]),
+    [["claude.manifest.component", "hooks"]],
   );
 });
 

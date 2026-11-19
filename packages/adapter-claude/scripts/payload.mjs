@@ -5,27 +5,33 @@ import { fileURLToPath } from "node:url";
 import { releasePayloads } from "@agent-plugins/workflows";
 
 import { claudeAdapter } from "../dist/index.js";
+import { officialFailures } from "./official-check.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const payloadsRoot = join(packageRoot, "payloads");
 const operation = process.argv[2] ?? "";
-const CLAUDE = process.env["CLAUDE_CODE_CLI"] ?? "claude";
-const MISSING_CLI = `Claude Code's CLI (${CLAUDE}) did not run. Install it with npm install -g @anthropic-ai/claude-code, or set CLAUDE_CODE_CLI to its path, then run payload:verify again.`;
+const nonEmpty = (value) => (value?.trim() ? value : undefined);
+const CLI = nonEmpty(process.env["CLAUDE_CODE_CLI"]) ?? "claude"; // fp-allow: no-ambient-effect
+const TIMEOUT_MS = 120_000;
 
-/** The command line for Claude Code's own manifest check; `--strict` makes its warnings fail too. */
-const validateArgs = (plugin) => ["plugin", "validate", "--strict", join(payloadsRoot, plugin, "payload")];
+/** How to start the CLI here: Windows starts the npm shim through cmd.exe, which takes one quoted command line. */
+const command = (args) =>
+  process.platform === "win32"
+    ? { file: [CLI, ...args].map((part) => `"${part}"`).join(" "), argv: [], shell: true }
+    : { file: CLI, argv: args, shell: false };
 
-// Boundary: runs Claude Code's validator on one built payload. Windows runs the npm shim through cmd.exe.
-const officialCheck = (plugin) => {
-  const run = process.platform === "win32"
-    ? spawnSync([CLAUDE, ...validateArgs(plugin)].map((part) => `"${part}"`).join(" "), { encoding: "utf8", shell: true })
-    : spawnSync(CLAUDE, validateArgs(plugin), { encoding: "utf8" });
-  return { plugin, ok: run.status === 0, output: run.error === undefined ? `${run.stdout}${run.stderr}`.trim() : MISSING_CLI };
+// Boundary: runs Claude Code's CLI once and returns spawnSync's result.
+const runCli = (args) => {
+  const { file, argv, shell } = command(args);
+  return spawnSync(file, argv, { encoding: "utf8", shell, timeout: TIMEOUT_MS });
 };
 
-const reports = releasePayloads(operation, claudeAdapter, { pluginsRoot: resolve(packageRoot, "../../plugins"), payloadsRoot });
-// Claude Code is the authority on what it loads, so a verified payload must also pass its validator.
-const official = operation === "verify" && reports.every(({ result }) => result.ok) ? reports.map(({ plugin }) => officialCheck(plugin)) : [];
+const built = releasePayloads(operation, claudeAdapter, { pluginsRoot: resolve(packageRoot, "../../plugins"), payloadsRoot });
+// Claude Code is the authority on what it loads, so a verified payload must also pass its own validator.
+const reports = [
+  ...built,
+  ...officialFailures({ operation, reports: built, payloadDir: (plugin) => join(payloadsRoot, plugin, "payload"), cli: CLI, run: runCli }),
+];
 
-process.stdout.write(`${JSON.stringify({ reports, official }, null, 2)}\n`);
-if ([...reports.map(({ result }) => result.ok), ...official.map(({ ok }) => ok)].includes(false)) process.exitCode = 1;
+process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
+if (reports.some(({ result }) => !result.ok)) process.exitCode = 1;
