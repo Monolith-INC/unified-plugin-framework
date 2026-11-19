@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { fail, object, type Result } from "@agent-plugins/project";
 import type { HostName } from "./host-names.js";
 import { command, selectEnvironment } from "./tooling-process.js";
@@ -73,7 +74,7 @@ const download = async (pin: NativePin, target: string, fetcher: typeof fetch): 
   const response = await fetcher(pin.url, { redirect: "error", signal: AbortSignal.timeout(150_000) });
   const length = Number(response.headers.get("content-length") ?? 0);
   if (!response.ok || response.body === null || length <= 0 || length > 256 * 1024 * 1024) return false;
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(target, { mode: 0o600, flags: "wx" }));
+  await pipeline(Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>), createWriteStream(target, { mode: 0o600, flags: "wx" }));
   return `sha512-${await fileDigest(target, "sha512", "base64")}` === pin.integrity;
 };
 const EXTRACT = `import pathlib, sys, tarfile
@@ -127,10 +128,19 @@ const resolveNative = async (project: string, host: HostName, python: string, co
   return installed === null ? missing(true) : available(installed, "private", true);
 };
 
+/** What resolving a host program reads from outside: the process environment and the network. */
+export interface HostCliIo { readonly environment: NodeJS.ProcessEnv; readonly fetcher: typeof fetch }
+
+/** Edge interpreter: the real environment and network. */
+export const NODE_HOST_CLI_IO: HostCliIo = Object.freeze({
+  environment: process.env, // fp-allow: no-ambient-effect
+  fetcher: fetch, // fp-allow: no-ambient-effect
+});
+
 /** Resolve a host without modifying PATH. Downloads use only pinned native packages and run no npm scripts. */
 export const prepareHostCli = async (project: string, host: HostName, python: string, consent: boolean,
-  environment: NodeJS.ProcessEnv = process.env, fetcher: typeof fetch = fetch): Promise<HostCli> => {
-  const system = await onPath(host, environment);
+  io: HostCliIo = NODE_HOST_CLI_IO): Promise<HostCli> => {
+  const system = await onPath(host, io.environment);
   return system !== undefined ? available(system, "path")
-    : resolveNative(project, host, python, consent, environment, fetcher).catch(() => missing(consent));
+    : resolveNative(project, host, python, consent, io.environment, io.fetcher).catch(() => missing(consent));
 };
