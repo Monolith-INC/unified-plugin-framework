@@ -24,6 +24,19 @@ test('installer exposes main(args, io) without running when imported and help is
   assert.equal(io.fetches.length, 0);
 });
 
+test('a UPF source checkout is refused before any question, download or project write', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-source-checkout-'));
+  await mkdir(join(project, 'plugins', 'unified-plugin-framework'), { recursive: true });
+  await mkdir(join(project, 'packages', 'cli'), { recursive: true });
+  await writeFile(join(project, 'plugins', 'unified-plugin-framework', 'plugin.json'), '{}');
+  await writeFile(join(project, 'packages', 'cli', 'package.json'), '{}');
+  const io = ioFor(project, { ask: async () => assert.fail('asked a question') });
+  assert.equal(await main(['--project', project, '--version', '0.2.2'], io), 1);
+  assert.equal(io.fetches.length, 0);
+  assert.deepEqual((await readdir(project)).sort(), ['packages', 'plugins']);
+  assert.match(io.stderr.join(''), /source checkout[\s\S]*separate test project/);
+});
+
 test('explicit plan without private Python consent is refused before downloads or project writes', async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-launcher-consent-'));
   const input = join(project, 'plan.json');

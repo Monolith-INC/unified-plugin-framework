@@ -19,3 +19,14 @@ __pycache__/
 # Host payloads are built in CI and attached to GitHub releases (AGE-104)
 packages/adapter-*/payloads/
 release-assets/
+
+# UPF is never installed into its own source; dogfood in a separate test project.
+# These hold installed plugin copies and installer state, so they can never be committed.
+/.upf-tools/
+/.agents/
+/.claude/skills/
+/.claude/worktrees/
+/.claude/settings.local.json
+/.project-knowledge/
+/.project-knowledge.json
+/.unified-plugin-framework.json
