@@ -54,6 +54,7 @@ test('an abandoned installer lock is reclaimed once and waiters reacquire after 
   const path = join(directory, 'installer.lock');
   await mkdir(directory);
   await writeFile(path, JSON.stringify({ id: 'stale-run', pid: process.pid + 100_000, startedAt: '', childPid: null }));
+  await writeFile(`${path}.reclaim-stale-run`, JSON.stringify({ id: 'stale-run', pid: process.pid + 100_000, token: 'abandoned-claim' }));
   const old = new Date(Date.now() - 60_000);
   await utimes(path, old, old);
   let releaseWait;
@@ -79,6 +80,18 @@ test('an abandoned installer lock is reclaimed once and waiters reacquire after 
   assert.notEqual(next.id, winner.id);
   await releaseProjectLock(next);
   assert.deepEqual(await readdir(directory), []);
+});
+
+test('an old legacy lock whose owner record is still being written is kept and waited on', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-legacy-lock-'));
+  const path = join(project, '.upf-tools', 'installer.lock');
+  await mkdir(path, { recursive: true });
+  await writeFile(join(path, 'owner.json'), '{"id":"legacy-run","pid":');
+  const old = new Date(Date.now() - 60_000);
+  await utimes(path, old, old);
+  const io = { now: () => Date.now(), processAlive: () => false, sleep: () => Promise.reject(new Error('waited')) };
+  await assert.rejects(acquireProjectLock(project, io), /waited/);
+  assert.deepEqual(await readdir(path), ['owner.json']);
 });
 
 test('launcher log failure is optional and the CLI-reported log path takes precedence', async () => {
