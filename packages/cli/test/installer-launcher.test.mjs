@@ -52,7 +52,7 @@ test('latest resolution requests JSON metadata before binary archive downloads',
   encoding:'utf8',env:environment,timeout:10_000});
  assert.equal(run.status,1);assert.match(run.stderr,/checksum mismatch/);
  const requests=run.stdout.trim().split('\n').map(JSON.parse);
- assert.equal(requests.length,3);
+ assert.equal(requests.length,5,'metadata, then the archive and checksums downloaded twice after a mismatch');
  assert.match(requests[0].url,/\/releases\/latest$/);
  assert.equal(requests[0].accept,'application/vnd.github+json');
  assert.equal(requests.slice(1).every(request=>request.accept==='application/octet-stream' && request.url.includes('/download/v0.2.3/')),true);

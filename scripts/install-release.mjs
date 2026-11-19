@@ -3,7 +3,7 @@
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
 import {existsSync, lstatSync, readFileSync, readdirSync, readlinkSync} from 'node:fs';
-import {appendFile, chmod, cp, link, mkdir, mkdtemp, readFile, rename, rm, stat, unlink, writeFile} from 'node:fs/promises';
+import {appendFile, chmod, cp, link, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, unlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join, relative, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
@@ -22,6 +22,11 @@ const UV=Object.freeze({version:'0.13.7',archives:Object.freeze({
  'aarch64-apple-darwin':'81b811b57e4624df7ed3aac148e0359100d9962f3d9dce00aec533dc2e086731'})});
 const usage='Interactive: node install.mjs [--project <project>] [--version <version>]\nAutomation: node install.mjs --input <accepted-plan.json> --project <project> [--version <version>]\nLocal archive: --source <archive> --checksums <SHA256SUMS>\nPython executable: --python <python3.12+>';
 const stop=message=>{throw new Error(message);}; // Boundary: report installation failures once without partial activation.
+// Stops before the run log exists: cause, the recovery table's instruction, and why there is no log to read.
+const stopEarly=(cause,instruction)=>stop(`${cause} ${instruction} No log was written because the installer stopped before changing the project.`);
+const RERUN='then run the installer again.';
+const CHECKSUM_TWICE='Try again later or from another network.';
+const NEED_PYTHON=`Install Python 3.12 or newer, or pass --python <executable>, ${RERUN}`;
 const options=args=>parseArgs({args,options:{help:{type:'boolean'},strict:{type:'boolean'},version:{type:'string'},dest:{type:'string'},project:{type:'string'},input:{type:'string'},source:{type:'string'},checksums:{type:'string'},python:{type:'string'}},strict:true}).values;
 const NODE_IO=Object.freeze({env:process.env,platform:process.platform,arch:process.arch,libc:process.report?.getReport?.().header?.glibcVersionRuntime?'gnu':'musl',
  nodeVersion:process.versions.node,stdinIsTTY:process.stdin.isTTY,
@@ -49,7 +54,7 @@ const retryDownload=async(operation,url,accept,io,attempt=0)=>{
  const result=await operation().then(response=>({response}),error=>({error}));
  if(result.error===undefined && result.response.ok) return Buffer.from(await result.response.arrayBuffer());
  const failure=result.error ?? Object.assign(new Error(`Could not download ${url} (HTTP ${result.response.status}).`),{status:result.response.status});
- return attempt>=2 || !retryable(failure) ? stop(`Download failed after ${attempt+1} attempt(s): ${url} (${failure.status ?? failure.message}); nothing installed.`)
+ return attempt>=2 || !retryable(failure) ? stopEarly(`Download failed after ${attempt+1} attempt(s): ${url} (${failure.status ?? failure.message}); nothing installed.`,`Check the network connection, ${RERUN}`)
   : io.sleep(retryDelay(attempt)).then(()=>retryDownload(operation,url,accept,io,attempt+1));
 };
 export const downloadBytes=(url,accept='application/octet-stream',io=NODE_IO)=>retryDownload(
@@ -63,11 +68,19 @@ const download=async(version,scratch,io)=>{
  await Promise.all([[archive,`${base}/unified-plugin-framework-${version}.tar.gz`],[checksums,`${base}/SHA256SUMS`]].map(async([path,url])=>writeFile(path,await get(url,'application/octet-stream',io))));
  return {archive,checksums};
 };
+// The verified archive path, or null on a mismatch or a missing unique checksum.
 const verify=async(files,version)=>{
  const entries=(await readFile(files.checksums,'utf8')).trim().split(/\r?\n/).filter(line=>line.endsWith(`  unified-plugin-framework-${version}.tar.gz`));
  const expected=entries.length===1 ? entries[0].split('  ')[0] : '';
- return /^[a-f0-9]{64}$/.test(expected) && digest(await readFile(files.archive))===expected
-  ? files.archive : stop('Archive checksum mismatch or missing unique checksum; nothing installed.');
+ return /^[a-f0-9]{64}$/.test(expected) && digest(await readFile(files.archive))===expected ? files.archive : null;
+};
+const localFiles=args=>({archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))});
+const ARCHIVE_MISMATCH='Archive checksum mismatch or missing unique checksum; nothing installed.';
+// A cache or proxy can corrupt one download, so a downloaded release is fetched once more before the mismatch stops.
+const verifiedArchive=async(args,scratch,io,attempt=0)=>{
+ const archive=await verify(args.source ? localFiles(args) : await download(args.version,scratch,io),args.version);
+ return archive ?? (args.source ? stopEarly(ARCHIVE_MISMATCH,`Download the archive and its SHA256SUMS again, ${RERUN}`)
+  : attempt>=1 ? stopEarly(ARCHIVE_MISMATCH,CHECKSUM_TWICE) : verifiedArchive(args,scratch,io,attempt+1));
 };
 const pythonExecutable=(preferred,io)=>{
  const candidates=preferred===undefined ? ['python3.12','python3','python3.13','python3.14'] : [preferred];
@@ -98,8 +111,8 @@ const publish=async(source,target)=>{
 const runMain=async(args,io)=>{
  const parsed=options(args);
  return parsed.help ? {ok:true,message:`${usage}\n`,exitCode:0}
-  : Number(io.nodeVersion.split('.')[0])<22 ? stop('Node.js 22+ is required.')
-  : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? stop('Interactive installation needs a terminal. Run the one-command installer in a terminal or supply --input for automation.')
+  : Number(io.nodeVersion.split('.')[0])<22 ? stopEarly('Node.js 22+ is required.',`Install Node.js 22 or newer, ${RERUN}`)
+  : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? stopEarly('Interactive installation needs a terminal.','Run the one-command installer in a terminal or supply --input for automation.')
     : prepare(parsed,io);
 };
 export const main=async(args,io=NODE_IO)=>{
@@ -114,9 +127,9 @@ export const main=async(args,io=NODE_IO)=>{
 };
 const prepare=async(args,io)=>{
  const acceptedPlan=args.input===undefined ? null : await readFile(resolve(args.input),'utf8').then(JSON.parse).catch(()=>null);
- const python=pythonExecutable(args.python ?? acceptedPlan?.python,io);
+ const python=pythonExecutable(args.python ?? acceptedPlan?.python,io) ?? await reusablePrivatePython(args.project ?? args.dest ?? io.cwd(),io);
  const consented=python!==null ? true : acceptedPlan?.consent?.privatePython===true || args.input===undefined && await privatePythonConsent(args,io);
- if(!consented) return stop('A private Python 3.12 installation requires explicit consent; no project files were changed.');
+ if(!consented) return stopEarly('A private Python 3.12 installation requires explicit consent; no project files were changed.',NEED_PYTHON);
  const privateRuntime=python===null ? await installPrivatePython(args,io) : null;
  try {
   const version=String(args.version ?? io.env.UPF_VERSION ?? await latest(io)).replace(/^v/,'');
@@ -129,6 +142,15 @@ const prepare=async(args,io)=>{
 const privatePythonConsent=async(args,io)=>args.input!==undefined
  ? readFile(resolve(args.input),'utf8').then(JSON.parse).then(plan=>plan.consent?.privatePython===true).catch(()=>false)
  : askYesNo(io,'Python 3.12+ is unavailable. Allow the installer to add a private Python 3.12.16? yes/no: ');
+const PRIVATE_PYTHON=join('.upf-tools','python');
+const savedPlanPython=project=>readFile(join(project,'.upf-tools','setup-plan.json'),'utf8').then(text=>JSON.parse(text).python).catch(()=>undefined);
+const privateInterpreters=project=>readdir(join(project,PRIVATE_PYTHON)).then(names=>names.filter(name=>name.startsWith(`cpython-${PYTHON_VERSION}-`))
+ .map(name=>join(project,PRIVATE_PYTHON,name,'bin','python3.12')),()=>[]);
+// A rerun after a killed or partial run reuses the project's private Python instead of asking and downloading again.
+const reusablePrivatePython=async(project,io)=>{
+ const candidates=[await savedPlanPython(resolve(project)),...await privateInterpreters(resolve(project))].filter(path=>typeof path==='string');
+ return candidates.find(path=>pythonExecutable(path,io)!==null) ?? null;
+};
 const YES_NO=new Map([['y',true],['yes',true],['n',false],['no',false]]);
 // Anything else is asked again with an example; after three unclear replies the safe answer, no, stands.
 export const askYesNo=(io,prompt,attempts=3)=>io.ask(prompt).then(answer=>YES_NO.get(String(answer??'').trim().toLowerCase())
@@ -143,17 +165,18 @@ const uvEnvironment=(base,scratch,pythonRoot)=>Object.freeze({
 const installPrivatePython=async(args,io)=>{
  const triple=uvTriple(io);
  const expected=UV.archives[triple];
- return triple===null || expected===undefined ? stop('Private Python is unsupported on this platform; no project files were changed.')
+ return triple===null || expected===undefined ? stopEarly('Private Python is unsupported on this platform; no project files were changed.',NEED_PYTHON)
   : installPinnedPython(triple,expected,io);
 };
+// One re-download on a mismatch, as for the release archive; a second mismatch is a real integrity failure.
+const pinnedBytes=(url,expected,io,attempt=0)=>downloadBytes(url,'application/octet-stream',io).then(bytes=>digest(bytes)===expected ? bytes
+ : attempt>=1 ? stopEarly('Pinned uv checksum mismatch; private Python was not installed.',CHECKSUM_TWICE) : pinnedBytes(url,expected,io,attempt+1));
 const installPinnedPython=async(triple,expected,io)=>{
  const scratch=await mkdtemp(join(tmpdir(),'upf-private-python-'));
  try {
  const archive=join(scratch,`uv-${triple}.tar.gz`);
  const url=`https://github.com/astral-sh/uv/releases/download/${UV.version}/uv-${triple}.tar.gz`;
- const bytes=await downloadBytes(url,'application/octet-stream',io);
- if(digest(bytes)!==expected) return stop('Pinned uv checksum mismatch; private Python was not installed.');
- await writeFile(archive,bytes);
+ await writeFile(archive,await pinnedBytes(url,expected,io));
  const extracted=join(scratch,'uv-extract');
  const pythonRoot=join(scratch,'python');
  await mkdir(extracted);
@@ -166,7 +189,7 @@ const installPinnedPython=async(triple,expected,io)=>{
  const python=located.status===0 ? located.stdout.trim() : '';
  const verified=python.length>0 && resolve(python).startsWith(`${resolve(pythonRoot)}/`)
   && io.spawnSync(python,['--version'],{encoding:'utf8',timeout:10_000,stdio:'pipe',env}).status===0;
- return verified ? {scratch,pythonRoot,python} : stop('Pinned Python 3.12.16 could not be installed and verified.');
+ return verified ? {scratch,pythonRoot,python} : stopEarly('Pinned Python 3.12.16 could not be installed and verified.',NEED_PYTHON);
  } catch(error) {
   await rm(scratch,{recursive:true,force:true});
   throw error;
@@ -180,15 +203,14 @@ const install=async(args,io)=>{
 const stageArchive=async(args,scratch,io)=>{
  const project=resolve(args.project);
  const target=join(project,'.upf-tools/distributions',args.version);
- return !validTarget(project,target) ? stop('Choose an existing project directory with no linked installation paths.') : prepareArchive(args,scratch,project,io);
+ return !validTarget(project,target) ? stopEarly('The project directory is missing or has linked installation paths.',`Choose an existing project directory with no linked installation paths, ${RERUN}`) : prepareArchive(args,scratch,project,io);
 };
 const prepareArchive=async(args,scratch,project,io)=>{
- const files=args.source ? {archive:resolve(args.source),checksums:resolve(args.checksums ?? join(dirname(args.source),'SHA256SUMS'))} : await download(args.version,scratch,io);
- const archive=await verify(files,args.version);
+ const archive=await verifiedArchive(args,scratch,io);
  const python=args.extractionPython ?? pythonExecutable(args.python,io);
  const extracted=extract(python,archive,scratch,args.version,io);
  const manifest=JSON.parse(await readFile(join(extracted,'distribution.json'),'utf8'));
- return manifest.format!=='upf-distribution/1' || manifest.version!==args.version ? stop('Distribution identity does not match the selected release.')
+ return manifest.format!=='upf-distribution/1' || manifest.version!==args.version ? stopEarly('Distribution identity does not match the selected release.','Download the installer again, then run it.')
   : chooseInstallation({...args,extractionPython:python},extracted,project,io);
 };
 const chooseInstallation=async(args,extracted,project,io)=>{
@@ -201,11 +223,11 @@ const chooseInstallation=async(args,extracted,project,io)=>{
  });
  if(!selection.ok) return reportFailure(selection,io);
  const acceptedProject=selection.value.project;
- if(!validTarget(acceptedProject,join(acceptedProject,'.upf-tools/distributions',args.version))) return stop('Choose an existing project directory with no linked installation paths.');
+ if(!validTarget(acceptedProject,join(acceptedProject,'.upf-tools/distributions',args.version))) return stopEarly('The chosen project directory is missing or has linked installation paths.',`Choose an existing project directory with no linked installation paths, ${RERUN}`);
  const log=await beginRunLog(extracted,acceptedProject,args.version,io);
  const lock=await acquireProjectLock(acceptedProject,io);
  try {
-  const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(acceptedProject,args.privateRuntime,io);
+  const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(acceptedProject,args.privateRuntime,io,log);
   const accepted={...selection.value,plan:{...selection.value.plan,python}};
   await (log===null ? Promise.resolve() : appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined));
   await ignoreToolFolders(acceptedProject,io);
@@ -223,11 +245,14 @@ const explicitPlan=async(args,root,project)=>{
  const parsed=parseBootstrap(JSON.parse(await readFile(resolve(args.input),'utf8')));
  return parsed.ok ? {ok:true,value:{project,plan:parsed.value}} : parsed;
 };
-const persistPrivatePython=async(project,runtime,io)=>{
- const target=join(project,'.upf-tools','python');
+const withLog=(message,log)=>`${message}${log===null?' Setup log could not be saved.':` Log: ${log}`}`;
+// An existing target holding the same verified interpreter is the runtime a previous run already placed: reuse it.
+const persistPrivatePython=async(project,runtime,io,log)=>{
+ const target=join(project,PRIVATE_PYTHON);
  const relativePython=relative(runtime.pythonRoot,runtime.python);
- return relativePython.startsWith('..') ? stop('The private Python path escaped its temporary installation directory.')
-  : existsSync(target) ? stop('An existing .upf-tools/python directory is preserved; move it before accepting a private Python installation.')
+ return relativePython.startsWith('..') ? stop(withLog('The private Python path escaped its temporary installation directory. This is an installer defect; report it with the log.',log))
+  : existsSync(target) && pythonExecutable(join(target,relativePython),io)!==null ? join(target,relativePython)
+  : existsSync(target) ? stop(withLog(`An existing .upf-tools/python directory is preserved because its interpreter could not be verified. Move it away (the knowledge runtime may link to it), ${RERUN}`,log))
     : mkdir(join(project,'.upf-tools'),{recursive:true,mode:0o700}).then(()=>chmod(join(project,'.upf-tools'),0o700))
       .then(()=>cp(runtime.pythonRoot,target,{recursive:true,verbatimSymlinks:true,errorOnExist:true}))
       .then(()=>join(target,relativePython));

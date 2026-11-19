@@ -167,3 +167,65 @@ test('launcher log failure is optional and the CLI-reported log path takes prece
   assert.equal(reportLogPath({ ok: false, log: '/tmp/fallback.jsonl' }, null), '/tmp/fallback.jsonl');
   assert.equal(reportLogPath({ ok: false }, null), null);
 });
+
+const noLog = /No log was written because the installer stopped before changing the project\./;
+const pythonOnly = (accepted, calls = []) => (program) => { calls.push(program); return { status: accepted.includes(program) ? 0 : 1 }; };
+
+test('a rerun reuses the project private Python without asking consent or downloading it again', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-reuse-'));
+  const interpreter = join(project, '.upf-tools', 'python', 'cpython-3.12.16-linux-x86_64-gnu', 'bin', 'python3.12');
+  await mkdir(join(interpreter, '..'), { recursive: true });
+  await writeFile(interpreter, '');
+  const asked = [];
+  const io = ioFor(project, { stdinIsTTY: true, stdoutIsTTY: true, spawnSync: pythonOnly([interpreter]), ask: async (prompt) => { asked.push(prompt); return 'no'; } });
+  assert.equal(await main(['--project', project, '--version', '0.2.2'], io), 1);
+  assert.deepEqual(asked, []);
+  assert.match(io.stderr.join(''), /unified-plugin-framework-0\.2\.2\.tar\.gz/);
+  assert.doesNotMatch(io.stderr.join(''), /consent|uv/);
+});
+
+test('a rerun reuses the saved plan Python before offering a private installation', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-saved-'));
+  await mkdir(join(project, '.upf-tools'));
+  await writeFile(join(project, '.upf-tools', 'setup-plan.json'), JSON.stringify({ python: '/saved/python3.12' }));
+  const calls = [];
+  const io = ioFor(project, { stdinIsTTY: true, stdoutIsTTY: true, spawnSync: pythonOnly(['/saved/python3.12'], calls), ask: async () => assert.fail('asked consent') });
+  assert.equal(await main(['--project', project, '--version', '0.2.2'], io), 1);
+  assert.ok(calls.includes('/saved/python3.12'));
+});
+
+test('a pinned uv checksum mismatch is downloaded once more, then stops with an instruction and no log', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-uv-'));
+  const input = join(project, 'plan.json');
+  await writeFile(input, JSON.stringify({ consent: { privatePython: true } }));
+  const fetches = [];
+  const io = ioFor(project, { arch: 'x64', libc: 'gnu', fetch: async (url) => { fetches.push(url); return { ok: true, status: 200, arrayBuffer: async () => Buffer.from('corrupt') }; } });
+  assert.equal(await main(['--input', input, '--project', project, '--version', '0.2.2'], io), 1);
+  assert.equal(fetches.length, 2);
+  assert.match(io.stderr.join(''), /uv checksum mismatch; private Python was not installed\. Try again later or from another network\./);
+  assert.match(io.stderr.join(''), noLog);
+  assert.deepEqual(await readdir(project), ['plan.json']);
+});
+
+test('a release archive checksum mismatch is downloaded once more, then stops with an instruction and no log', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-archive-'));
+  const fetches = [];
+  const io = ioFor(project, { spawnSync: pythonOnly(['python3.12']), fetch: async (url) => { fetches.push(basename(url)); return { ok: true, status: 200, arrayBuffer: async () => Buffer.from('corrupt') }; } });
+  assert.equal(await main(['--input', join(project, 'absent.json'), '--project', project, '--version', '0.2.2'], io), 1);
+  assert.deepEqual(fetches.toSorted(), ['SHA256SUMS', 'SHA256SUMS', 'unified-plugin-framework-0.2.2.tar.gz', 'unified-plugin-framework-0.2.2.tar.gz']);
+  assert.match(io.stderr.join(''), /Archive checksum mismatch.*Try again later or from another network\./);
+  assert.match(io.stderr.join(''), noLog);
+  assert.deepEqual(await readdir(project), []);
+});
+
+test('launcher stops before confirmation name the instruction and why no log exists', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-early-'));
+  const io = ioFor(project, { nodeVersion: '20.0.0' });
+  assert.equal(await main([], io), 1);
+  assert.match(io.stderr.join(''), /Install Node\.js 22 or newer, then run the installer again\./);
+  assert.match(io.stderr.join(''), noLog);
+  const refused = ioFor(project, { stdinIsTTY: true, stdoutIsTTY: true });
+  assert.equal(await main(['--project', project, '--version', '0.2.2'], refused), 1);
+  assert.match(refused.stderr.join(''), /pass --python <executable>, then run the installer again\./);
+  assert.match(refused.stderr.join(''), noLog);
+});
