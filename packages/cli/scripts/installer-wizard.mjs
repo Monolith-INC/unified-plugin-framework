@@ -152,22 +152,28 @@ const confirm = async (io, project, plan, version, report, missingHosts) => {
 const savedSettings = async project => {
   const settings = await readJson(join(project, '.unified-plugin-framework.json'));
   const knowledge = await readJson(join(project, '.project-knowledge.json'));
-  const saved = await readJson(join(project, '.upf-tools/setup-plan.json'));
+  const saved = await savedPlanOf(project);
   if (!settings.ok) return settings;
   if (!knowledge.ok) return knowledge;
   if ([settings.value, knowledge.value].some(value => value !== null && !object(value))) {
     return fail('invalid-settings', 'Saved project settings are not objects.', 'Preserve and repair existing settings before rerunning setup.');
   }
-  if (!saved.ok) return saved;
-  const plan = saved.value === null ? ok(null) : parseBootstrap(saved.value);
-  return plan.ok ? ok({ settings: settings.value, knowledge: knowledge.value, savedPlan: plan.value })
-    : fail('invalid-saved-plan', 'The saved setup plan is invalid.', 'Preserve and repair it before rerunning setup, or use an explicit accepted --input plan.');
+  return !saved.ok && saved.error.code !== 'invalid-saved-plan' ? saved
+    : ok({ settings: settings.value, knowledge: knowledge.value, savedPlan: saved.ok ? saved.value : null, savedPlanInvalid: !saved.ok });
 };
+// A saved plan only supplies earlier answers: one that is not valid JSON or not a valid plan is set aside after confirmation.
+const savedPlanOf = project => readFile(join(project, '.upf-tools/setup-plan.json'), 'utf8')
+  .then(text => Promise.resolve(text).then(JSON.parse).then(parseBootstrap, () => fail('invalid-saved-plan', 'The saved setup plan is not valid JSON.', '')),
+    error => error.code === 'ENOENT' ? ok(null)
+      : fail('unreadable-settings', 'Could not read the saved setup plan.', 'Preserve the existing file and correct it before rerunning the installer.'))
+  .then(plan => plan.ok || plan.error.code === 'unreadable-settings' ? plan : fail('invalid-saved-plan', 'The saved setup plan is invalid.', ''));
+const INVALID_PLAN_NOTE = 'The saved setup plan could not be read, so the questions are asked again. After you confirm, it is kept beside the new plan as setup-plan.json.broken-<time>.';
 
 /** Inject questions and output while keeping the same validation and plan collection. */
 export const collectInstallation = async (io, options = {}) => {
   const project = resolve(await text(io, 'project', options.project ?? process.cwd()));
   const saved = await savedSettings(project);
+  if (saved.ok && saved.value.savedPlanInvalid) await io.say(INVALID_PLAN_NOTE);
   return saved.ok ? choose(io, project, saved.value.settings, saved.value.knowledge, { ...options, savedPlan: saved.value.savedPlan }) : saved;
 };
 

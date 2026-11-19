@@ -48,7 +48,7 @@ For Linear, set the credential environment required by the existing adapter (nor
 
 The complete archive contains the CLI and production Node dependencies, canonical framework/knowledge sources and lock, all five unchanged pinned upstream repositories with supporting files/licenses, and the knowledge runtime source. Installed releases stage bundled plugins locally; missing or changed bundled content fails rather than downloading plugin repositories.
 
-After confirmation, the installer places the verified distribution under `.upf-tools/distributions/<version>` and saves the accepted plan at `.upf-tools/setup-plan.json`. The report shows shared results once and verification for each selected host. It includes a local log and recovery instructions when available. Rerunning setup reuses completed steps.
+After confirmation, the installer places the verified distribution under `.upf-tools/distributions/<version>` and saves the accepted plan at `.upf-tools/setup-plan.json`. The report shows shared results once and verification for each selected host. It includes a local log and recovery instructions when available. Rerunning setup reuses completed steps. If the saved plan cannot be read, the installer asks the questions again and, after confirmation, keeps the old file beside the new one as `setup-plan.json.broken-<time>`.
 
 | Exit code | Meaning |
 | --- | --- |

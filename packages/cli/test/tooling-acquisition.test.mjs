@@ -62,3 +62,25 @@ test("a hung discovery command settles at its deadline", { skip: process.platfor
   const result = await boundedOutput(process.execPath, ["-e", "setInterval(() => {}, 1000)"], tmpdir(), 150, {});
   assert.equal(result.ok, false);
 });
+
+test("when every pinned host is signed out, discovery reports sign-in as the person's action", { skip: process.platform === "win32" }, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "upf-acquisition-signin-"));
+  const project = join(fixture, "project");
+  const bin = join(fixture, "bin");
+  await Promise.all([bin, join(project, ".project-knowledge/runtime/bin"), join(project, "knowledge")].map((path) => mkdir(path, { recursive: true })));
+  await writeFile(join(bin, "codex"), `#!${process.execPath}
+if (process.argv[2] === "--version") console.log("codex-cli 0.166.0");
+else process.exit(1);
+`, { mode: 0o700 });
+  const report = { status: "action-required", steps: [
+    ...["knowledge-runtime", "knowledge-settings", "host-discovery"].map((step) => ({ step, status: "ready", evidence: "fixture" })),
+    { step: "knowledge-content", status: "action-required", failure: { code: "knowledge-discovery-needed" } },
+  ] };
+  const python = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+  const plan = { hosts: ["codex"], python, knowledge: { knowledgeRoot: "knowledge" }, consent: { headlessDiscovery: true } };
+  const result = await finishKnowledge(report, project, plan, {}, ["codex"], new Map(), { PATH: bin });
+  const content = result.steps.find(({ step }) => step === "knowledge-content");
+  assert.equal(content.failure.code, "host-sign-in-needed");
+  assert.match(content.failure.message, /not signed in: Codex/);
+  assert.match(content.failure.recovery, /Sign in to the assistant/);
+});

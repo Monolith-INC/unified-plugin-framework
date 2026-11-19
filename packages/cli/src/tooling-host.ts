@@ -172,7 +172,7 @@ const pinnedVersion = (name: string): string => {
 const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
   canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python,
   ...(environment.hostCli?.kind === "available" ? { program: environment.hostCli.program } : {}),
-  ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+  ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }), ...(environment.patience === undefined ? {} : { patience: environment.patience }) });
 const realProject = (project: string): string => {
   try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
 };

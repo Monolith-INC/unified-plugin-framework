@@ -1,14 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { RECOVERY_CODES, UNEXPECTED, exitCodeOf, headlessDiscovery, recoveryFor } from "../dist/tooling-recovery.js";
 
 const expected = {
-  auto: ["network-unavailable", "checksum-mismatch", "python-missing", "invalid-saved-plan", "stale-lock", "write-busy", "host-configuration-conflict", "host-cli-missing", "tool-timeout", "tool-command-failed", "partial-step", "dependency-fetch", "knowledge-discovery-needed", "tooling-missing", "host-unavailable", "host-skill-errors", "host-activation-needed", "tooling-storage"],
+  auto: ["network-unavailable", "checksum-mismatch", "python-missing", "invalid-saved-plan", "stale-lock", "write-busy", "host-cli-missing", "tool-timeout", "tool-command-failed", "partial-step", "dependency-fetch", "knowledge-discovery-needed", "tooling-missing", "host-unavailable", "host-skill-errors", "host-activation-needed", "tooling-storage"],
   "hand-off": ["review-setup-needed"],
   "user-action": ["host-sign-in-needed", "tracker-attention", "authentication-needed", "connection-unavailable", "tracker-error", "outcome-unknown", "invalid-reply", "invalid-scope", "setup-needed", "invalid-pagination", "invalid-parent", "invalid-request", "not-found", "outside-project", "unmapped-kind", "unmapped-state", "unsupported-operation"],
-  stop: ["platform-unsupported", "extractor-missing", "unsupported-runtime", "invalid-settings", "write-denied", "storage-error", "project-busy", "invalid-json", "unreadable-input", "usage", "answers-required", "invalid-bootstrap", "host-required", "distribution-incomplete"],
-  preserve: ["settings-changed", "unsupported-settings", "symlink-escape", "modified-file", "unmanaged-file", "active-skill-drift", "dependency-fetch-mismatch", "dependency-source", "dependency-pin", "dependency-binding", "artifact-conflict", "invalid-local-store"],
+  stop: ["platform-unsupported", "extractor-missing", "unsupported-runtime", "invalid-settings", "write-denied", "storage-error", "project-busy", "invalid-json", "unreadable-input", "usage", "answers-required", "invalid-bootstrap", "host-required", "distribution-incomplete", "handoff-storage", "missing-input"],
+  preserve: ["host-configuration-conflict", "settings-changed", "unsupported-settings", "symlink-escape", "modified-file", "unmanaged-file", "active-skill-drift", "dependency-fetch-mismatch", "dependency-source", "dependency-pin", "dependency-binding", "artifact-conflict", "invalid-local-store"],
 };
 
 test("discovery starts outside the project and configures the two MCP servers explicitly", () => {
@@ -47,7 +47,7 @@ test("each recovery has its approved class, exit and bounded fallback", () => {
 });
 
 test("the table covers literal failures emitted directly by setup", async () => {
-  const files = ["tooling-node.ts", "tooling-host.ts", "tooling-input.ts", "tooling-runtime.ts", "tooling-process.ts", "tooling-command.ts", "tooling-files.ts", "dependency-sources.ts", "dependency-fetch.ts", "host-table.ts", "distribution.ts"];
+  const files = (await readdir(new URL("../src/", import.meta.url))).filter((file) => file.endsWith(".ts"));
   const sources = await Promise.all(files.map((file) => readFile(new URL(`../src/${file}`, import.meta.url), "utf8")));
   const emitted = sources.flatMap((source) => [...source.matchAll(/(?:fail|inputNeeded)\("([a-z][a-z-]+)"/g)].map((match) => match[1]));
   assert.deepEqual([...new Set(emitted.filter((code) => !RECOVERY_CODES.includes(code)))], []);

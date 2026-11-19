@@ -37,13 +37,16 @@ export interface HostSetup {
 type ProjectPhase = { readonly report: ToolingReport; readonly events: readonly BootstrapEvent[] };
 type StepResult = { readonly step: ToolingOutcome; readonly events: readonly BootstrapEvent[] };
 
-const retryable = (action: RecoveryAction, step: ToolingStep): boolean =>
-  action.kind === "retry" || action.kind === "take-over-stale-lock" || action.kind === "clean-and-redo"
-    || (action.kind === "backup-and-replace-owned" && step === "cli");
+const RETRYABLE: ReadonlySet<RecoveryAction["kind"]> = new Set(["retry", "retry-with-longer-limit", "take-over-stale-lock", "clean-and-redo"]);
+/** A retry after a timeout gets this many times the usual limit; every other run keeps the usual one. */
+export const LONGER_LIMIT = 2;
+const patienceFor = (action: RecoveryAction["kind"]): number => action === "retry-with-longer-limit" ? LONGER_LIMIT : 1;
 
-type RetryState = { readonly code: string; readonly remaining: number; readonly attempt: number };
-const recoveryStep = (io: ToolingIO, apply: boolean, step: ToolingStep, host?: HostName, state?: RetryState): Task<StepResult> => async () => {
-  const run = await bootstrapTooling(io, apply, [step])();
+/** The step's interpreter at a time-limit multiple: 1 normally, `LONGER_LIMIT` when retrying a timeout. */
+export type PatientIO = (patience: number) => ToolingIO;
+type RetryState = { readonly code: string; readonly remaining: number; readonly attempt: number; readonly patience: number };
+const recoveryStep = (io: PatientIO, apply: boolean, step: ToolingStep, host?: HostName, state?: RetryState): Task<StepResult> => async () => {
+  const run = await bootstrapTooling(io(state?.patience ?? 1), apply, [step])();
   const observed = run.ok ? run.value.steps[0] : undefined;
   const outcome: ToolingOutcome = observed ?? { step, status: "action-required",
     failure: run.ok ? { code: "tooling-missing", message: "No observation was recorded.", recovery: "Repeat setup for this step." } : run.error };
@@ -51,23 +54,24 @@ const recoveryStep = (io: ToolingIO, apply: boolean, step: ToolingStep, host?: H
     : recoverOutcome(io, outcome, host, state);
 };
 
-const recoverOutcome = async (io: ToolingIO, outcome: Extract<ToolingOutcome, { status: "action-required" }>,
+const recoverOutcome = async (io: PatientIO, outcome: Extract<ToolingOutcome, { status: "action-required" }>,
   host?: HostName, state?: RetryState): Promise<Result<StepResult>> => {
   const { step, failure } = outcome;
   const policy = recoveryFor(step, failure.code);
   const remaining = state === undefined ? policy.attempts : state.code === failure.code ? state.remaining : 0;
   const attempt = (state?.attempt ?? 0) + 1;
-  const action = remaining > 0 && retryable(policy.action, step) ? policy.action.kind : "none";
+  const action = remaining > 0 && RETRYABLE.has(policy.action.kind) ? policy.action.kind : "none";
   const event: BootstrapEvent = { ...(host === undefined ? {} : { host }), step, code: failure.code, action, attempt };
   const next: StepResult = { step: { ...outcome, failure: withRecovery(failure, policy.onFailure.instruction) }, events: [event] };
-  const retried = action === "none" ? ok(next) : await recoveryStep(io, true, step, host, { code: failure.code, remaining: remaining - 1, attempt })();
+  const retried = action === "none" ? ok(next)
+    : await recoveryStep(io, true, step, host, { code: failure.code, remaining: remaining - 1, attempt, patience: patienceFor(action) })();
   return retried.ok && action !== "none" ? ok({ ...retried.value, events: recoveryEvents.concat([event], retried.value.events) }) : retried;
 };
 
 const withRecovery = (failure: Failure, instruction: string): Failure =>
   failure.code === "tooling-missing" ? failure : { ...failure, recovery: instruction };
 
-const runPhase = (io: ToolingIO, apply: boolean, steps: readonly ToolingStep[], host?: HostName,
+const runPhase = (io: PatientIO, apply: boolean, steps: readonly ToolingStep[], host?: HostName,
   progress: (host: HostName | undefined, step: ToolingStep) => void = () => undefined): Promise<ProjectPhase> =>
   steps.reduce<Promise<ProjectPhase>>((pending, step) => pending.then(async (phase) => {
     progress(host, step);
@@ -81,11 +85,12 @@ const selectedSteps = (plan: AcceptedPlan, host: HostName): readonly ToolingStep
   HOST_STEPS.filter((step) => plan.steps.includes(step) || (host !== plan.hosts[0] && step === "host-discovery" && plan.steps.includes("dependencies")));
 
 /** Describe one install without effects. Running the task sequences project work and each selected host. */
-export const bootstrapHosts = (ioFor: (host: HostName) => ToolingIO, apply: boolean, plan: AcceptedPlan,
+export const bootstrapHosts = (ioFor: (host: HostName, patience?: number) => ToolingIO, apply: boolean, plan: AcceptedPlan,
   progress?: (host: HostName | undefined, step: ToolingStep) => void): Task<HostSetup> => async () => {
-  const project = await runPhase(ioFor(plan.hosts[0]), apply, TOOLING_STEPS.filter((step) => plan.steps.includes(step) && !HOST_STEPS.includes(step)), undefined, progress);
+  const patient = (host: HostName): PatientIO => (patience) => ioFor(host, patience);
+  const project = await runPhase(patient(plan.hosts[0]), apply, TOOLING_STEPS.filter((step) => plan.steps.includes(step) && !HOST_STEPS.includes(step)), undefined, progress);
   return ok(await plan.hosts.reduce<Promise<HostSetup>>((pending, host) => pending.then(async (setup) => {
-    const phase = await runPhase(ioFor(host), apply, selectedSteps(plan, host), host, progress);
+    const phase = await runPhase(patient(host), apply, selectedSteps(plan, host), host, progress);
     return { ...setup, hosts: [...setup.hosts, { host, tooling: phase.report }], events: recoveryEvents.concat(setup.events, phase.events) };
   }), Promise.resolve({ project: project.report, hosts: [], events: project.events })));
 };
@@ -97,6 +102,7 @@ export const pendingTasks = (report: ToolingReport): readonly TaskKind[] =>
     switch (action.kind) {
       case "hand-off": return [action.task];
       case "acquire-knowledge": return ["knowledge-discovery"];
-      default: return step.failure.code === "host-sign-in-needed" ? ["host-sign-in"] : [];
+      // Headless discovery stopped on sign-in: the person signs in, and the knowledge still needs collecting.
+      default: return step.failure.code === "host-sign-in-needed" ? ["host-sign-in", "knowledge-discovery"] : [];
     }
   }))];

@@ -141,7 +141,12 @@ test('malformed configuration and a failed read-only preview stop before confirm
   assert.ok(!q.shown.some(prompt => prompt.title === 'Apply this setup?'));
   await mkdir(join(project, '.upf-tools'));
   await writeFile(join(project, '.upf-tools/setup-plan.json'), '{}');
-  assert.equal((await questions().run(project)).error.code, 'invalid-saved-plan');
+  const reasked = questions();
+  assert.notEqual((await reasked.run(project)).error?.code, 'invalid-saved-plan');
+  assert.ok(reasked.output.some(line => /questions are asked again.*setup-plan\.json\.broken-/.test(line)));
+  assert.equal(await readFile(join(project, '.upf-tools/setup-plan.json'), 'utf8'), '{}', 'nothing is set aside before confirmation');
+  await writeFile(join(project, '.upf-tools/setup-plan.json'), '{not json');
+  assert.notEqual((await questions().run(project)).error?.code, 'invalid-saved-plan');
   await writeFile(join(project, '.unified-plugin-framework.json'), '{invalid');
   assert.equal((await questions().run(project)).error.code, 'unreadable-settings');
 });

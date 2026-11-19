@@ -21,7 +21,7 @@ export type RecoveryAction =
   | { readonly kind: "retry" }
   | { readonly kind: "install-private-python" }
   | { readonly kind: "install-host-cli" }
-  | { readonly kind: "backup-and-replace-owned" }
+  | { readonly kind: "retry-with-longer-limit" }
   | { readonly kind: "clean-and-redo" }
   | { readonly kind: "take-over-stale-lock" }
   | { readonly kind: "set-aside-and-ask" }
@@ -62,10 +62,11 @@ const BY_CODE: ReadonlyMap<string, Recovery> = new Map<string, Recovery>([
   ["stale-lock", auto({ kind: "take-over-stale-lock" }, 1, stop(`Another installation still holds the lock. Wait for it to finish, then ${RERUN.toLowerCase()}`))],
   ["write-busy", auto({ kind: "retry" }, 2, stop(`A configuration file stayed busy. Close other setup tools, then ${RERUN.toLowerCase()}`))],
   ["write-denied", final(stop("The installer has no permission to write a setup file. Give your user write access to it, then run the installer again."))],
-  ["host-configuration-conflict", auto({ kind: "backup-and-replace-owned" }, 1, PRESERVE.onFailure)],
+  // Host entries are never recorded as installer-owned, so a differing entry is always someone else's: preserve it.
+  ["host-configuration-conflict", final({ class: "preserve", instruction: "An existing assistant configuration entry differs from this setup and was not written by the installer, so it was left as it is. Reconcile the entry the message names, then run the installer again." })],
   ["host-cli-missing", auto({ kind: "install-host-cli" }, 1, { class: "user-action", instruction: "Install the assistant's command-line tool with its official installer, add it to your PATH, then run the installer again." })],
   ["host-sign-in-needed", final({ class: "user-action", instruction: "Sign in to the assistant with its login command, then run the installer again." })],
-  ["tool-timeout", auto({ kind: "retry" }, 1, stop(`A setup program did not finish in time. ${RERUN}`))],
+  ["tool-timeout", auto({ kind: "retry-with-longer-limit" }, 1, stop(`A setup program did not finish in time, even with a longer time limit. ${RERUN}`))],
   ["tool-command-failed", auto({ kind: "retry" }, 1, stop(`A setup program failed. The log names the program and step. ${RERUN}`))],
   ["partial-step", auto({ kind: "clean-and-redo" }, 1, stop(`An interrupted step could not be cleaned up. ${RERUN}`))],
   ["dependency-fetch", auto({ kind: "retry" }, 3, stop(`A pinned dependency could not be fetched. Check the network connection, then ${RERUN.toLowerCase()}`))],
@@ -97,6 +98,7 @@ const BY_CODE: ReadonlyMap<string, Recovery> = new Map<string, Recovery>([
   ["invalid-json", final(stop("The input JSON could not be read. Correct it and retry."))],
   ["unreadable-input", final(stop("The input file could not be read. Check its path and retry."))],
   ["usage", final(stop("Check the command options and supply the accepted input plan."))],
+  ["missing-input", final(stop("Supply --input with the accepted input plan, then run the command again."))],
   ["answers-required", final(stop("Some setup choices are missing. Run the installer in a terminal to answer them, or complete the --input plan."))],
   ["invalid-bootstrap", final(stop("The setup plan is not valid. Correct it as the message describes, then run the installer again."))],
   ["host-required", final(stop("A per-host step received the whole plan. This is an installer defect; report it with the log."))],
@@ -112,6 +114,7 @@ const BY_CODE: ReadonlyMap<string, Recovery> = new Map<string, Recovery>([
   ["host-unavailable", auto({ kind: "install-host-cli" }, 1, { class: "user-action", instruction: "The assistant's command-line tool is not available. Install it, then run the installer again." })],
   ["host-skill-errors", auto({ kind: "retry" }, 1, stop(`The assistant reported errors loading skills. ${RERUN}`))],
   ["host-activation-needed", auto({ kind: "retry" }, 1, stop(`Pinned dependencies were not staged. ${RERUN}`))],
+  ["handoff-storage", final(stop("The pending setup tasks could not be verified or saved. Existing task files were kept; check that your state folder (XDG_STATE_HOME or ~/.local/state) is private and writable, then run the installer again."))],
   ["tooling-storage", auto({ kind: "retry" }, 1, stop(`A setup file could not be written. Check its permissions, then ${RERUN.toLowerCase()}`))],
 ]);
 

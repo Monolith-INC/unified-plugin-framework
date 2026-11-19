@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, stat, utimes, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
-import { acquireProjectLock, askYesNo, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
+import { acquireProjectLock, askYesNo, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath, setAsideInvalidPlan } from '../../../scripts/install-release.mjs';
 
 const ioFor = (project, overrides = {}) => {
   const stdout = [];
@@ -228,4 +228,19 @@ test('launcher stops before confirmation name the instruction and why no log exi
   assert.equal(await main(['--project', project, '--version', '0.2.2'], refused), 1);
   assert.match(refused.stderr.join(''), /pass --python <executable>, then run the installer again\./);
   assert.match(refused.stderr.join(''), noLog);
+});
+
+test('after confirmation an invalid saved plan is set aside as .broken-<time> and a valid one is kept in place', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-broken-'));
+  const input = join(project, 'setup-plan.json');
+  const log = join(project, 'run.log');
+  const parse = (value) => ({ ok: value?.hosts !== undefined });
+  const io = { now: () => Date.UTC(2026, 10, 19, 9, 30) };
+  await writeFile(input, '{not json');
+  assert.equal(await setAsideInvalidPlan(input, '{not json', parse, io, log), null);
+  assert.deepEqual((await readdir(project)).sort(), ['run.log', 'setup-plan.json.broken-2026-11-19T09-30-00-000Z']);
+  assert.match(await readFile(log, 'utf8'), /"event":"set-aside","code":"invalid-saved-plan"/);
+  await writeFile(input, '{"hosts":["codex"]}');
+  assert.equal(await setAsideInvalidPlan(input, '{"hosts":["codex"]}', parse, io, log), '{"hosts":["codex"]}');
+  assert.equal(await setAsideInvalidPlan(join(project, 'absent.json'), null, parse, io, log), null);
 });

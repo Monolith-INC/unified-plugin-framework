@@ -229,7 +229,7 @@ const chooseInstallation=async(args,extracted,project,io)=>{
  try {
   const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(acceptedProject,args.privateRuntime,io,log);
   const accepted={...selection.value,plan:{...selection.value.plan,python}};
-  await (log===null ? Promise.resolve() : appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined));
+  await logEvent(log,{event:'lock-acquired'},io);
   await ignoreToolFolders(acceptedProject,io);
   return await activate(args,extracted,accepted,io,report.finishInstall,log,lock);
  } finally {
@@ -355,13 +355,23 @@ const activateSafe=async(args,extracted,project,target,plan,io,finishInstall,log
   .then(()=>publish(join(staging,'distribution'),target)).then(root=>savePlanAndBootstrap(root,project,plan,args,io,finishInstall,log,lock))
   .finally(()=>rm(staging,{recursive:true,force:true}));
 };
+// Logging never fails the install: a run log that cannot be appended to is skipped.
+const logEvent=(log,event,io)=>log===null ? Promise.resolve()
+ : appendFile(log,`${JSON.stringify({type:'launcher',...event,at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined);
+const validPlanText=(text,parseBootstrap)=>Promise.resolve(text).then(JSON.parse).then(value=>parseBootstrap(value).ok,()=>false);
+// The recovery table's set-aside: an invalid saved plan is kept as .broken-<time> before the accepted plan replaces it.
+export const setAsideInvalidPlan=async(input,previous,parseBootstrap,io,log)=>previous===null || await validPlanText(previous,parseBootstrap) ? previous
+ : rename(input,`${input}.broken-${new Date(io.now()).toISOString().replace(/[:.]/g,'-')}`)
+  .then(()=>logEvent(log,{event:'set-aside',code:'invalid-saved-plan'},io)).then(()=>null,
+   ()=>stop(withLog('The saved setup plan could not be read and could not be set aside. Move .upf-tools/setup-plan.json away, then run the installer again.',log)));
 const savePlanAndBootstrap=async(root,project,plan,args,io,finishInstall,log,lock)=>{
  const {directory,writeText,readText}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-files.js')).href);
- const {planFile}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-input.js')).href);
+ const {planFile,parseBootstrap}=await import(pathToFileURL(join(root,'packages/cli/dist/tooling-input.js')).href);
  const input=join(project,'.upf-tools/setup-plan.json');
  const previous=await readText(input);
  const created=previous.ok ? await directory(project,join(project,'.upf-tools')) : previous;
- const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),previous.value,plan.python) : created;
+ const kept=created.ok ? await setAsideInvalidPlan(input,previous.value,parseBootstrap,io,log) : null;
+ const saved=created.ok ? await writeText(project,input,JSON.stringify(planFile(plan),null,2),kept,plan.python) : created;
  return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input,args,io,finishInstall,log,lock);
 };
 const bootstrap=async(root,project,input,args,io,finishInstall,log,lock)=>{

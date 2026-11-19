@@ -45,9 +45,9 @@ const execute = async (project: string, plan: AcceptedPlan, apply: boolean, requ
     ? await Promise.all(plan.hosts.map(async (host) => [host, await prepareHostCli(project, host, plan.python, plan.consent.installHostClis)] as const))
     : []);
   const claudeState = io.claudeState();
-  const ioFor = (host: HostName) => {
+  const ioFor = (host: HostName, patience?: number) => {
     const hostCli = hostClis.get(host);
-    return nodeToolingIO(project, forHost(plan, host), hostCli === undefined ? { claudeState } : { claudeState, hostCli });
+    return nodeToolingIO(project, forHost(plan, host), { claudeState, ...(hostCli === undefined ? {} : { hostCli }), ...(patience === undefined ? {} : { patience }) });
   };
   const progress = (host: HostName | undefined, step: typeof TOOLING_STEPS[number]): void =>
     io.err(`[${host ?? "project"}] ${step}\n`); // fp-allow: no-void-return -- progress output boundary

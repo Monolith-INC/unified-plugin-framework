@@ -70,29 +70,47 @@ const installedProgram = async (directory: string, pin: NativePin): Promise<stri
   const receipt = await readFile(join(directory, "receipt"), "utf8").catch(() => null);
   return receipt !== null && receipt === await receiptText(directory, pin) ? executable : null;
 };
-const download = async (pin: NativePin, target: string, fetcher: typeof fetch): Promise<boolean> => {
+type Download = "verified" | "mismatch" | "unavailable";
+const download = async (pin: NativePin, target: string, fetcher: typeof fetch): Promise<Download> => {
   const response = await fetcher(pin.url, { redirect: "error", signal: AbortSignal.timeout(150_000) });
   const length = Number(response.headers.get("content-length") ?? 0);
-  if (!response.ok || response.body === null || length <= 0 || length > 256 * 1024 * 1024) return false;
+  if (!response.ok || response.body === null || length <= 0 || length > 256 * 1024 * 1024) return "unavailable";
   await pipeline(Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>), createWriteStream(target, { mode: 0o600, flags: "wx" }));
-  return `sha512-${await fileDigest(target, "sha512", "base64")}` === pin.integrity;
+  return `sha512-${await fileDigest(target, "sha512", "base64")}` === pin.integrity ? "verified" : "mismatch";
+};
+/** The recovery table: an unreachable download is tried three times with backoff, a checksum mismatch downloaded once more. */
+const DOWNLOAD_ATTEMPTS = 3;
+const BACKOFF: readonly number[] = [250, 750];
+type Tries = { readonly attempt: number; readonly mismatched: boolean };
+const againAfter = (outcome: Download, tries: Tries): boolean => {
+  switch (outcome) {
+    case "verified": return false;
+    case "mismatch": return !tries.mismatched && tries.attempt + 1 < DOWNLOAD_ATTEMPTS;
+    case "unavailable": return tries.attempt + 1 < DOWNLOAD_ATTEMPTS;
+  }
+};
+const downloadVerified = async (pin: NativePin, target: string, io: HostCliIo, tries: Tries = { attempt: 0, mismatched: false }): Promise<Download> => {
+  const outcome = await rm(target, { force: true }).then(() => download(pin, target, io.fetcher)).catch((): Download => "unavailable");
+  return !againAfter(outcome, tries) ? outcome : io.sleep(BACKOFF[tries.attempt] ?? 1_500)
+    .then(() => downloadVerified(pin, target, io, { attempt: tries.attempt + 1, mismatched: tries.mismatched || outcome === "mismatch" }));
 };
 const EXTRACT = `import pathlib, sys, tarfile
 with tarfile.open(sys.argv[1], "r:gz") as archive:
     members = archive.getmembers()
     assert all(m.isfile() and pathlib.PurePosixPath(m.name).parts[0] == "package" for m in members)
     archive.extractall(sys.argv[2], members=members, filter="data")`;
-const fetchNative = async (scratch: string, pin: NativePin, python: string, environment: NodeJS.ProcessEnv, fetcher: typeof fetch): Promise<Result<string>> => {
+const fetchNative = async (scratch: string, pin: NativePin, python: string, io: HostCliIo): Promise<Result<string>> => {
   const archive = join(scratch, "native.tgz");
-  if (!await download(pin, archive, fetcher)) return fail("checksum-mismatch", "The pinned host package did not verify.", "Install its official CLI manually.");
-  const clean = selectEnvironment(environment, ["PATH", "HOME", "LANG", "LC_ALL"]);
+  const downloaded = await downloadVerified(pin, archive, io);
+  if (downloaded !== "verified") return downloaded === "mismatch" ? fail("checksum-mismatch", "The pinned host package did not verify.", "Install its official CLI manually.")
+    : fail("network-unavailable", "The pinned host package could not be downloaded.", "Install its official CLI manually.");
+  const clean = selectEnvironment(io.environment, ["PATH", "HOME", "LANG", "LC_ALL"]);
   return command(python, ["-I", "-c", EXTRACT, archive, scratch], scratch, 90_000, clean);
 };
-const publish = async (root: string, destination: string, pin: NativePin, python: string, environment: NodeJS.ProcessEnv,
-  fetcher: typeof fetch): Promise<string | null> => {
+const publish = async (root: string, destination: string, pin: NativePin, python: string, io: HostCliIo): Promise<string | null> => {
   const scratch = await mkdtemp(join(root, ".stage-"));
   try {
-    const extracted = await fetchNative(scratch, pin, python, environment, fetcher);
+    const extracted = await fetchNative(scratch, pin, python, io);
     if (!extracted.ok) return null;
     await rm(join(scratch, "native.tgz"));
     await chmod(join(scratch, pin.member), 0o700);
@@ -110,7 +128,8 @@ const exists = (path: string): Promise<boolean> => lstat(path).then(() => true).
 const glibcRuntime = (report: unknown): boolean =>
   object(report) && object(report.header) && typeof report.header.glibcVersionRuntime === "string";
 const resolveNative = async (project: string, host: HostName, python: string, consent: boolean,
-  environment: NodeJS.ProcessEnv, fetcher: typeof fetch): Promise<HostCli> => {
+  io: HostCliIo): Promise<HostCli> => {
+  const { environment } = io;
   const arch = process.arch;
   if (process.platform !== "linux" || (arch !== "x64" && arch !== "arm64")) return missing(false);
   const pin = nativePin(host, arch, !glibcRuntime(process.report.getReport()));
@@ -124,17 +143,18 @@ const resolveNative = async (project: string, host: HostName, python: string, co
   const existing = await installedProgram(destination, pin);
   if (existing !== null) return available(existing, "private");
   if (!consent || await exists(destination)) return missing(false);
-  const installed = await publish(canonicalRoot, destination, pin, python, environment, fetcher);
+  const installed = await publish(canonicalRoot, destination, pin, python, io);
   return installed === null ? missing(true) : available(installed, "private", true);
 };
 
-/** What resolving a host program reads from outside: the process environment and the network. */
-export interface HostCliIo { readonly environment: NodeJS.ProcessEnv; readonly fetcher: typeof fetch }
+/** What resolving a host program reads from outside: the process environment, the network and the retry delay. */
+export interface HostCliIo { readonly environment: NodeJS.ProcessEnv; readonly fetcher: typeof fetch; readonly sleep: (milliseconds: number) => Promise<void> }
 
 /** Edge interpreter: the real environment and network. */
 export const NODE_HOST_CLI_IO: HostCliIo = Object.freeze({
   environment: process.env, // fp-allow: no-ambient-effect
   fetcher: fetch, // fp-allow: no-ambient-effect
+  sleep: (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)), // fp-allow: no-ambient-effect
 });
 
 /** Resolve a host without modifying PATH. Downloads use only pinned native packages and run no npm scripts. */
@@ -142,5 +162,5 @@ export const prepareHostCli = async (project: string, host: HostName, python: st
   io: HostCliIo = NODE_HOST_CLI_IO): Promise<HostCli> => {
   const system = await onPath(host, io.environment);
   return system !== undefined ? available(system, "path")
-    : resolveNative(project, host, python, consent, io.environment, io.fetcher).catch(() => missing(consent));
+    : resolveNative(project, host, python, consent, io).catch(() => missing(consent));
 };

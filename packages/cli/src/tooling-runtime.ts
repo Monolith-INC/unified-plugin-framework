@@ -4,7 +4,7 @@ import { sha256 } from "@agent-plugins/compiler";
 import { installVendorBundle } from "@agent-plugins/installer";
 import { nodeProjectFiles, object, ok, fail, type Result } from "@agent-plugins/project";
 import type { BootstrapInput } from "./tooling-input.js";
-import { command, sequence } from "./tooling-process.js";
+import { command, scaled, sequence } from "./tooling-process.js";
 import { backupOwnedText, directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
 import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, frameworkTarget, toolsRoot } from "./tooling-host.js";
 import type { HostName } from "./host-names.js";
@@ -37,11 +37,11 @@ const installPlugin = (project: string, host: HostName, name: string): Promise<R
 });
 
 /** Install from a private source copy so package builders cannot modify dependency source. */
-export const installKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
+export const installKnowledge = async (project: string, input: BootstrapInput, patience = 1): Promise<Result<string>> => {
   const runtime = await prepareKnowledgeRuntime(project, input.python);
-  return !runtime.ok ? runtime : command(input.python, ["-m", "venv", runtime.value], project).then((venv) => venv.ok
+  return !runtime.ok ? runtime : command(input.python, ["-m", "venv", runtime.value], project, scaled(120_000, patience)).then((venv) => venv.ok
     ? withSetupStage(project, input.python, (stage) => copyRuntime(join(stage, "source"))
-      .then((source) => source.ok ? command(pythonRuntime(project), ["-m", "pip", "install", "--disable-pip-version-check", source.value], project, 180_000) : source))
+      .then((source) => source.ok ? command(pythonRuntime(project), ["-m", "pip", "install", "--disable-pip-version-check", source.value], project, scaled(180_000, patience)) : source))
     : venv);
 };
 

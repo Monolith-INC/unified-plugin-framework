@@ -85,3 +85,23 @@ test("recovery events combine associatively while preserving their order", () =>
   assert.deepEqual(concat(bronze, empty), bronze);
   assert.deepEqual(concat(concat(bronze, silver), gold), concat(bronze, concat(silver, gold)));
 });
+
+test("a timed-out step is retried once with a longer time limit, then stops", async () => {
+  const limits = [];
+  const io = (host, patience) => {
+    limits.push(patience ?? 1);
+    return record([], () => missing, () => fail("tool-timeout"))(host);
+  };
+  const { value } = await bootstrapHosts(io, true, { hosts: ["codex"], steps: ["cli"] })();
+  assert.deepEqual(limits, [1, 2]);
+  assert.deepEqual(value.events.map(({ action, attempt }) => [action, attempt]), [["retry-with-longer-limit", 1], ["none", 2]]);
+  assert.match(value.project.steps[0].failure.recovery, /even with a longer time limit/);
+});
+
+test("a host configuration conflict is preserved without a retry", async () => {
+  const seen = [];
+  const { value } = await bootstrapHosts(record(seen, () => missing, () => fail("host-configuration-conflict")), true, { hosts: ["codex"], steps: ["skills"] })();
+  assert.equal(seen.filter(([, call]) => call === "configure").length, 1);
+  assert.deepEqual(value.events.map(({ action }) => action), ["none"]);
+  assert.match(value.hosts[0].tooling.steps[0].failure.recovery, /was not written by the installer/);
+});

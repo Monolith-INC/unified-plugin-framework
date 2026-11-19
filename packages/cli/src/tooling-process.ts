@@ -89,6 +89,8 @@ const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[])
 };
 
 /** Before a deadline, stderr is discarded and stdout is capped. Omit env to inherit it. */
+/** A time limit stretched for a retry after a timeout; `patience` is 1 on every first run. */
+export const scaled = (milliseconds: number, patience = 1): number => milliseconds * patience;
 export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env?: NodeJS.ProcessEnv): Promise<Result<string>> =>
   commandOutput(program, args, cwd, { timeout, ...(env === undefined ? {} : { env }) });
 
