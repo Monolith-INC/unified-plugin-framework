@@ -252,49 +252,48 @@ export const acquireProjectLock=async(project,io)=>{
  return attempt();
 };
 const LOCK_GRACE_MS=30_000;
+const HELD=Symbol('held');
 const lockGone=error=>error.code==='ENOENT'||error.code==='ENOTDIR';
 const ignoreGone=error=>lockGone(error)?undefined:Promise.reject(error);
 const readJson=file=>readFile(file,'utf8').then(JSON.parse);
 const ownerLive=(io,owner)=>io.processAlive(owner.pid) || owner.childPid!==null && io.processAlive(owner.childPid);
 const sameLock=(seen,current)=>seen.dev===current.dev && seen.ino===current.ino;
-const moveAside=path=>{const stale=`${path}.stale-${randomUUID()}`;return rename(path,stale).then(()=>stale);};
-const discardStaleLock=path=>moveAside(path).then(stale=>rm(stale,{recursive:true,force:true}));
+const discardStaleLock=path=>{const stale=`${path}.stale-${randomUUID()}`;return rename(path,stale).then(()=>rm(stale,{recursive:true,force:true}));};
 // Current locks are a file holding the owner; legacy installers used a directory holding owner.json.
 const ownerFile=(path,info)=>info.isDirectory()?join(path,'owner.json'):path;
-// An owner record is `missing`, `unreadable` (still being written, or left truncated) or a parsed `owner`.
+// null: no readable owner yet (missing, still being written, or left truncated); HELD: present but unreadable to us.
 const readOwner=file=>readFile(file,'utf8').then(text=>Promise.resolve(text).then(JSON.parse)
- .then(owner=>({kind:'owner',owner}),()=>({kind:'unreadable'})),error=>lockGone(error)?{kind:'missing'}:Promise.reject(error));
+ .then(owner=>typeof owner?.pid==='number'?owner:null,()=>null),error=>lockGone(error)?null:HELD);
 const lastTouched=(file,info)=>stat(file).then(record=>Math.max(record.mtimeMs,info.mtimeMs),()=>info.mtimeMs);
+const graceOver=(file,info,io)=>lastTouched(file,info).then(touched=>io.now()-touched>LOCK_GRACE_MS);
 // Abandoned: the owner is dead, or no readable owner has appeared within the grace period.
-const abandoned=(path,info,io)=>readOwner(ownerFile(path,info)).then(record=>record.kind==='owner' ? !ownerLive(io,record.owner)
- : lastTouched(ownerFile(path,info),info).then(touched=>io.now()-touched>LOCK_GRACE_MS));
-export const claimPathFor=(path,info)=>`${path}.reclaim-${info.dev}-${info.ino}`;
+const abandoned=(path,info,io)=>{
+ const file=ownerFile(path,info);
+ return readOwner(file).then(owner=>owner===HELD ? false : owner===null ? graceOver(file,info,io) : !ownerLive(io,owner));
+};
 const reclaimOrWait=ctx=>stat(ctx.path).then(info=>abandoned(ctx.path,info,ctx.io).then(stale=>stale?reclaim(ctx,info):waitOrStop(ctx)),
  error=>lockGone(error)?ctx.attempt():Promise.reject(error));
 const waitOrStop=ctx=>ctx.io.now()>=ctx.deadline ? stop('Another installer holds the project lock; wait and rerun.')
  : ctx.io.sleep(500).then(()=>reclaimOrWait(ctx));
 // Only the claim holder discards, and only after re-checking that the lock it saw is still there and still abandoned.
-const reclaim=(ctx,info)=>claimLock(claimPathFor(ctx.path,info),ctx.io).then(claim=>claim===null ? waitOrStop(ctx)
+const reclaim=(ctx,info)=>claimLock(`${ctx.path}.reclaim-${info.dev}-${info.ino}`,ctx.io).then(chain=>chain===null ? waitOrStop(ctx)
  : stat(ctx.path).then(current=>sameLock(info,current) && abandoned(ctx.path,current,ctx.io))
   .then(stale=>stale?discardStaleLock(ctx.path):undefined).catch(ignoreGone)
-  .finally(()=>releaseClaim(claimPathFor(ctx.path,info),claim)).then(()=>ctx.attempt()));
-// A claim is staged and hard-linked so readers never see a partial one; null means a live claimant holds it.
+  .finally(()=>releaseClaim(chain)).then(()=>ctx.attempt()));
+// Claims form a chain that is never shortened while contended: a dead claimant's successor hard-links
+// `<claim>.after-<its token>`, so exactly one link can be the live end. Claims are staged, so none is read half-written.
+// Returns the chain ending in our claim, or null while a live claimant (or an unreadable link) holds it.
 const claimLock=(claimPath,io)=>{
- const claim={pid:process.pid,token:randomUUID()};
- const staging=`${claimPath}.${claim.token}`;
- const take=()=>link(staging,claimPath).then(()=>claim,error=>error.code!=='EEXIST' ? Promise.reject(error)
-  : takeOverDeadClaim(claimPath,io).then(freed=>freed?take():null));
- return writeFile(staging,JSON.stringify(claim),{mode:0o600}).then(take).finally(()=>unlink(staging).catch(ignoreGone));
+ const token=randomUUID();
+ const staging=`${claimPath}.${token}`;
+ const take=chain=>link(staging,chain.at(-1)).then(()=>chain,error=>error.code==='EEXIST'?follow(chain):Promise.reject(error));
+ const follow=chain=>readJson(chain.at(-1)).then(holder=>io.processAlive(holder.pid)?null:take([...chain,`${claimPath}.after-${holder.token}`]),
+  error=>lockGone(error)?null:Promise.reject(error));
+ return writeFile(staging,JSON.stringify({pid:process.pid,token}),{mode:0o600}).then(()=>take([claimPath]))
+  .finally(()=>unlink(staging).catch(ignoreGone));
 };
-// A dead claimant's claim is moved aside; if a newer live claim was moved instead, it is put back.
-const takeOverDeadClaim=(claimPath,io)=>readJson(claimPath).then(current=>io.processAlive(current.pid) ? false
- : moveAside(claimPath).then(moved=>keepIfDead(claimPath,moved,current.token)))
- .catch(error=>lockGone(error)?true:Promise.reject(error));
-const keepIfDead=(claimPath,moved,token)=>readJson(moved).then(seen=>seen.token===token ? true
- : link(moved,claimPath).then(()=>false,error=>error.code==='EEXIST'?false:Promise.reject(error)))
- .finally(()=>rm(moved,{force:true}));
-const releaseClaim=(claimPath,claim)=>readJson(claimPath)
- .then(current=>current.token===claim.token?unlink(claimPath):undefined).catch(ignoreGone);
+// The holder removes the whole chain once its re-check and discard are done.
+const releaseClaim=chain=>Promise.all(chain.map(file=>unlink(file).catch(ignoreGone)));
 export const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
  .then(owner=>owner.id!==id?undefined:stat(path).then(info=>info.isDirectory()?rm(path,{recursive:true,force:true}):unlink(path)))
  .catch(()=>undefined);
