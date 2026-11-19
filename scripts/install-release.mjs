@@ -128,7 +128,11 @@ const prepare=async(args,io)=>{
 };
 const privatePythonConsent=async(args,io)=>args.input!==undefined
  ? readFile(resolve(args.input),'utf8').then(JSON.parse).then(plan=>plan.consent?.privatePython===true).catch(()=>false)
- : io.ask('Python 3.12+ is unavailable. Allow the installer to add a private Python 3.12.16? yes/no: ').then(answer=>answer.trim().toLowerCase()==='yes');
+ : askYesNo(io,'Python 3.12+ is unavailable. Allow the installer to add a private Python 3.12.16? yes/no: ');
+const YES_NO=new Map([['y',true],['yes',true],['n',false],['no',false]]);
+// Anything else is asked again with an example; after three unclear replies the safe answer, no, stands.
+export const askYesNo=(io,prompt,attempts=3)=>io.ask(prompt).then(answer=>YES_NO.get(String(answer??'').trim().toLowerCase())
+ ?? (attempts>1 ? askYesNo(io,`Please answer yes or no, for example: yes. ${prompt}`,attempts-1) : false));
 const uvTriple=io=>io.platform==='darwin' ? `${io.arch==='arm64'?'aarch64':'x86_64'}-apple-darwin`
  : io.platform==='linux' ? `${io.arch==='arm64'?'aarch64':'x86_64'}-unknown-linux-${io.libc}` : null;
 const uvEnvironment=(base,scratch,pythonRoot)=>Object.freeze({

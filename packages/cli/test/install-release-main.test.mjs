@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, stat, utimes, writeFile } from 'node
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import test from 'node:test';
-import { acquireProjectLock, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
+import { acquireProjectLock, askYesNo, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
 
 const ioFor = (project, overrides = {}) => {
   const stdout = [];
@@ -144,6 +144,16 @@ test('a legacy lock left with a truncated owner record past the grace period is 
   assert.equal((await stat(path)).isFile(), true);
   await releaseProjectLock(lock);
   assert.deepEqual(await readdir(directory), []);
+});
+
+test('the launcher yes or no accepts short answers and asks again with an example', async () => {
+  const replies = (answers) => { const prompts = []; return { prompts, io: { ask: async (prompt) => { prompts.push(prompt); return answers.shift(); } } }; };
+  const cases = [[['y'], true], [[' YES '], true], [['n'], false], [['No'], false], [['yes please', 'y'], true], [['', 'maybe', 'sure'], false]];
+  const results = await Promise.all(cases.map(([answers]) => askYesNo(replies([...answers]).io, 'Allow? yes/no: ')));
+  assert.deepEqual(results, cases.map(([, expected]) => expected));
+  const asked = replies(['ok', 'n']);
+  assert.equal(await askYesNo(asked.io, 'Allow? yes/no: '), false);
+  assert.deepEqual(asked.prompts, ['Allow? yes/no: ', 'Please answer yes or no, for example: yes. Allow? yes/no: ']);
 });
 
 test('launcher log failure is optional and the CLI-reported log path takes precedence', async () => {
