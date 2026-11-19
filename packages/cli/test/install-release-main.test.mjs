@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { downloadBytes, main } from '../../../scripts/install-release.mjs';
+import { acquireProjectLock, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
 
 const ioFor = (project, overrides = {}) => {
   const stdout = [];
@@ -46,4 +46,49 @@ test('downloads retry only transient network and server responses through the in
   assert.deepEqual(delays, [250, 750]);
   const nonRetryable = { ...io, fetch: async () => ({ ok: false, status: 404 }) };
   await assert.rejects(downloadBytes('https://example.test/missing', 'application/octet-stream', nonRetryable), /404/);
+});
+
+test('an abandoned installer lock is reclaimed once and waiters reacquire after release', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-lock-'));
+  const directory = join(project, '.upf-tools');
+  const path = join(directory, 'installer.lock');
+  await mkdir(directory);
+  await writeFile(path, JSON.stringify({ id: 'stale-run', pid: process.pid + 100_000, startedAt: '', childPid: null }));
+  const old = new Date(Date.now() - 60_000);
+  await utimes(path, old, old);
+  let releaseWait;
+  let markWaiting;
+  const waiting = new Promise((resolve) => { markWaiting = resolve; });
+  const io = { now: () => Date.now(), processAlive: (pid) => pid === process.pid,
+    sleep: () => { markWaiting(); return new Promise((resolve) => { releaseWait = resolve; }); } };
+  const firstPending = acquireProjectLock(project, io);
+  const secondPending = acquireProjectLock(project, io);
+  const { source, lock: winner } = await Promise.race([
+    firstPending.then((lock) => ({ source: 'first', lock })),
+    secondPending.then((lock) => ({ source: 'second', lock })),
+  ]);
+  const waiter = source === 'first' ? secondPending : firstPending;
+  await waiting;
+  let settled = false;
+  waiter.then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  await releaseProjectLock(winner);
+  releaseWait();
+  const next = await waiter;
+  assert.notEqual(next.id, winner.id);
+  await releaseProjectLock(next);
+  assert.deepEqual(await readdir(directory), []);
+});
+
+test('launcher log failure is optional and the CLI-reported log path takes precedence', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'upf-launcher-log-module-'));
+  const modulePath = join(root, 'packages', 'cli', 'dist');
+  await mkdir(modulePath, { recursive: true });
+  await writeFile(join(root, 'package.json'), '{"type":"module"}');
+  await writeFile(join(modulePath, 'install-log.js'), 'export const writeInstallLog = async () => null;');
+  assert.equal(await beginRunLog(root, root, 'v0.2.2', { now: () => 0 }), null);
+  assert.equal(reportLogPath({ ok: true, value: { log: '/tmp/cli.jsonl' } }, '/tmp/launcher.jsonl'), '/tmp/cli.jsonl');
+  assert.equal(reportLogPath({ ok: false, log: '/tmp/fallback.jsonl' }, null), '/tmp/fallback.jsonl');
+  assert.equal(reportLogPath({ ok: false }, null), null);
 });

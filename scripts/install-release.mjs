@@ -228,12 +228,12 @@ const persistPrivatePython=async(project,runtime,io)=>{
       .then(()=>cp(runtime.pythonRoot,target,{recursive:true,verbatimSymlinks:true,errorOnExist:true}))
       .then(()=>join(target,relativePython));
 };
-const beginRunLog=async(root,project,version,io)=>{
+export const beginRunLog=async(root,project,version,io)=>{
  const {writeInstallLog}=await import(pathToFileURL(join(root,'packages/cli/dist/install-log.js')).href);
- const path=await writeInstallLog(project,[{type:'launcher',event:'accepted',version,at:new Date(io.now()).toISOString()}]);
+ const path=await (io.writeInstallLog ?? writeInstallLog)(project,[{type:'launcher',event:'accepted',version,at:new Date(io.now()).toISOString()}]);
  return path;
 };
-const acquireProjectLock=async(project,io)=>{
+export const acquireProjectLock=async(project,io)=>{
  const parent=join(project,'.upf-tools');
  const path=join(parent,'installer.lock');
  await mkdir(parent,{recursive:true,mode:0o700});
@@ -247,23 +247,65 @@ const acquireProjectLock=async(project,io)=>{
   return writeFile(staging,JSON.stringify(owner),{mode:0o600}).then(()=>link(staging,path))
    .then(()=>unlink(staging).catch(()=>undefined).then(()=>({path,ownerPath,id})))
    .catch(error=>unlink(staging).catch(()=>undefined).then(()=>error.code==='EEXIST'
-    ? reclaimOrWait(path,ownerPath,owner,deadline,io) : Promise.reject(error)));
+    ? reclaimOrWait(path,ownerPath,owner,deadline,io,attempt) : Promise.reject(error)));
  };
  return attempt();
 };
-const reclaimOrWait=async(path,ownerPath,owner,deadline,io)=>{
+const reclaimOrWait=async(path,ownerPath,owner,deadline,io,attempt)=>{
  const info=await stat(path).catch(()=>null);
+ return info===null ? attempt() : reclaimPresent(path,ownerPath,owner,deadline,io,attempt,info);
+};
+const discardStaleLock=path=>{
+ const stale=`${path}.stale-${randomUUID()}`;
+ return rename(path,stale).then(()=>rm(stale,{recursive:true,force:true}));
+};
+const reclaimPresent=async(path,ownerPath,owner,deadline,io,attempt,info)=>{
  const lockOwnerPath=info?.isDirectory()?join(path,'owner.json'):ownerPath;
  const saved=await readFile(lockOwnerPath,'utf8').then(JSON.parse).catch(()=>null);
  const emptyAge=info===null?0:io.now()-info.mtimeMs;
- return saved===null && emptyAge>30_000 ? rename(path,`${path}.stale-${randomUUID()}`)
-  .then(stale=>rm(stale,{recursive:true,force:true})).then(()=>acquireProjectLock(dirname(dirname(path)),io))
-  : saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid)) ? rename(path,`${path}.stale-${randomUUID()}`)
-  .then(stale=>rm(stale,{recursive:true,force:true})).then(()=>acquireProjectLock(dirname(dirname(path)),io))
+ return saved===null && emptyAge>30_000 && info.isDirectory() ? reclaimEmptyLegacyLock(path,info,deadline,io,attempt)
+  : saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid))
+    ? info.isDirectory() ? reclaimLegacyOwnedLock(path,info,saved,deadline,io,attempt)
+      : reclaimOwnedLock(path,saved,deadline,io,attempt)
   : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
-    : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,owner,deadline,io));
+    : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,owner,deadline,io,attempt));
 };
-const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
+const reclaimOwnedLock=async(path,saved,deadline,io,attempt)=>{
+ const claimPath=`${path}.reclaim-${saved.id}`;
+ const claimed=await link(path,claimPath).then(()=>true).catch(error=>error.code==='EEXIST'?false:Promise.reject(error));
+ return claimed ? readFile(path,'utf8').then(JSON.parse).then(current=>current.id!==saved.id
+  || io.processAlive(current.pid) || current.childPid!==null && io.processAlive(current.childPid)
+    ? undefined : discardStaleLock(path))
+    .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
+    .then(()=>unlink(claimPath).catch(()=>undefined)).then(()=>attempt())
+  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
+    : io.sleep(500).then(()=>reclaimOrWait(path,`${path}/owner.json`,saved,deadline,io,attempt));
+};
+const reclaimEmptyLegacyLock=async(path,info,deadline,io,attempt)=>{
+ const claimPath=join(path,`.reclaim-${info.dev}-${info.ino}`);
+ const claimed=await writeFile(claimPath,JSON.stringify({pid:process.pid}),{flag:'wx',mode:0o600})
+  .then(()=>true).catch(error=>error.code==='EEXIST'?false:error.code==='ENOTDIR'?null:Promise.reject(error));
+ return claimed===null ? attempt() : claimed ? stat(path).then(current=>current.dev!==info.dev || current.ino!==info.ino
+  ? undefined : discardStaleLock(path))
+  .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
+  .then(()=>unlink(claimPath).catch(()=>undefined)).then(()=>attempt())
+  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
+    : io.sleep(500).then(()=>reclaimOrWait(path,join(path,'owner.json'),null,deadline,io,attempt));
+};
+const reclaimLegacyOwnedLock=async(path,info,saved,deadline,io,attempt)=>{
+ const claimPath=join(path,`.reclaim-${saved.id}`);
+ const claimed=await writeFile(claimPath,JSON.stringify({pid:process.pid}),{flag:'wx',mode:0o600})
+  .then(()=>true).catch(error=>error.code==='EEXIST'?false:error.code==='ENOTDIR'||error.code==='ENOENT'?null:Promise.reject(error));
+ return claimed===null ? attempt() : claimed ? Promise.all([stat(path),readFile(join(path,'owner.json'),'utf8').then(JSON.parse)])
+  .then(([current,owner])=>current.dev!==info.dev || current.ino!==info.ino || owner.id!==saved.id
+    || io.processAlive(owner.pid) || owner.childPid!==null && io.processAlive(owner.childPid)
+    ? undefined : discardStaleLock(path))
+  .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
+  .then(()=>unlink(claimPath).catch(()=>undefined)).then(()=>attempt())
+  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
+    : io.sleep(500).then(()=>reclaimOrWait(path,join(path,'owner.json'),saved,deadline,io,attempt));
+};
+export const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
  .then(owner=>owner.id!==id?undefined:stat(path).then(info=>info.isDirectory()?rm(path,{recursive:true,force:true}):unlink(path)))
  .catch(()=>undefined);
 const updateLockOwner=async(lock,update)=>{
@@ -271,6 +313,7 @@ const updateLockOwner=async(lock,update)=>{
  return readFile(lock.ownerPath,'utf8').then(JSON.parse).then(owner=>writeFile(temporary,JSON.stringify(update(owner)),{mode:0o600}))
   .then(()=>rename(temporary,lock.ownerPath)).catch(()=>unlink(temporary).catch(()=>undefined));
 };
+export const reportLogPath=(report,fallback)=>report?.value?.log ?? report?.log ?? fallback;
 const ignoreToolFolders=async(project,io)=>{
  const resolved=io.spawnSync('git',['rev-parse','--git-path','info/exclude'],{cwd:project,encoding:'utf8',stdio:'pipe',timeout:10_000});
  return resolved.status!==0 || resolved.stdout.trim()==='' ? undefined : appendExcludes(resolve(project,resolved.stdout.trim()));
@@ -329,10 +372,11 @@ const bootstrapReport=(output,root,project,exitCode,args,io,finishInstall,log)=>
  const report=decodeReport(output);
  if(report?.ok!==true) {
   const finished=finishInstall(output,{strict:args.strict});
-  io.writeStderr(`${finished.message}\n${log===null?'Setup log could not be saved.':`Log: ${log}`}\n`);
-  return {ok:false,project,...(log===null?{}:{log}),result:report,exitCode:1};
+  const savedLog=reportLogPath(report,log);
+  io.writeStderr(`${finished.message}\n${savedLog===null?'Setup log could not be saved.':`Log: ${savedLog}`}\n`);
+  return {ok:false,project,...(savedLog===null?{}:{log:savedLog}),result:report,exitCode:1};
  }
- return finishStructured(report,root,project,args,io,finishInstall,log,exitCode);
+ return finishStructured(report,root,project,args,io,finishInstall,reportLogPath(report,log),exitCode);
 };
 const decodeReport=output=>{
  try { return JSON.parse(output); } catch { return null; }
