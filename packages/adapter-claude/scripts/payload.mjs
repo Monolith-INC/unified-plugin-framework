@@ -2,13 +2,12 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { releasePayloads } from "@agent-plugins/workflows";
+import { releasePayloads, withPayloadsRoot } from "@agent-plugins/workflows";
 
 import { claudeAdapter } from "../dist/index.js";
 import { officialFailures } from "./official-check.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const payloadsRoot = join(packageRoot, "payloads");
 const operation = process.argv[2] ?? "";
 const nonEmpty = (value) => (value?.trim() ? value : undefined);
 const CLI = nonEmpty(process.env["CLAUDE_CODE_CLI"]) ?? "claude"; // fp-allow: no-ambient-effect
@@ -26,12 +25,17 @@ const runCli = (args) => {
   return spawnSync(file, argv, { encoding: "utf8", shell, timeout: TIMEOUT_MS });
 };
 
-const built = releasePayloads(operation, claudeAdapter, { pluginsRoot: resolve(packageRoot, "../../plugins"), payloadsRoot });
-// Claude Code is the authority on what it loads, so a verified payload must also pass its own validator.
-const reports = [
-  ...built,
-  ...officialFailures({ operation, reports: built, payloadDir: (plugin) => join(payloadsRoot, plugin, "payload"), cli: CLI, run: runCli }),
-];
+/** Build reports plus, for verify, Claude Code's own verdict on each payload, read while the payloads still exist. */
+const releaseAndValidate = (payloadsRoot) => {
+  const built = releasePayloads(operation, claudeAdapter, { pluginsRoot: resolve(packageRoot, "../../plugins"), payloadsRoot });
+  // Claude Code is the authority on what it loads, so a verified payload must also pass its own validator.
+  return [
+    ...built,
+    ...officialFailures({ operation, reports: built, payloadDir: (plugin) => join(payloadsRoot, plugin, "payload"), cli: CLI, run: runCli }),
+  ];
+};
+// Verification writes to a scratch folder that is removed afterwards; only build keeps payloads in the package.
+const reports = withPayloadsRoot(operation, join(packageRoot, "payloads"), releaseAndValidate);
 
 process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
 if (reports.some(({ result }) => !result.ok)) process.exitCode = 1;
