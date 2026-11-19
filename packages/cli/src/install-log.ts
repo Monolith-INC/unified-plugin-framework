@@ -40,8 +40,9 @@ const appendRun = (path: string, entries: readonly unknown[]): Promise<string | 
   appendFile(path, `${entries.map((entry) => JSON.stringify(redact(entry))).join("\n")}\n`, { mode: PRIVATE_FILE })
     .then(() => chmod(path, PRIVATE_FILE)).then(() => path).catch(() => null);
 
+const managedLog = (name: string): boolean => /^run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}Z-[0-9a-f-]{36}\.jsonl$/.test(name);
 const retainTen = (directory: string): Promise<unknown> => readdir(directory, { withFileTypes: true })
-  .then((entries) => Promise.all(entries.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+  .then((entries) => Promise.all(entries.filter((entry) => entry.isFile() && managedLog(entry.name))
     .map((entry) => join(directory, entry.name)).map(async (path) => ({ path, modified: (await stat(path)).mtimeMs }))))
   .then((files) => Promise.all(files.sort((left, right) => right.modified - left.modified).slice(RETAINED_RUNS)
     .map(({ path }) => unlink(path).catch(() => undefined)))).catch(() => undefined);
@@ -52,12 +53,14 @@ const storeInstallLog = async (project: string, entries: readonly unknown[], req
   const name = logName(date, randomUUID());
   const primary = requestedPath === undefined ? join(project, ".upf-tools", "logs") : dirname(resolve(project, requestedPath));
   const path = requestedPath === undefined ? join(primary, name) : resolve(project, requestedPath);
-  const primaryResult = await mkdir(primary, { recursive: true, mode: PRIVATE_DIR }).then(() => chmod(primary, PRIVATE_DIR))
+  const primaryResult = await mkdir(primary, { recursive: true, mode: PRIVATE_DIR })
+    .then(() => requestedPath === undefined ? chmod(primary, PRIVATE_DIR) : undefined)
     .then(() => appendRun(path, entries)).catch(() => null);
   const fallback = primaryResult === null ? await createFallbackDirectory(project).catch(() => null) : null;
   const stored = primaryResult ?? (fallback === null ? null : await appendRun(join(fallback, name), entries));
   const selected = stored ?? null;
-  return selected === null ? null : retainTen(dirname(selected)).then(() => selected);
+  return selected === null ? null : (requestedPath === undefined || fallback !== null
+    ? retainTen(dirname(selected)) : Promise.resolve()).then(() => selected);
 };
 
 export const writeInstallLog = (project: string, entries: readonly unknown[], requestedPath?: string): Promise<string | null> =>

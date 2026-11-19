@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, stat, writeFile, readFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, stat, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -35,6 +35,19 @@ test('install log falls back to a private temporary directory when its requested
   assert.equal((await stat(path)).mode & 0o777, 0o600);
   assert.equal((await readLastInstallLog(project)).path, path);
   assert.equal(await readFile(blocker, 'utf8'), 'preserve');
+});
+
+test('custom install log preserves unrelated JSONL files and parent permissions', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-install-custom-log-'));
+  const directory = join(project, 'logs');
+  await mkdir(directory);
+  await chmod(directory, 0o755);
+  const unrelated = join(directory, 'application.jsonl');
+  await writeFile(unrelated, 'preserve\n');
+  const requested = join(directory, 'custom.jsonl');
+  assert.equal(await writeInstallLog(project, [{ type: 'bootstrap' }], requested), requested);
+  assert.equal(await readFile(unrelated, 'utf8'), 'preserve\n');
+  assert.equal((await stat(directory)).mode & 0o777, 0o755);
 });
 
 test('project status displays the last recorded bootstrap run', async () => {

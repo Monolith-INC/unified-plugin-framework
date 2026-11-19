@@ -25,6 +25,7 @@ test('CLI plan is read-only; apply configures missing accepted choices and re-en
   const input=join(project,'plan.json');await writeFile(input,JSON.stringify(choices));
   const run=(apply=false)=>JSON.parse(execFileSync(process.execPath,[cli,'project','bootstrap','--input',input,'--project',project,...(apply?['--apply']:[])],{encoding:'utf8'}));
   assert.equal(run().value.tooling.status,'action-required');
+  assert.deepEqual((await readdir(project)).sort(),['plan.json']);
   await assert.rejects(readFile(join(project,'.unified-plugin-framework.json')));
   assert.equal(run(true).value.tooling.status,'ready');
   const before=await readFile(join(project,'.unified-plugin-framework.json'),'utf8');

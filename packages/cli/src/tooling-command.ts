@@ -54,7 +54,7 @@ const execute = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const result = swept.ok ? await bootstrapHosts(ioFor, apply, plan, apply ? progress : undefined)() : swept;
   return result.ok
     ? respond(project, plan, apply, request, io, apply ? await acquire(result.value, project, plan, ioFor, hostClis) : result.value, hostClis, logPath)
-    : writeInstallLog(project, [{ type: "bootstrap-failure", failure: result.error }], logPath).then((log) => {
+    : (apply || logPath !== undefined ? writeInstallLog(project, [{ type: "bootstrap-failure", failure: result.error }], logPath) : Promise.resolve(null)).then((log) => {
       io.out(JSON.stringify({ ...result, log }, null, 2)); // fp-allow: no-void-return -- CLI output boundary
       return 1;
     });
@@ -108,10 +108,14 @@ const respond = async (project: string, plan: AcceptedPlan, apply: boolean, requ
   const resumed = apply && request !== null && report.status === "ready" && report.steps.length > 0
     ? await resumeTooling(report, operate(nodeProjectIO(project), request))() : null;
   const result = resumed === null ? ok(common) : resumed.ok ? ok({ ...common, ...resumed.value }) : resumed;
-  const stored = await writeInstallLog(project, [
+  const stored = apply || logPath !== undefined ? await writeInstallLog(project, [
     ...setup.events.map((event) => ({ type: "recovery", ...event })),
     ...[...hostClis].map(([host, cli]) => ({ type: "host-cli", host, ...cli })),
     { type: "bootstrap", mode: common.mode, status: common.status, project: common.project, hosts: common.hosts, handoffs: common.handoffs },
-  ], logPath);
-  return output(io, result.ok ? ok({ ...result.value, log: stored }) : result, handoff.ok ? reportExit(report, apply) : 1);
+    ...(result.ok ? [] : [{ type: "resume-failure", failure: result.error }]),
+  ], logPath) : null;
+  const response = result.ok ? ok({ ...result.value, ...(stored === null ? {} : { log: stored }) })
+    : { ...result, ...(stored === null ? {} : { log: stored }) };
+  const resumeExit = result.ok ? reportExit(report, apply) : exitCodeOf(recoveryFor("launcher", result.error.code).onFailure.class);
+  return output(io, response, handoff.ok ? resumeExit : 1);
 };

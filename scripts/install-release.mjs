@@ -3,7 +3,7 @@
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
 import {createHash, randomUUID} from 'node:crypto';
 import {existsSync, lstatSync, readFileSync, readdirSync, readlinkSync} from 'node:fs';
-import {appendFile, chmod, cp, mkdir, mkdtemp, readFile, rename, rm, writeFile} from 'node:fs/promises';
+import {appendFile, chmod, cp, link, mkdir, mkdtemp, readFile, rename, rm, stat, unlink, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join, relative, resolve} from 'node:path';
 import {parseArgs} from 'node:util';
@@ -203,7 +203,7 @@ const chooseInstallation=async(args,extracted,project,io)=>{
  try {
   const python=args.privateRuntime===null ? selection.value.plan.python : await persistPrivatePython(acceptedProject,args.privateRuntime,io);
   const accepted={...selection.value,plan:{...selection.value.plan,python}};
-  await appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined);
+  await (log===null ? Promise.resolve() : appendFile(log,`${JSON.stringify({type:'launcher',event:'lock-acquired',at:new Date(io.now()).toISOString()})}\n`,{mode:0o600}).catch(()=>undefined));
   await ignoreToolFolders(acceptedProject,io);
   return await activate(args,extracted,accepted,io,report.finishInstall,log,lock);
  } finally {
@@ -231,7 +231,7 @@ const persistPrivatePython=async(project,runtime,io)=>{
 const beginRunLog=async(root,project,version,io)=>{
  const {writeInstallLog}=await import(pathToFileURL(join(root,'packages/cli/dist/install-log.js')).href);
  const path=await writeInstallLog(project,[{type:'launcher',event:'accepted',version,at:new Date(io.now()).toISOString()}]);
- return path ?? stop('Could not create the local setup log after confirmation.');
+ return path;
 };
 const acquireProjectLock=async(project,io)=>{
  const parent=join(project,'.upf-tools');
@@ -239,25 +239,38 @@ const acquireProjectLock=async(project,io)=>{
  await mkdir(parent,{recursive:true,mode:0o700});
  await chmod(parent,0o700);
  const id=randomUUID();
- const ownerPath=join(path,'owner.json');
+ const ownerPath=path;
  const owner={id,pid:process.pid,startedAt:new Date(io.now()).toISOString(),childPid:null};
  const deadline=io.now()+120_000;
  const attempt=async()=>{
-  const created=await mkdir(path,{mode:0o700}).then(()=>true).catch(error=>error.code==='EEXIST'?false:Promise.reject(error));
-  return created ? writeFile(ownerPath,JSON.stringify(owner),{mode:0o600}).then(()=>({path,ownerPath,id}))
-   : await reclaimOrWait(path,ownerPath,owner,deadline,io);
+  const staging=join(parent,`.installer-lock-${id}`);
+  return writeFile(staging,JSON.stringify(owner),{mode:0o600}).then(()=>link(staging,path))
+   .then(()=>unlink(staging).catch(()=>undefined).then(()=>({path,ownerPath,id})))
+   .catch(error=>unlink(staging).catch(()=>undefined).then(()=>error.code==='EEXIST'
+    ? reclaimOrWait(path,ownerPath,owner,deadline,io) : Promise.reject(error)));
  };
  return attempt();
 };
 const reclaimOrWait=async(path,ownerPath,owner,deadline,io)=>{
- const saved=await readFile(ownerPath,'utf8').then(JSON.parse).catch(()=>null);
- return saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid)) ? rename(path,`${path}.stale-${randomUUID()}`)
+ const info=await stat(path).catch(()=>null);
+ const lockOwnerPath=info?.isDirectory()?join(path,'owner.json'):ownerPath;
+ const saved=await readFile(lockOwnerPath,'utf8').then(JSON.parse).catch(()=>null);
+ const emptyAge=info===null?0:io.now()-info.mtimeMs;
+ return saved===null && emptyAge>30_000 ? rename(path,`${path}.stale-${randomUUID()}`)
+  .then(stale=>rm(stale,{recursive:true,force:true})).then(()=>acquireProjectLock(dirname(dirname(path)),io))
+  : saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid)) ? rename(path,`${path}.stale-${randomUUID()}`)
   .then(stale=>rm(stale,{recursive:true,force:true})).then(()=>acquireProjectLock(dirname(dirname(path)),io))
   : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
     : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,owner,deadline,io));
 };
 const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
- .then(owner=>owner.id===id ? rm(path,{recursive:true,force:true}) : undefined).catch(()=>undefined);
+ .then(owner=>owner.id!==id?undefined:stat(path).then(info=>info.isDirectory()?rm(path,{recursive:true,force:true}):unlink(path)))
+ .catch(()=>undefined);
+const updateLockOwner=async(lock,update)=>{
+ const temporary=`${lock.ownerPath}.${randomUUID()}`;
+ return readFile(lock.ownerPath,'utf8').then(JSON.parse).then(owner=>writeFile(temporary,JSON.stringify(update(owner)),{mode:0o600}))
+  .then(()=>rename(temporary,lock.ownerPath)).catch(()=>unlink(temporary).catch(()=>undefined));
+};
 const ignoreToolFolders=async(project,io)=>{
  const resolved=io.spawnSync('git',['rev-parse','--git-path','info/exclude'],{cwd:project,encoding:'utf8',stdio:'pipe',timeout:10_000});
  return resolved.status!==0 || resolved.stdout.trim()==='' ? undefined : appendExcludes(resolve(project,resolved.stdout.trim()));
@@ -291,13 +304,14 @@ const savePlanAndBootstrap=async(root,project,plan,args,io,finishInstall,log,loc
  return !saved.ok ? stop(saved.error.message) : bootstrap(root,project,input,args,io,finishInstall,log,lock);
 };
 const bootstrap=async(root,project,input,args,io,finishInstall,log,lock)=>{
- const result=await runChild(process.execPath,[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply','--log',log],project,io,lock);
+ const commandArgs=[join(root,'packages/cli/dist/index.js'),'project','bootstrap','--project',project,'--input',input,'--apply',...(log===null?[]:['--log',log])];
+ const result=await runChild(process.execPath,commandArgs,project,io,lock);
  return [0,1,2].includes(result.status) ? bootstrapReport(result.stdout,root,project,result.status,args,io,finishInstall,log)
-  : stop(`Setup stopped before returning a report. Log: ${log}`);
+  : stop(`Setup stopped before returning a report.${log===null?'':' Log: '+log}`);
 };
 const runChild=(command,arguments_,cwd,io,lock)=>new Promise((resolveResult,rejectResult)=>{
  const child=io.spawn(command,arguments_,{cwd,stdio:['ignore','pipe','pipe'],detached:io.platform!=='win32',env:io.env});
- const owner=readFile(lock.ownerPath,'utf8').then(JSON.parse).then(value=>writeFile(lock.ownerPath,JSON.stringify({...value,childPid:child.pid}),{mode:0o600})).catch(()=>undefined);
+ const owner=updateLockOwner(lock,value=>({...value,childPid:child.pid}));
  const chunks=[];let size=0;let settled=false;
  const finish=result=>{if(settled)return;settled=true;clearTimeout(timer);resolveResult(result);};
  const timer=setTimeout(()=>{io.killGroup(child.pid,'SIGTERM');setTimeout(()=>io.killGroup(child.pid,'SIGKILL'),5000).unref();finish({status:1,stdout:''});},15*60_000);timer.unref();
@@ -315,8 +329,8 @@ const bootstrapReport=(output,root,project,exitCode,args,io,finishInstall,log)=>
  const report=decodeReport(output);
  if(report?.ok!==true) {
   const finished=finishInstall(output,{strict:args.strict});
-  io.writeStderr(`${finished.message}\nLog: ${log}\n`);
-  return {ok:false,project,log,result:report,exitCode:1};
+  io.writeStderr(`${finished.message}\n${log===null?'Setup log could not be saved.':`Log: ${log}`}\n`);
+  return {ok:false,project,...(log===null?{}:{log}),result:report,exitCode:1};
  }
  return finishStructured(report,root,project,args,io,finishInstall,log,exitCode);
 };
@@ -327,8 +341,8 @@ const finishStructured=(report,root,project,args,io,finishInstall,log,exitCode)=
  const finished=finishInstall(JSON.stringify(report),{strict:args.strict});
  const open=(report.value.tooling.steps??[]).filter(({status})=>status!=='ready');
  const followUps=open.filter(followUp).map(({step})=>step);
- io.writeStderr(`${finished.message}\nLog: ${log}\n`);
- const result={ok:true,distribution:root,project,followUps,log,status:report.value.status,result:report};
+ io.writeStderr(`${finished.message}\n${log===null?'Setup log could not be saved.':`Log: ${log}`}\n`);
+ const result={ok:true,distribution:root,project,followUps,...(log===null?{}:{log}),status:report.value.status,result:report};
  return {...result,exitCode:exitCode===1 ? 1 : finished.exitCode};
 };
 if(process.argv[1] && pathToFileURL(resolve(process.argv[1])).href===import.meta.url) process.exitCode=await main(process.argv.slice(2));
