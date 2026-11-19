@@ -247,76 +247,54 @@ export const acquireProjectLock=async(project,io)=>{
   return writeFile(staging,JSON.stringify(owner),{mode:0o600}).then(()=>link(staging,path))
    .then(()=>unlink(staging).catch(()=>undefined).then(()=>({path,ownerPath,id})))
    .catch(error=>unlink(staging).catch(()=>undefined).then(()=>error.code==='EEXIST'
-    ? reclaimOrWait(path,ownerPath,owner,deadline,io,attempt) : Promise.reject(error)));
+    ? reclaimOrWait({path,deadline,io,attempt}) : Promise.reject(error)));
  };
  return attempt();
 };
-const reclaimOrWait=async(path,ownerPath,owner,deadline,io,attempt)=>{
- const info=await stat(path).catch(()=>null);
- return info===null ? attempt() : reclaimPresent(path,ownerPath,owner,deadline,io,attempt,info);
+const LOCK_GRACE_MS=30_000;
+const lockGone=error=>error.code==='ENOENT'||error.code==='ENOTDIR';
+const ignoreGone=error=>lockGone(error)?undefined:Promise.reject(error);
+const readJson=file=>readFile(file,'utf8').then(JSON.parse);
+const ownerLive=(io,owner)=>io.processAlive(owner.pid) || owner.childPid!==null && io.processAlive(owner.childPid);
+const sameLock=(seen,current)=>seen.dev===current.dev && seen.ino===current.ino;
+const moveAside=path=>{const stale=`${path}.stale-${randomUUID()}`;return rename(path,stale).then(()=>stale);};
+const discardStaleLock=path=>moveAside(path).then(stale=>rm(stale,{recursive:true,force:true}));
+// Current locks are a file holding the owner; legacy installers used a directory holding owner.json.
+const ownerFile=(path,info)=>info.isDirectory()?join(path,'owner.json'):path;
+// An owner record is `missing`, `unreadable` (still being written, or left truncated) or a parsed `owner`.
+const readOwner=file=>readFile(file,'utf8').then(text=>Promise.resolve(text).then(JSON.parse)
+ .then(owner=>({kind:'owner',owner}),()=>({kind:'unreadable'})),error=>lockGone(error)?{kind:'missing'}:Promise.reject(error));
+const lastTouched=(file,info)=>stat(file).then(record=>Math.max(record.mtimeMs,info.mtimeMs),()=>info.mtimeMs);
+// Abandoned: the owner is dead, or no readable owner has appeared within the grace period.
+const abandoned=(path,info,io)=>readOwner(ownerFile(path,info)).then(record=>record.kind==='owner' ? !ownerLive(io,record.owner)
+ : lastTouched(ownerFile(path,info),info).then(touched=>io.now()-touched>LOCK_GRACE_MS));
+export const claimPathFor=(path,info)=>`${path}.reclaim-${info.dev}-${info.ino}`;
+const reclaimOrWait=ctx=>stat(ctx.path).then(info=>abandoned(ctx.path,info,ctx.io).then(stale=>stale?reclaim(ctx,info):waitOrStop(ctx)),
+ error=>lockGone(error)?ctx.attempt():Promise.reject(error));
+const waitOrStop=ctx=>ctx.io.now()>=ctx.deadline ? stop('Another installer holds the project lock; wait and rerun.')
+ : ctx.io.sleep(500).then(()=>reclaimOrWait(ctx));
+// Only the claim holder discards, and only after re-checking that the lock it saw is still there and still abandoned.
+const reclaim=(ctx,info)=>claimLock(claimPathFor(ctx.path,info),ctx.io).then(claim=>claim===null ? waitOrStop(ctx)
+ : stat(ctx.path).then(current=>sameLock(info,current) && abandoned(ctx.path,current,ctx.io))
+  .then(stale=>stale?discardStaleLock(ctx.path):undefined).catch(ignoreGone)
+  .finally(()=>releaseClaim(claimPathFor(ctx.path,info),claim)).then(()=>ctx.attempt()));
+// A claim is staged and hard-linked so readers never see a partial one; null means a live claimant holds it.
+const claimLock=(claimPath,io)=>{
+ const claim={pid:process.pid,token:randomUUID()};
+ const staging=`${claimPath}.${claim.token}`;
+ const take=()=>link(staging,claimPath).then(()=>claim,error=>error.code!=='EEXIST' ? Promise.reject(error)
+  : takeOverDeadClaim(claimPath,io).then(freed=>freed?take():null));
+ return writeFile(staging,JSON.stringify(claim),{mode:0o600}).then(take).finally(()=>unlink(staging).catch(ignoreGone));
 };
-const discardStaleLock=path=>{
- const stale=`${path}.stale-${randomUUID()}`;
- return rename(path,stale).then(()=>rm(stale,{recursive:true,force:true}));
-};
-const claimLock=async(claimPath,saved,io)=>{
- const claim={id:saved?.id??null,pid:process.pid,token:randomUUID()};
- const acquire=()=>{const staging=`${claimPath}.${claim.token}`;return writeFile(staging,JSON.stringify(claim),{mode:0o600})
-  .then(()=>link(staging,claimPath)).then(()=>true).catch(async error=>error.code!=='EEXIST'?Promise.reject(error):readFile(claimPath,'utf8').then(JSON.parse).catch(()=>null)
-   .then(current=>current!==null&&current.id===claim.id&&!io.processAlive(current.pid)
-    ? (()=>{const stale=`${claimPath}.stale-${randomUUID()}`;return rename(claimPath,stale).then(()=>rm(stale,{force:true})).catch(renameError=>renameError.code==='ENOENT'?undefined:Promise.reject(renameError)).then(acquire);})()
-    : false)).finally(()=>unlink(staging).catch(()=>undefined));};
- return acquire().then(acquired=>({acquired,claim}));
-};
-const releaseClaim=(claimPath,claim)=>readFile(claimPath,'utf8').then(JSON.parse)
- .then(current=>current.token===claim.token?unlink(claimPath):undefined).catch(()=>undefined);
-const reclaimPresent=async(path,ownerPath,owner,deadline,io,attempt,info)=>{
- const lockOwnerPath=info?.isDirectory()?join(path,'owner.json'):ownerPath;
- const saved=await readFile(lockOwnerPath,'utf8').then(JSON.parse).catch(()=>null);
- const emptyAge=info===null?0:io.now()-info.mtimeMs;
- return saved===null && emptyAge>30_000 && info.isDirectory() ? reclaimEmptyLegacyLock(path,info,deadline,io,attempt)
-  : saved!==null && !io.processAlive(saved.pid) && (saved.childPid===null || !io.processAlive(saved.childPid))
-    ? info.isDirectory() ? reclaimLegacyOwnedLock(path,info,saved,deadline,io,attempt)
-      : reclaimOwnedLock(path,ownerPath,saved,deadline,io,attempt)
-  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
-    : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,owner,deadline,io,attempt));
-};
-const reclaimOwnedLock=async(path,ownerPath,saved,deadline,io,attempt)=>{
- const claimPath=`${path}.reclaim-${saved.id}`;
- const {acquired,claim}=await claimLock(claimPath,saved,io);
- return acquired ? readFile(ownerPath,'utf8').then(JSON.parse).then(current=>current.id!==saved.id
-  || io.processAlive(current.pid) || current.childPid!==null && io.processAlive(current.childPid)
-    ? undefined : discardStaleLock(path))
-    .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
-    .then(()=>releaseClaim(claimPath,claim)).then(()=>attempt())
-  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
-    : io.sleep(500).then(()=>reclaimOrWait(path,ownerPath,saved,deadline,io,attempt));
-};
-const reclaimEmptyLegacyLock=async(path,info,deadline,io,attempt)=>{
- const claimPath=join(path,`.reclaim-${info.dev}-${info.ino}`);
- const {acquired,claim}=await claimLock(claimPath,null,io).catch(error=>error.code==='ENOTDIR'?{acquired:false,claim:null}:Promise.reject(error));
- return !await stat(path).then(()=>true).catch(()=>false) ? attempt() : acquired ? Promise.all([stat(path),readFile(join(path,'owner.json'),'utf8').catch(error=>error.code==='ENOENT'?null:Promise.reject(error))])
-  .then(([current,ownerText])=>Promise.resolve(ownerText).then(JSON.parse).catch(()=>null).then(owner=>[current,ownerText,owner]))
-  .then(([current,ownerText,owner])=>current.dev!==info.dev || current.ino!==info.ino || ownerText!==null
-   && (owner===null || io.processAlive(owner.pid) || owner.childPid!==null && io.processAlive(owner.childPid))
-   ? undefined : discardStaleLock(path))
-  .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
-  .then(()=>claim===null?undefined:releaseClaim(claimPath,claim)).then(()=>attempt())
-  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
-    : io.sleep(500).then(()=>reclaimOrWait(path,join(path,'owner.json'),null,deadline,io,attempt));
-};
-const reclaimLegacyOwnedLock=async(path,info,saved,deadline,io,attempt)=>{
- const claimPath=join(path,`.reclaim-${saved.id}`);
- const {acquired,claim}=await claimLock(claimPath,saved,io).catch(error=>error.code==='ENOTDIR'||error.code==='ENOENT'?{acquired:false,claim:null}:Promise.reject(error));
- return !await stat(path).then(()=>true).catch(()=>false) ? attempt() : acquired ? Promise.all([stat(path),readFile(join(path,'owner.json'),'utf8').then(JSON.parse)])
-  .then(([current,owner])=>current.dev!==info.dev || current.ino!==info.ino || owner.id!==saved.id
-    || io.processAlive(owner.pid) || owner.childPid!==null && io.processAlive(owner.childPid)
-    ? undefined : discardStaleLock(path))
-  .catch(error=>error.code==='ENOENT'?undefined:Promise.reject(error))
-  .then(()=>releaseClaim(claimPath,claim)).then(()=>attempt())
-  : io.now()>=deadline ? stop('Another installer holds the project lock; wait and rerun.')
-    : io.sleep(500).then(()=>reclaimOrWait(path,join(path,'owner.json'),saved,deadline,io,attempt));
-};
+// A dead claimant's claim is moved aside; if a newer live claim was moved instead, it is put back.
+const takeOverDeadClaim=(claimPath,io)=>readJson(claimPath).then(current=>io.processAlive(current.pid) ? false
+ : moveAside(claimPath).then(moved=>keepIfDead(claimPath,moved,current.token)))
+ .catch(error=>lockGone(error)?true:Promise.reject(error));
+const keepIfDead=(claimPath,moved,token)=>readJson(moved).then(seen=>seen.token===token ? true
+ : link(moved,claimPath).then(()=>false,error=>error.code==='EEXIST'?false:Promise.reject(error)))
+ .finally(()=>rm(moved,{force:true}));
+const releaseClaim=(claimPath,claim)=>readJson(claimPath)
+ .then(current=>current.token===claim.token?unlink(claimPath):undefined).catch(ignoreGone);
 export const releaseProjectLock=({path,ownerPath,id})=>readFile(ownerPath,'utf8').then(JSON.parse)
  .then(owner=>owner.id!==id?undefined:stat(path).then(info=>info.isDirectory()?rm(path,{recursive:true,force:true}):unlink(path)))
  .catch(()=>undefined);

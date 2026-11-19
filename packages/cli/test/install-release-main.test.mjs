@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readdir, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { acquireProjectLock, beginRunLog, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
+import { acquireProjectLock, beginRunLog, claimPathFor, downloadBytes, main, releaseProjectLock, reportLogPath } from '../../../scripts/install-release.mjs';
 
 const ioFor = (project, overrides = {}) => {
   const stdout = [];
@@ -54,7 +54,6 @@ test('an abandoned installer lock is reclaimed once and waiters reacquire after 
   const path = join(directory, 'installer.lock');
   await mkdir(directory);
   await writeFile(path, JSON.stringify({ id: 'stale-run', pid: process.pid + 100_000, startedAt: '', childPid: null }));
-  await writeFile(`${path}.reclaim-stale-run`, JSON.stringify({ id: 'stale-run', pid: process.pid + 100_000, token: 'abandoned-claim' }));
   const old = new Date(Date.now() - 60_000);
   await utimes(path, old, old);
   let releaseWait;
@@ -82,16 +81,54 @@ test('an abandoned installer lock is reclaimed once and waiters reacquire after 
   assert.deepEqual(await readdir(directory), []);
 });
 
+const age = (path) => utimes(path, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
+const deadPid = process.pid + 100_000;
+const lockIn = async (prefix) => {
+  const project = await mkdtemp(join(tmpdir(), prefix));
+  await mkdir(join(project, '.upf-tools'));
+  return { project, directory: join(project, '.upf-tools'), path: join(project, '.upf-tools', 'installer.lock') };
+};
+const waitingIo = { now: () => Date.now(), processAlive: (pid) => pid === process.pid, sleep: () => Promise.reject(new Error('waited')) };
+
+test('a claim left by a killed recovery is taken over and the dead lock reclaimed', async () => {
+  const { project, directory, path } = await lockIn('upf-launcher-dead-claim-');
+  await writeFile(path, JSON.stringify({ id: 'stale-run', pid: deadPid, startedAt: '', childPid: null }));
+  await writeFile(claimPathFor(path, await stat(path)), JSON.stringify({ pid: deadPid, token: 'abandoned-claim' }));
+  const lock = await acquireProjectLock(project, waitingIo);
+  await releaseProjectLock(lock);
+  assert.deepEqual(await readdir(directory), []);
+});
+
+test('a dead lock claimed by a live recovery is waited on and left alone', async () => {
+  const { project, path } = await lockIn('upf-launcher-live-claim-');
+  await writeFile(path, JSON.stringify({ id: 'stale-run', pid: deadPid, startedAt: '', childPid: null }));
+  const claimPath = claimPathFor(path, await stat(path));
+  await writeFile(claimPath, JSON.stringify({ pid: process.pid, token: 'live-claim' }));
+  await assert.rejects(acquireProjectLock(project, waitingIo), /waited/);
+  assert.equal((await stat(path)).isFile(), true);
+  assert.equal((await stat(claimPath)).isFile(), true);
+});
+
 test('an old legacy lock whose owner record is still being written is kept and waited on', async () => {
-  const project = await mkdtemp(join(tmpdir(), 'upf-launcher-legacy-lock-'));
-  const path = join(project, '.upf-tools', 'installer.lock');
-  await mkdir(path, { recursive: true });
+  const { project, directory, path } = await lockIn('upf-launcher-legacy-lock-');
+  await mkdir(path);
   await writeFile(join(path, 'owner.json'), '{"id":"legacy-run","pid":');
-  const old = new Date(Date.now() - 60_000);
-  await utimes(path, old, old);
-  const io = { now: () => Date.now(), processAlive: () => false, sleep: () => Promise.reject(new Error('waited')) };
-  await assert.rejects(acquireProjectLock(project, io), /waited/);
+  await age(path);
+  await assert.rejects(acquireProjectLock(project, waitingIo), /waited/);
   assert.deepEqual(await readdir(path), ['owner.json']);
+  assert.deepEqual(await readdir(directory), ['installer.lock']);
+});
+
+test('a legacy lock left with a truncated owner record past the grace period is reclaimed', async () => {
+  const { project, directory, path } = await lockIn('upf-launcher-truncated-lock-');
+  await mkdir(path);
+  await writeFile(join(path, 'owner.json'), '{"id":"legacy-run","pid":');
+  await age(join(path, 'owner.json'));
+  await age(path);
+  const lock = await acquireProjectLock(project, waitingIo);
+  assert.equal((await stat(path)).isFile(), true);
+  await releaseProjectLock(lock);
+  assert.deepEqual(await readdir(directory), []);
 });
 
 test('launcher log failure is optional and the CLI-reported log path takes precedence', async () => {
