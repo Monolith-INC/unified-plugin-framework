@@ -53,12 +53,15 @@ export const writeText = (project: string, path: string, content: string, previo
     : unsafePath());
 
 const WRITER = fileURLToPath(new URL("../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py", import.meta.url));
+/** The writer's last diagnostic line names the cause, such as a missing module or an unsupported Python. */
+const writerCrash = (diagnostics: string): string =>
+  `The isolated setup writer could not finish${diagnostics.trim() === "" ? "" : `: ${diagnostics.trim().split("\n").at(-1)?.slice(0, 200)}`}.`;
 const lockedWrite = (python: string, project: string, path: string, content: string, previous: string | null): Promise<Result<string>> =>
   runWriter(python, project, path, JSON.stringify({ content, previous }));
 const runWriter = (python: string, project: string, target: string, input: string): Promise<Result<string>> =>
   new Promise((settle) => {
-    const child = execFile(python, ["-I", WRITER, project, target], { cwd: project, timeout: 30_000, maxBuffer: 8_192 }, (error, output) =>
-      settle(error === null ? writeResult(target, output.trim()) : setupFailure("The isolated setup writer could not finish.")));
+    const child = execFile(python, ["-I", WRITER, project, target], { cwd: project, timeout: 30_000, maxBuffer: 8_192 }, (error, output, diagnostics) =>
+      settle(error === null ? writeResult(target, output.trim()) : setupFailure(writerCrash(String(diagnostics)))));
     child.stdin?.on("error", () => settle(setupFailure("The isolated setup writer could not accept its input.")));
     child.stdin?.end(input);
   });

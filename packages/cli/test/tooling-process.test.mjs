@@ -38,7 +38,9 @@ test("a chatty child is cut off and private environment entries are omitted", as
   assert.match(result.error.message, /output limit/);
   const env = selectEnvironment({ INCLUDE: "keep", PRIVATE_VALUE: "omit" }, ["INCLUDE"]);
   const shown = await command(process.execPath, ["-e", "process.stdout.write(JSON.stringify(process.env))"], tmpdir(), 1000, env);
-  assert.deepEqual(JSON.parse(shown.value), { INCLUDE: "keep" });
+  // macOS adds its text-encoding variable to every child process; nothing from the parent may leak.
+  const { __CF_USER_TEXT_ENCODING: _system, ...passed } = JSON.parse(shown.value);
+  assert.deepEqual(passed, { INCLUDE: "keep" });
 });
 
 test("the app-server deadline bounds an unresponsive protocol", { skip: process.platform === "win32", timeout: 5000 }, async () => {
