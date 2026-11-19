@@ -33,6 +33,8 @@ export const diagnosticCodes = {
   manifestNameInvalid: "manifest.name.invalid",
   manifestVersionRequired: "manifest.version.required",
   manifestDescriptionInvalidType: "manifest.description.invalid_type",
+  manifestAuthorInvalid: "manifest.author.invalid",
+  manifestLicenseInvalidType: "manifest.license.invalid_type",
   manifestExtensionsInvalidType: "manifest.extensions.invalid_type",
   manifestSchemaVersionInvalidType: "manifest.schemaVersion.invalid_type",
   manifestSchemaVersionUnsupported: "manifest.schemaVersion.unsupported",
@@ -74,10 +76,20 @@ export interface Diagnostic {
   readonly path?: string;
 }
 
+/** Who maintains a plugin: a non-empty name, plus an optional contact email and URL. */
+export type PluginAuthor = {
+  readonly name: string;
+  readonly email?: string;
+  readonly url?: string;
+};
+
 export interface PluginManifest {
   readonly name: string;
   readonly version: string;
   readonly description?: string;
+  readonly author?: PluginAuthor;
+  /** An SPDX license identifier, such as `Apache-2.0`. */
+  readonly license?: string;
   readonly schemaVersion?: string;
   readonly extensions?: Record<string, unknown>;
 }
@@ -90,6 +102,8 @@ const PORTABLE_MANIFEST_FIELDS = new Set([
   "name",
   "version",
   "description",
+  "author",
+  "license",
   "schemaVersion",
   "extensions",
 ]);
@@ -335,6 +349,8 @@ function readManifest(
   const name = readPluginName(value);
   const version = readRequiredString(value, "version", diagnosticCodes.manifestVersionRequired);
   const description = readOptionalString(value, "description", diagnosticCodes.manifestDescriptionInvalidType);
+  const author = readAuthor(value);
+  const license = readOptionalString(value, "license", diagnosticCodes.manifestLicenseInvalidType);
   const schemaVersion = readSchemaVersion(value);
   const extensions = readOptionalRecord(value, "extensions", diagnosticCodes.manifestExtensionsInvalidType);
   const diagnostics = [
@@ -342,6 +358,8 @@ function readManifest(
     ...name.diagnostics,
     ...version.diagnostics,
     ...description.diagnostics,
+    ...author.diagnostics,
+    ...license.diagnostics,
     ...schemaVersion.diagnostics,
     ...extensions.diagnostics,
   ];
@@ -354,6 +372,8 @@ function readManifest(
           name: name.value,
           version: version.value,
           ...(description.value === undefined ? {} : { description: description.value }),
+          ...(author.value === undefined ? {} : { author: author.value }),
+          ...(license.value === undefined ? {} : { license: license.value }),
           ...(schemaVersion.value === undefined ? {} : { schemaVersion: schemaVersion.value }),
           ...(extensions.value === undefined ? {} : { extensions: extensions.value }),
         },
@@ -834,6 +854,36 @@ function readOptionalString(
           }),
         ],
       };
+}
+
+const AUTHOR_FIELDS: ReadonlySet<string> = new Set(["name", "email", "url"]);
+const optionalString = (entry: unknown): boolean => entry === undefined || typeof entry === "string";
+
+/** An author object with a non-empty name, string contacts when present, and no other keys. */
+const isPluginAuthor = (entry: unknown): entry is PluginAuthor =>
+  isRecord(entry) &&
+  typeof entry["name"] === "string" &&
+  entry["name"].trim().length > 0 &&
+  optionalString(entry["email"]) &&
+  optionalString(entry["url"]) &&
+  Object.keys(entry).every((key) => AUTHOR_FIELDS.has(key));
+
+function readAuthor(value: Record<string, unknown>): ReadResult<PluginAuthor> {
+  const entry = value["author"];
+  return entry === undefined
+    ? { diagnostics: [] }
+    : isPluginAuthor(entry)
+      ? { value: entry, diagnostics: [] }
+      : {
+          diagnostics: [
+            createDiagnostic({
+              severity: "error",
+              code: diagnosticCodes.manifestAuthorInvalid,
+              message: 'Field "author" must be an object with a non-empty "name" and optional string "email" and "url".',
+              path: "author",
+            }),
+          ],
+        };
 }
 
 function readOptionalRecord(

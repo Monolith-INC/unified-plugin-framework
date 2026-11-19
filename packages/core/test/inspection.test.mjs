@@ -7,6 +7,19 @@ import { join } from "node:path";
 
 import { UPF_EXTENSION, diagnosticCodes, inspectManifest, inspectPlugin, loadPluginRoot } from "../dist/index.js";
 
+test("inspectManifest keeps a valid author and license and reports malformed ones", () => {
+  const author = { name: "Monolith-INC", email: "dev@example.com", url: "https://github.com/Monolith-INC" };
+  const valid = inspectManifest({ name: "demo", version: "1.0.0", author, license: "Apache-2.0" });
+  assert.deepEqual(valid.diagnostics, []);
+  assert.deepEqual(valid.manifest, { name: "demo", version: "1.0.0", author, license: "Apache-2.0" });
+
+  const codes = (manifest) => inspectManifest({ name: "demo", version: "1.0.0", ...manifest }).diagnostics.map(({ code, path }) => [code, path]);
+  [{ author: "Monolith-INC" }, { author: { name: "" } }, { author: { name: "A", email: 1 } }, { author: { name: "A", role: "x" } }]
+    .map((manifest) => assert.deepEqual(codes(manifest), [[diagnosticCodes.manifestAuthorInvalid, "author"]], JSON.stringify(manifest)));
+  assert.deepEqual(codes({ license: ["MIT"] }), [[diagnosticCodes.manifestLicenseInvalidType, "license"]]);
+  assert.equal(inspectManifest({ name: "demo", version: "1.0.0", author: { name: "" } }).manifest?.author, undefined);
+});
+
 test("inspectManifest reports structured manifest diagnostics", () => {
   const inspection = inspectManifest({
     description: 42,
@@ -168,6 +181,8 @@ test("all stable diagnostic codes are reachable through inspection", () => {
       name: "",
       version: "",
       description: 42,
+      author: "nobody",
+      license: 42,
       extensions: [],
       skills: 42,
       mcpServers: 42,

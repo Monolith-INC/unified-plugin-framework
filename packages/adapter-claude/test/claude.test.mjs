@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { compileVendorPayload, finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
+import { compileVendorPayload, createJsonPayloadFile, finalizeVendorBundle, normalizeCanonicalPlugin, readVendorBundle } from "@agent-plugins/compiler";
 import { assertAdapterModuleHasNoFilesystemEffects, assertVendorAdapterConformance } from "@agent-plugins/testing";
 import {
   CLAUDE_ADAPTER_VERSION,
@@ -72,10 +72,7 @@ test("Claude adapter renders native manifest, Skill, hook, and MCP payload", () 
   const manifest = JSON.parse(new TextDecoder().decode(bundle.value.files[0].content));
   assert.deepEqual(manifest, {
     description: "Claude fixture.",
-    hooks: "./hooks/hooks.json",
-    mcpServers: "./.mcp.json",
     name: "hello-world",
-    skills: "./skills/",
     version: "1.0.0",
   });
   const hooks = JSON.parse(new TextDecoder().decode(bundle.value.files[2].content));
@@ -85,6 +82,51 @@ test("Claude adapter renders native manifest, Skill, hook, and MCP payload", () 
   const plan = planClaudeInstallation(bundle.value, { root: "/unused" });
   assert.equal(plan.ok, true);
   assert.deepEqual(plan.value.writes.map((write) => write.destination), bundle.value.files.map((file) => file.path));
+});
+
+const MANIFEST = ".claude-plugin/plugin.json";
+const manifestOf = (bundle) => JSON.parse(new TextDecoder().decode(bundle.files.find(({ path }) => path === MANIFEST).content));
+/** The same bundle with its Claude manifest replaced, digests recomputed. */
+const withManifest = (bundle, manifest) => {
+  const file = createJsonPayloadFile({ path: MANIFEST, value: manifest });
+  assert.equal(file.ok, true);
+  const rebuilt = finalizeVendorBundle({
+    plugin: bundle.manifest.plugin,
+    vendor: bundle.manifest.vendor,
+    adapter: bundle.manifest.adapter,
+    sourceDigest: bundle.manifest.sourceDigest,
+    files: [file.value, ...bundle.files.filter(({ path }) => path !== MANIFEST)],
+  });
+  assert.equal(rebuilt.ok, true);
+  return rebuilt.value;
+};
+
+test("Claude adapter carries the portable author and license into the manifest", () => {
+  const author = { name: "Monolith-INC", url: "https://github.com/Monolith-INC" };
+  const draft = compileClaudePayload(richCanonical({
+    manifest: { name: "hello-world", version: "1.0.0", description: "Claude fixture.", author, license: "Apache-2.0" },
+  }));
+  assert.equal(draft.ok, true);
+  const bundle = finalizeVendorBundle(draft.value);
+  assert.equal(bundle.ok, true);
+  assert.deepEqual(manifestOf(bundle.value), { author, description: "Claude fixture.", license: "Apache-2.0", name: "hello-world", version: "1.0.0" });
+  assert.deepEqual(validateClaudeBundle(bundle.value), []);
+  const codes = (manifest) => validateClaudeBundle(withManifest(bundle.value, { ...manifestOf(bundle.value), ...manifest })).map(({ code }) => code);
+  assert.deepEqual(codes({ author: { name: " " } }), ["claude.manifest.author"]);
+  assert.deepEqual(codes({ license: 2 }), ["claude.manifest.license"]);
+});
+
+test("Claude adapter still accepts released bundles that declared default component paths", () => {
+  const draft = compileClaudePayload(richCanonical());
+  assert.equal(draft.ok, true);
+  const bundle = finalizeVendorBundle(draft.value);
+  assert.equal(bundle.ok, true);
+  const legacy = { ...manifestOf(bundle.value), skills: "./skills/", hooks: "./hooks/hooks.json", mcpServers: "./.mcp.json" };
+  assert.deepEqual(validateClaudeBundle(withManifest(bundle.value, legacy)), []);
+  assert.deepEqual(
+    validateClaudeBundle(withManifest(bundle.value, { ...legacy, skills: "./elsewhere/" })).map(({ code, path }) => [code, path]),
+    [["claude.manifest.component", "skills"]],
+  );
 });
 
 test("Claude adapter rejects unrepresentable rules and poisoned payloads", () => {

@@ -2,6 +2,11 @@
   "name": "unified-plugin-framework",
   "version": "0.1.0",
   "description": "Project companion workflows backed by onboarded plugins through workflow adapters.",
+  "author": {
+    "name": "Monolith-INC",
+    "url": "https://github.com/Monolith-INC"
+  },
+  "license": "Apache-2.0",
   "schemaVersion": "1.0.0",
   "extensions": {
     "io.github.monolith-inc.upf": {

@@ -40,21 +40,26 @@ export const CLAUDE_TOOLING = Object.freeze({
 export const claudeMarketplaceName = (project: string): string => `upf-${sha256(project).slice(0, 12)}`;
 
 const OWNER = Object.freeze({ name: "Unified Plugin Framework" });
+const DESCRIPTION = "Plugins installed for this project by Unified Plugin Framework.";
 const catalogConflict = (existing: unknown, marketplace: string, entries: readonly ClaudeCatalogEntry[]): boolean => {
   const listed = record(existing).plugins;
   return existing !== null && (!isRecord(existing) || record(existing).name !== marketplace || !Array.isArray(listed)
     || listed.some((old: unknown) => !isRecord(old) || typeof record(old).name !== "string")
     || entries.some((entry) => listed.some((old: unknown) => record(old).name === entry.name && record(old).source !== entry.source)));
 };
-/** Earlier entries and unrelated catalog fields are kept; a plugin already listed from another folder is a conflict. */
+/**
+ * Earlier entries and unrelated catalog fields, including a description the user wrote, are kept; a plugin already
+ * listed from another folder is a conflict. A catalog written before descriptions were added gains one on the next run.
+ */
 export const mergeClaudeMarketplace = (existing: unknown, marketplace: string, entries: readonly ClaudeCatalogEntry[]): Result<JsonEdit> => {
   const current = record(existing);
   const listed: readonly unknown[] = Array.isArray(current.plugins) ? current.plugins : [];
   const added = entries.filter((entry) => !listed.some((old) => record(old).name === entry.name));
   return catalogConflict(existing, marketplace, entries)
     ? failure({ severity: "error", code: "claude.marketplace.conflict", message: `Catalog ${marketplace} lists a plugin from another folder, or is not a ${marketplace} catalog.` })
-    : added.length === 0 && existing !== null ? success({ kind: "unchanged" })
-      : success({ kind: "write", document: { ...current, name: marketplace, owner: current.owner ?? OWNER, plugins: [...listed, ...added] } as unknown as JsonValue });
+    : added.length === 0 && existing !== null && current.description !== undefined ? success({ kind: "unchanged" })
+      : success({ kind: "write", document: { ...current, name: marketplace, description: current.description ?? DESCRIPTION,
+        owner: current.owner ?? OWNER, plugins: [...listed, ...added] } as unknown as JsonValue });
 };
 
 /** Whether project settings already declare this project's marketplace, at this tools folder. */

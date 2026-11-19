@@ -1,5 +1,10 @@
 {
   "name": "project-knowledge",
   "version": "0.1.0",
-  "description": "Standalone project knowledge setup and discovery guidance."
+  "description": "Standalone project knowledge setup and discovery guidance.",
+  "author": {
+    "name": "Monolith-INC",
+    "url": "https://github.com/Monolith-INC"
+  },
+  "license": "Apache-2.0"
 }
