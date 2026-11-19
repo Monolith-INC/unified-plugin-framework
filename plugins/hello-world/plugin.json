@@ -2,6 +2,11 @@
   "name": "hello-world",
   "version": "1.0.0",
   "description": "Minimum valid Agent Plugins reference plugin.",
+  "author": {
+    "name": "Monolith-INC",
+    "url": "https://github.com/Monolith-INC"
+  },
+  "license": "Apache-2.0",
   "extensions": {
     "com.example.flags": {
       "demo": true

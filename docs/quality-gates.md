@@ -14,7 +14,7 @@ pnpm test
 pnpm payloads:verify
 ```
 
-Node.js `>=22` and `pnpm@10.14.0` (see root `package.json` `packageManager`) are required.
+Node.js `>=22` and `pnpm@10.14.0` (see root `package.json` `packageManager`) are required. `pnpm payloads:verify` also needs the Claude Code CLI (`claude`), because it runs Claude Code's own validator on the Claude payloads.
 
 ## CI matrix
 

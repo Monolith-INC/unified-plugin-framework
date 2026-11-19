@@ -115,7 +115,14 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # The Claude adapter's payload:verify also runs Claude Code's own validator on every built payload.
+      # The version is pinned so a Claude Code release cannot change the verdict between runs.
+      - name: Install Claude Code CLI
+        run: npm install --global @anthropic-ai/claude-code@2.1.318
+
       - name: Generate and verify host payloads
+        env:
+          DISABLE_AUTOUPDATER: '1'
         run: pnpm payloads:verify
 
       - name: Pack release assets

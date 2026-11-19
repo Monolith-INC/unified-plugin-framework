@@ -39,22 +39,33 @@ export const CLAUDE_TOOLING = Object.freeze({
 /** Claude Code keeps one marketplace per name for the whole user, so each project's catalog is named after its real path. */
 export const claudeMarketplaceName = (project: string): string => `upf-${sha256(project).slice(0, 12)}`;
 
-const OWNER = Object.freeze({ name: "Unified Plugin Framework" });
+/** Catalog fields setup supplies only when the catalog lacks them; a value the user wrote always wins. */
+const MARKETPLACE_DEFAULTS: Readonly<Record<string, unknown>> = Object.freeze({
+  description: "Plugins installed for this project by Unified Plugin Framework.",
+  owner: Object.freeze({ name: "Unified Plugin Framework" }),
+});
+/** The defaults the catalog lacks: fields that are absent or null. */
+const missingDefaults = (current: Readonly<Record<string, unknown>>): readonly (readonly [string, unknown])[] =>
+  Object.entries(MARKETPLACE_DEFAULTS).filter(([key]) => (current[key] ?? undefined) === undefined);
 const catalogConflict = (existing: unknown, marketplace: string, entries: readonly ClaudeCatalogEntry[]): boolean => {
   const listed = record(existing).plugins;
   return existing !== null && (!isRecord(existing) || record(existing).name !== marketplace || !Array.isArray(listed)
     || listed.some((old: unknown) => !isRecord(old) || typeof record(old).name !== "string")
     || entries.some((entry) => listed.some((old: unknown) => record(old).name === entry.name && record(old).source !== entry.source)));
 };
-/** Earlier entries and unrelated catalog fields are kept; a plugin already listed from another folder is a conflict. */
+/**
+ * Earlier entries and unrelated catalog fields, including a description the user wrote, are kept; a plugin already
+ * listed from another folder is a conflict. A catalog written before descriptions were added gains one on the next run.
+ */
 export const mergeClaudeMarketplace = (existing: unknown, marketplace: string, entries: readonly ClaudeCatalogEntry[]): Result<JsonEdit> => {
   const current = record(existing);
   const listed: readonly unknown[] = Array.isArray(current.plugins) ? current.plugins : [];
   const added = entries.filter((entry) => !listed.some((old) => record(old).name === entry.name));
   return catalogConflict(existing, marketplace, entries)
     ? failure({ severity: "error", code: "claude.marketplace.conflict", message: `Catalog ${marketplace} lists a plugin from another folder, or is not a ${marketplace} catalog.` })
-    : added.length === 0 && existing !== null ? success({ kind: "unchanged" })
-      : success({ kind: "write", document: { ...current, name: marketplace, owner: current.owner ?? OWNER, plugins: [...listed, ...added] } as unknown as JsonValue });
+    : added.length === 0 && existing !== null && missingDefaults(current).length === 0 ? success({ kind: "unchanged" })
+      : success({ kind: "write", document: { ...current, ...Object.fromEntries(missingDefaults(current)), name: marketplace,
+        plugins: [...listed, ...added] } as unknown as JsonValue });
 };
 
 /** Whether project settings already declare this project's marketplace, at this tools folder. */
