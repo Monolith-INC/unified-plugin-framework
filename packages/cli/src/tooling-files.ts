@@ -61,7 +61,8 @@ const lockedWrite = (python: string, project: string, path: string, content: str
 const runWriter = (python: string, project: string, target: string, input: string): Promise<Result<string>> =>
   new Promise((settle) => {
     const child = execFile(python, ["-I", WRITER, project, target], { cwd: project, timeout: 30_000, maxBuffer: 8_192 }, (error, output, diagnostics) =>
-      settle(error === null ? writeResult(target, output.trim()) : setupFailure(writerCrash(String(diagnostics)))));
+      settle(error === null ? writeResult(target, output.trim())
+        : setupFailure(writerCrash(code(error) === "ENOENT" ? `${python} was not found` : String(diagnostics)))));
     child.stdin?.on("error", () => settle(setupFailure("The isolated setup writer could not accept its input.")));
     child.stdin?.end(input);
   });
