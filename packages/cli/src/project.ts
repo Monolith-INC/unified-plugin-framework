@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, setup, type ProjectIO, type ProjectReply, type Request, type Result } from "@agent-plugins/project";
+import { fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, setup, type ProjectIO, type Request, type Result } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
 import { runTooling } from "./tooling-command.js";
+import { readLastInstallLog } from "./install-log.js";
+import { handoffReady, handoffStateRoot, isTaskKind, manageHandoffs, type HandoffAction } from "./tooling-handoffs.js";
 
-const USAGE = "agent-plugin project describe | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
+const USAGE = "agent-plugin project describe | status | handoffs | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
 const option = (args: readonly string[], name: string): string | undefined => args[args.indexOf(name) + 1];
 const argument = (args: readonly string[], name: string): string | undefined => args.includes(name) ? option(args, name) : undefined;
 
@@ -15,7 +17,7 @@ const readInput = (root: string, path: string | undefined): Promise<Result<unkno
 const readResume = (root: string, path: string | undefined): Promise<Result<Request | null>> => path === undefined
   ? Promise.resolve(ok(null)) : readInput(root, path).then((raw) => flatMap(raw, parseRequest));
 
-const respond = (io: CliIo, result: Result<ProjectReply>): number => {
+const respond = (io: CliIo, result: Result<unknown>): number => {
   io.out(JSON.stringify(result, null, 2)); // fp-allow: no-void-return -- external CLI output contract
   return result.ok ? 0 : 1;
 };
@@ -51,14 +53,39 @@ const validArgs = (args: readonly string[]): boolean => args.slice(1).length % 2
   && (args[0] === "setup" || !args.includes("--resume")) && (args[0] !== "describe" || !args.includes("--input"));
 
 export const runProject = (args: readonly string[], io: CliIo): Promise<number> => args[0] === "bootstrap" ? runTooling(args.slice(1), io)
+  : args[0] === "handoffs" ? runHandoff(args.slice(1), io)
   : validArgs(args) ? runAction(args, io) : Promise.resolve(respond(io, fail("usage", USAGE, "Correct the option names and provide one value for each option.")));
+
+const handoffAction = (args: readonly string[]): HandoffAction | null => {
+  const task = argument(args, "--task");
+  const token = argument(args, "--finish");
+  const claim = argument(args, "--claim");
+  const options = args.filter((_, index) => index % 2 === 0);
+  const valid = args.length % 2 === 0 && new Set(options).size === options.length
+    && args.every((entry, index) => index % 2 === 0 ? ["--project", "--claim", "--task", "--finish"].includes(entry) : entry.length > 0 && !entry.startsWith("--"));
+  if (!valid) return null;
+  if (isTaskKind(claim) && task === undefined && token === undefined) return { kind: "claim", task: claim };
+  if (isTaskKind(task) && token !== undefined && claim === undefined) return { kind: "finish", task, token };
+  return claim === undefined && task === undefined && token === undefined ? { kind: "list" } : null;
+};
+const runHandoff = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const action = handoffAction(args);
+  const project = resolve(io.cwd(), argument(args, "--project") ?? ".");
+  return action === null ? respond(io, fail("usage", "Invalid handoff arguments.",
+    "Use agent-plugin project handoffs [--project <directory>] [--claim <task> | --task <task> --finish <token>]."))
+    : respond(io, await manageHandoffs(project, handoffStateRoot(), action, handoffReady(project, { claudeState: io.claudeState() })));
+};
 const runAction = (args: readonly string[], io: CliIo): Promise<number> => {
   const root = resolve(io.cwd(), argument(args, "--project") ?? ".");
   const runtime = nodeProjectIO(root);
   switch (args[0]) {
     case "describe": return operate(runtime, null)().then((reply) => respond(io, reply));
+    case "status": return readLastInstallLog(root).then((log) => {
+      io.out(JSON.stringify({ ok: true, value: { log } }, null, 2)); // fp-allow: no-void-return -- CLI output boundary
+      return 0;
+    });
     case "request": return requestCommand(root, argument(args, "--input"), runtime, io);
     case "setup": return setupCommand(root, args, runtime, io);
-    default: return Promise.resolve(respond(io, fail("usage", USAGE, "Choose describe, request or setup.")));
+    default: return Promise.resolve(respond(io, fail("usage", USAGE, "Choose describe, status, handoffs, request or setup.")));
   }
 };

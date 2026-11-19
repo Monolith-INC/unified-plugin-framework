@@ -1,0 +1,1 @@
+Run shared steps once and host steps per host, apply recoveries, keep going when one host fails, collect knowledge after setup, and report per host while keeping the existing output keys. Done when two-host, failing-host, restricted-step, later-host and resume-once tests pass, with the combining rule's law test.

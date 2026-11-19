@@ -6,8 +6,9 @@ import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 import { fail, object, ok, parseJson, type Result } from "@agent-plugins/project";
 import type { HostName } from "./host-names.js";
 import { NODE_PLUGIN_FACTS_IO, skillNames } from "./plugin-reader.js";
-import { codexAppServerRequest, command } from "./tooling-process.js";
+import { codexAppServerRequest, command, scaled } from "./tooling-process.js";
 import { readText, readToml, writeText } from "./tooling-files.js";
+import type { HostCli } from "./tooling-host-cli.js";
 
 export interface DiscoveredSkill { readonly name: string; readonly path: string }
 /** A plugin directory the host should load, under the name its skills are namespaced by. */
@@ -17,16 +18,19 @@ export interface HostPlugin { readonly name: string; readonly root: string; read
  * `claudeState` is Claude Code's user state file, where it keeps local-scope servers per project.
  */
 export interface HostContext {
+  readonly program?: string;
   readonly project: string;
   readonly canonical: string;
   readonly claudeState: string;
   readonly tools: string;
   readonly python: string;
   readonly knowledgeCommand?: string;
+  /** Time-limit multiple for host commands; set only when retrying a timeout. */
+  readonly patience?: number;
 }
 
 /** What setup needs from the user's environment, read once at the program edge. */
-export interface HostEnvironment { readonly claudeState: string }
+export interface HostEnvironment { readonly claudeState: string; readonly hostCli?: HostCli; readonly patience?: number }
 
 /** One host's names, paths and commands; setup steps stay host-neutral and ask this record. */
 export interface HostTooling {
@@ -55,18 +59,18 @@ interface JsonDocument { readonly text: string | null; readonly value: unknown }
 const readDocument = (path: string): Promise<Result<JsonDocument>> => readText(path).then((read) => !read.ok ? read
   : read.value === null ? ok({ text: null, value: null }) : withText(read.value, parseJson(read.value)));
 const withText = (text: string, parsed: Result<unknown>): Result<JsonDocument> => parsed.ok ? ok({ text, value: parsed.value }) : parsed;
-const written = (project: string, path: string, previous: string | null, edit: JsonEdit): Promise<Result<string>> => {
+const written = (context: HostContext, path: string, previous: string | null, edit: JsonEdit): Promise<Result<string>> => {
   switch (edit.kind) {
     case "unchanged": return Promise.resolve(ok(path));
-    case "write": return writeText(project, path, `${JSON.stringify(edit.document, null, 2)}\n`, previous);
+    case "write": return writeText(context.project, path, `${JSON.stringify(edit.document, null, 2)}\n`, previous, context.python);
   }
 };
 /** Read once, plan the edit purely, then write only a changed document. */
-const editJson = (project: string, path: string, label: string, plan: (value: unknown) => PlanResult<JsonEdit>): Promise<Result<string>> =>
+const editJson = (context: HostContext, path: string, label: string, plan: (value: unknown) => PlanResult<JsonEdit>): Promise<Result<string>> =>
   readDocument(path).then((document) => {
     const planned = document.ok ? plan(document.value.value) : undefined;
     return !document.ok ? document : planned?.ok !== true ? conflict(label, path, planned === undefined ? "" : planDetail(planned))
-      : written(project, path, document.value.text, planned.value);
+      : written(context, path, document.value.text, planned.value);
   });
 const knowledge = <A>(context: HostContext, absent: A, present: (command: string) => Promise<Result<A>>): Promise<Result<A>> =>
   context.knowledgeCommand === undefined ? Promise.resolve(ok(absent)) : present(context.knowledgeCommand);
@@ -96,7 +100,7 @@ const codexCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Pro
   return readDocument(path).then((document) => {
     const merged = document.ok ? mergeCodexMarketplace(document.value.value, plugins.map(({ name }) => name)) : undefined;
     return !document.ok ? document : merged?.ok !== true ? conflict("Codex marketplace", path, merged === undefined ? "" : planDetail(merged))
-      : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text);
+      : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text, context.python);
   });
 };
 const codexSkills = (reply: unknown): Result<readonly DiscoveredSkill[]> => {
@@ -112,17 +116,17 @@ const CODEX = Object.freeze<HostTooling>({
   frameworkDir: "plugins", manifest: ".codex-plugin/plugin.json", bareSkills: ".agents/skills",
   catalog: codexCatalog,
   register: (context) => codexRegistration(context).then((found) => !found.ok ? found : found.value.addition === "" ? ok(CODEX_CONFIG)
-    : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old)),
+    : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old, context.python)),
   registered: (context) => codexRegistration(context).then((found) => found.ok ? ok(found.value.addition === "") : found),
-  activate: (context, plugin) => command("codex", CODEX_TOOLING.install(plugin.name), context.project),
-  discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project)).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
+  activate: (context, plugin) => command(context.program ?? "codex", CODEX_TOOLING.install(plugin.name), context.project, scaled(120_000, context.patience)),
+  discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project), scaled(25_000, context.patience), context.program).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
 });
 
 // Claude Code: a directory marketplace named for this project, declared and installed at local scope; plugins load in place.
 const claudeMarketplace = (context: HostContext): string => claudeMarketplaceName(context.canonical);
 const serverEntry = (context: HostContext, knowledgeCommand: string): ClaudeServerEntry => ({ command: knowledgeCommand, args: ["--project", context.project] });
 const claudeCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Promise<Result<string>> =>
-  editJson(context.project, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
+  editJson(context, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
     plugins.map(({ name, root }) => ({ name, source: catalogSource(context.tools, root) }))));
 /** Claude Code reads catalog sources as `./`-relative paths with forward slashes on every platform. */
 const catalogSource = (tools: string, root: string): string => `./${relative(tools, root).split(sep).join(posix.sep)}`;
@@ -135,7 +139,7 @@ const declared = (context: HostContext, settings: unknown): Result<boolean> => {
 };
 const claudeDeclared = (context: HostContext): Promise<Result<boolean>> =>
   readDocument(join(context.project, CLAUDE_TOOLING.settings)).then((document) => document.ok ? declared(context, document.value.value) : document);
-const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command("claude", args, context.canonical);
+const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command(context.program ?? "claude", args, context.canonical, scaled(120_000, context.patience));
 const claudeLocal = (context: HostContext): Promise<Result<unknown>> =>
   readDocument(context.claudeState).then((document) => document.ok ? ok(claudeLocalServer(document.value.value, context.canonical)) : document);
 const applyServer = (context: HostContext, entry: ClaudeServerEntry, old: unknown): Promise<Result<string>> => {

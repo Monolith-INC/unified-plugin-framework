@@ -48,6 +48,10 @@ jobs:
     name: Project knowledge platform/config checks / Windows
     runs-on: windows-latest
     steps:
+      # Work-item documents sit deep under docs/work-items and pass the 260-character Windows path limit.
+      - name: Allow long paths
+        run: git config --system core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -74,8 +78,19 @@ jobs:
         os: ${{ fromJSON(inputs.skip_macos && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
         node: [22]
     steps:
+      # Work-item documents sit deep under docs/work-items and pass the 260-character Windows path limit.
+      - name: Allow long paths
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Setup tests run the installer's writer with Python 3.12, which newer runner images no longer ship.
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

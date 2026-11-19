@@ -1,0 +1,1 @@
+Ask hosts and workflows with the checklist and single choices with the list, preselect hosts found on this machine, show a valid example on every rejected answer, and show one summary of installs, backups and consents. Done when rejection, preselection and cancel tests pass.

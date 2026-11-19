@@ -1,0 +1,1 @@
+Verify the downloaded installer, retry downloads, ask consent before installing a private Python, log from the start, lock the project only after confirmation, show progress per host, support `--strict` and keep tool folders out of Git. Done when exit codes 0, 2 and 1 are tested end to end and declining leaves the project unchanged.

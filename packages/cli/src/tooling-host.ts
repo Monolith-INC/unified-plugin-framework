@@ -1,6 +1,5 @@
 import { realpathSync } from "node:fs";
-import { cp, readdir, rename } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { cp, lstat, readdir, rename } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fail, object, ok, type Result } from "@agent-plugins/project";
@@ -15,7 +14,7 @@ import { checkPluginBinding } from "@agent-plugins/workflows";
 import { sequence } from "./tooling-process.js";
 import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment, type HostPlugin } from "./host-table.js";
 import type { HostName } from "./host-names.js";
-import { directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
+import { directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
 
 export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
 export const toolsRoot = (project: string): string => join(project, ".upf-tools");
@@ -119,7 +118,7 @@ const stageResolved = (project: string, input: BootstrapInput): Promise<Result<s
   const bindings = pluginBindings(project, input);
   const roots = parseRootArgs(project, input.pluginRoots);
   return !bindings.ok ? Promise.resolve(bindings) : !roots.ok ? Promise.resolve(setupFailure(roots.message))
-    : sequence(pluginNames(input), (name) => stageNamed(project, roots.roots, name), "Pinned dependencies staged.").then((staged) => {
+    : sequence(pluginNames(input), (name) => stageNamed(project, roots.roots, name, input.python), "Pinned dependencies staged.").then((staged) => {
       const checked = staged.ok ? stagedBindings(project, input) : staged;
       return checked.ok ? staged : checked;
     });
@@ -129,18 +128,18 @@ const stageResolved = (project: string, input: BootstrapInput): Promise<Result<s
 export const stagedBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => pluginBindings(project, {
   ...input, pluginRoots: pluginNames(input).map((name) => `${name}@${pinnedVersion(name)}=${join(pluginTarget(project, name), "source")}`),
 });
-const stageNamed = (project: string, roots: readonly PluginRootArg[], name: string): Promise<Result<string>> => {
+const stageNamed = (project: string, roots: readonly PluginRootArg[], name: string, python: string): Promise<Result<string>> => {
   const root = roots.find((root) => rootPluginName(NODE_PLUGIN_FACTS_IO, root) === name);
-  return root === undefined ? Promise.resolve(setupFailure(`No source for ${name}.`)) : stageDependency(project, name, root.path);
+  return root === undefined ? Promise.resolve(setupFailure(`No source for ${name}.`)) : stageDependency(project, name, root.path, python);
 };
-export const stageDependency = async (project: string, name: string, source: string): Promise<Result<string>> => {
+export const stageDependency = async (project: string, name: string, source: string, python = "python3"): Promise<Result<string>> => {
   const target = pluginTarget(project, name);
   const marker = await readText(join(target, "upf-source.json"));
   const manifest = JSON.stringify({ source: resolve(source), version: pinnedVersion(name) }, null, 2);
   return !marker.ok ? marker : marker.value !== null ? marker.value === manifest || markerMatches(marker.value, source) ? ok(target)
-    : identicalSource(target, source) ? writeText(project, join(target, "upf-source.json"), manifest, marker.value).then((saved) => saved.ok ? ok(target) : saved)
-      : setupFailure(`An existing ${name} wrapper has different source settings. Preserve it and reconcile its recorded source.`)
-    : directory(project, dirname(target)).then((dir) => dir.ok ? copySource(project, target, source, name, manifest) : dir);
+    : identicalSource(target, source) ? writeText(project, join(target, "upf-source.json"), manifest, marker.value, python).then((saved) => saved.ok ? ok(target) : saved)
+      : fail("modified-file", `An existing ${name} wrapper has different source settings.`, "Preserve it and reconcile its recorded source.")
+    : directory(project, dirname(target)).then((dir) => dir.ok ? copySource(project, target, source, name, manifest, python) : dir);
 };
 const identicalSource = (target: string, source: string): boolean => {
   const staged = readContentTree(join(target, "source"));
@@ -151,16 +150,17 @@ const markerMatches = (raw: string, source: string): boolean => {
   try { const marker: unknown = JSON.parse(raw); return object(marker) && marker.source === resolve(source); }
   catch { return false; }
 };
-const copySource = async (project: string, target: string, source: string, name: string, marker: string): Promise<Result<string>> => {
-  const staged = join(toolsRoot(project), "staging", randomUUID());
-  const sourceTree = join(staged, "source");
-  const occupied = await readdir(target).then((entries) => entries.length > 0).catch(() => false);
+const copySource = async (project: string, target: string, source: string, name: string, marker: string, python: string): Promise<Result<string>> => {
+  const occupied = await lstat(target).then(() => true).catch((error: unknown) =>
+    !object(error) || error.code !== "ENOENT");
   const safe = await safePath(project, target);
-  return !safe || occupied ? setupFailure(`Unmanaged or unsafe ${name} wrapper already exists.`)
-    : directory(project, staged).then((created) => created.ok ? cp(source, sourceTree, { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
-      .then(() => writeText(project, join(staged, "upf-source.json"), marker, null))
-      .then((written) => written.ok ? rename(staged, target).then(() => ok(target)) : written) : created)
-      .catch(() => setupFailure(`Could not stage ${name}; preserve existing source and wrapper, then inspect the partial installation.`));
+  return !safe ? fail("symlink-escape", `The ${name} wrapper follows a linked path.`, "Preserve the link and reconcile the installation location.")
+    : occupied ? fail("unmanaged-file", `An unmanaged ${name} wrapper already exists.`, "Preserve existing files and reconcile ownership before rerunning.")
+    : withSetupStage(project, python, (staged) =>
+      cp(source, join(staged, "source"), { recursive: true, dereference: false, verbatimSymlinks: true, errorOnExist: true, force: false, filter: (path) => ![".git", "node_modules", ".venv", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
+      .then(() => writeText(project, join(staged, "upf-source.json"), marker, null, python))
+      .then((written) => written.ok ? rename(staged, target).then(() => ok(target)) : written))
+      .catch(() => fail("partial-step", `Could not stage ${name}.`, "Preserve the existing source and wrapper, then rerun staging."));
 };
 const pinnedVersion = (name: string): string => {
   const raw = NODE_PLUGIN_FACTS_IO.readJson(join(FRAMEWORK_PLUGIN, LOCK_FILE));
@@ -170,7 +170,9 @@ const pinnedVersion = (name: string): string => {
 
 /** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
 const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
-  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python, ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }) });
+  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python,
+  ...(environment.hostCli?.kind === "available" ? { program: environment.hostCli.program } : {}),
+  ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }), ...(environment.patience === undefined ? {} : { patience: environment.patience }) });
 const realProject = (project: string): string => {
   try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
 };
@@ -183,12 +185,12 @@ const wrapperManifest = (name: string): string => JSON.stringify({ name, version
 const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Promise<Result<string>> => {
   switch (plugin.kind) {
     case "framework": return Promise.resolve(ok(plugin.root));
-    case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name);
+    case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name, input.python);
   }
 };
-const ensureWrapper = (project: string, path: string, name: string): Promise<Result<string>> => readText(path).then((existing) => !existing.ok ? existing
-  : existing.value === null ? writeText(project, path, wrapperManifest(name), null)
-    : existing.value === wrapperManifest(name) ? ok(path) : setupFailure(`An existing ${name} host manifest differs from its pinned wrapper; preserve and reconcile it.`));
+const ensureWrapper = (project: string, path: string, name: string, python: string): Promise<Result<string>> => readText(path).then((existing) => !existing.ok ? existing
+  : existing.value === null ? writeText(project, path, wrapperManifest(name), null, python)
+    : existing.value === wrapperManifest(name) ? ok(path) : fail("modified-file", `An existing ${name} host manifest differs from its pinned wrapper.`, "Preserve it and reconcile the wrapper before rerunning."));
 
 export const registerHost = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<string>> =>
   HOSTS[input.host].register(hostContext(project, input, environment, knowledgeCommand));
@@ -214,9 +216,9 @@ const activateBare = (project: string, input: BootstrapInput, names: readonly st
   const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog]
     .filter(({ plugin }) => names.includes(plugin) && adapter.bareSkillPlugins.includes(plugin))) : [];
   return sequence([...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()],
-    (ref) => copyBare(project, HOSTS[input.host].bareSkills, ref.plugin, ref.skill), "Bare dependency skills activated.");
+    (ref) => copyBare(project, HOSTS[input.host].bareSkills, ref.plugin, ref.skill, input.python), "Bare dependency skills activated.");
 };
-const copyBare = async (project: string, folder: string, plugin: string, skill: string): Promise<Result<string>> => {
+const copyBare = async (project: string, folder: string, plugin: string, skill: string, python: string): Promise<Result<string>> => {
   const source = join(pluginTarget(project, plugin), "source/skills", skill);
   const target = join(project, folder, skill);
   const expected = `${plugin}/${skill}@${pinnedVersion(plugin)}`;
@@ -230,7 +232,7 @@ const copyBare = async (project: string, folder: string, plugin: string, skill: 
       : directory(project, target).then((created) => created.ok ? readdir(target).then((entries) => entries.length === 0
         ? cp(source, target, { recursive: true, errorOnExist: false, force: false })
         : Promise.reject(new Error("unmanaged-content")))
-        .then(() => writeText(project, join(target, ".upf-source"), expected, null)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
+        .then(() => writeText(project, join(target, ".upf-source"), expected, null, python)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
 };
 
 export const discoverHost = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<readonly DiscoveredSkill[]>> =>

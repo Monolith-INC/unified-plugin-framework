@@ -1,0 +1,1 @@
+Give file failures distinct codes and a Preserve class; make per-file locks recoverable; sweep leftovers at start; mark steps in progress so a killed run redoes only installer-created paths; keep an ownership ledger and verified backups; require a completion marker for knowledge. Done when kill-then-rerun tests pass and user files survive cleanup.

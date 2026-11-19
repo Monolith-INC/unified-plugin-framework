@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, probeProjectRead, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
 import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 import type { HostEnvironment } from "./host-table.js";
-import type { BootstrapInput } from "./tooling-input.js";
-import { command } from "./tooling-process.js";
+import { requireHost, type BootstrapInput } from "./tooling-input.js";
+import { command, scaled } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
+import { DISCOVERY_MARKER } from "./tooling-recovery.js";
+import { HOST_STEPS } from "./tooling-bootstrap.js";
 import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
@@ -13,24 +15,34 @@ const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "re
 const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "missing", recovery });
 const checked = (result: Result<unknown>, evidence: string, recovery: string): Result<ToolingObservation> => result.ok ? ready(evidence) : missing(recovery);
 const inputNeeded = (code: string, message: string, recovery: string): Promise<Result<string>> => Promise.resolve(fail(code, message, recovery));
+const hostCliMissing = (input: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Result<never> | null =>
+  environment.hostCli?.kind === "missing" && HOST_STEPS.includes(step)
+    ? fail("host-cli-missing", environment.hostCli.attempted ? `The pinned ${input.host} CLI could not be installed.` : `The ${input.host} CLI is unavailable.`,
+      "Install the host's official CLI, add it to PATH, and rerun setup.")
+    : null;
+
+/** A per-host step runs only on one host's view of the plan; a whole plan is refused before any effect. */
+const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promise<Result<A>> =>
+  ((host: Result<true>) => host.ok ? run() : Promise.resolve(host))(requireHost(input));
 
 /**
  * Node edge interpreter; setup has one shared lifecycle and no provider-specific workflow logic. Each step sees the
  * accepted input and, once resolved, the same input with fetched dependency roots added.
  */
 export const nodeToolingIO = (project: string, input: BootstrapInput, environment: HostEnvironment): ToolingIO => ({
-  inspect: (step) => () => Promise.resolve().then(() => inspect(project, input, resolvedInput(project, input), environment, step)).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
-  configure: (step) => () => Promise.resolve().then(() => configureStep(project, input, resolvedInput(project, input), environment, step)).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
+  inspect: (step) => () => Promise.resolve().then(() => guarded(input, () =>
+    Promise.resolve(hostCliMissing(input, environment, step) ?? inspect(project, input, resolvedInput(project, input), environment, step)))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
+  configure: (step) => () => Promise.resolve().then(() => guarded(input, () => configureStep(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
 });
 const inspect = async (project: string, input: BootstrapInput, resolved: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Promise<Result<ToolingObservation>> => {
   switch (step) {
     case "settings": return inspectSettings(project, input);
-    case "cli": return installedCli(project).then((current) => current ? command(process.execPath, [join(toolsRoot(project), "bin/agent-plugin"), "--help"], project) : Promise.resolve(setupFailure("The CLI launcher does not point at this release.")))
+    case "cli": return installedCli(project).then((current) => current ? command(process.execPath, [join(toolsRoot(project), "bin/agent-plugin"), "--help"], project, scaled(120_000, environment.patience)) : Promise.resolve(setupFailure("The CLI launcher does not point at this release.")))
       .then((result) => checked(result, "Project CLI runs the shared command entry point.", "Expose the existing framework CLI from the supported installation."));
     case "skills": return inspectSkills(project, input);
     case "dependencies": return inspectDependencies(project, input, resolved);
-    case "knowledge-runtime": return command(pythonRuntime(project), ["-c", "import importlib.metadata as m; assert m.version('upf-project-knowledge') == '0.1.1'"], project)
-      .then((result) => checked(result, "Isolated knowledge runtime 0.1.1 is installed.", "Install the owned knowledge runtime into the isolated project environment."));
+    case "knowledge-runtime": return command(pythonRuntime(project), ["-c", "import importlib.metadata as m; assert m.version('upf-project-knowledge') == '0.1.2'"], project, scaled(120_000, environment.patience))
+      .then((result) => checked(result, "Isolated knowledge runtime 0.1.2 is installed.", "Install the owned knowledge runtime into the isolated project environment."));
     case "knowledge-settings": return knowledgeSettings(project, input);
     case "knowledge-content": return inspectKnowledgeContent(project, input);
     case "knowledge-server": return inspectServer(project, input, environment);
@@ -54,10 +66,10 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
   switch (step) {
     case "settings": return input.answers === undefined ? inputNeeded("answers-required", "Project choices are incomplete.", "Collect missing choices and include accepted answers; do not infer a tracker.")
       : setup(nodeProjectIO(project), input.answers)().then((result) => result.ok ? ok("Settings saved.") : result);
-    case "cli": return wireCli(project).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
+    case "cli": return wireCli(project, undefined, input.python).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
     case "skills": return installSkills(project, input.host).then((installed) => installed.ok ? installHostPlugins(project, input, environment, FRAMEWORK_PLUGINS) : installed);
     case "dependencies": return stageDependencies(project, input).then((staged) => staged.ok ? installHostPlugins(project, resolved, environment, pluginNames(input)) : staged);
-    case "knowledge-runtime": return process.platform === "win32" ? inputNeeded("unsupported-runtime", "The knowledge runtime currently supports Linux and macOS.", "Use a supported runtime host; preserve this host's existing configuration.") : installKnowledge(project, input);
+    case "knowledge-runtime": return process.platform === "win32" ? inputNeeded("unsupported-runtime", "The knowledge runtime currently supports Linux and macOS.", "Use a supported runtime host; preserve this host's existing configuration.") : installKnowledge(project, input, environment.patience);
     case "knowledge-settings": return configureKnowledge(project, input);
     case "knowledge-content": return inputNeeded("knowledge-discovery-needed", "Project knowledge has not been populated.", "Run the installed discover-project-knowledge skill on the accepted root, preserving authored decisions and citing source evidence; then rerun bootstrap.");
     case "knowledge-server": return registerHost(project, input, environment, knowledgeExecutable(project));
@@ -81,15 +93,16 @@ const knowledgeSettings = async (project: string, input: BootstrapInput): Promis
 };
 const inspectKnowledgeContent = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const root = join(project, input.knowledge.knowledgeRoot);
-  const [manifest, catalog] = await Promise.all([readText(join(root, "manifest.md")), readText(join(root, "catalog.tsv"))]);
-  return manifest.ok && manifest.value !== null && catalog.ok && (catalog.value?.trim().split("\n").length ?? 0) > 1
+  const [manifest, marker, catalog] = await Promise.all([readText(join(root, "manifest.md")), readText(join(root, DISCOVERY_MARKER)), readText(join(root, "catalog.tsv"))]);
+  return ((manifest.ok && manifest.value !== null) || (marker.ok && marker.value === "verified\n"))
+    && catalog.ok && (catalog.value?.trim().split("\n").length ?? 0) > 1
     ? ready("Knowledge manifest and a nonempty catalog are present; server verification checks retrieval.")
     : missing("Run discover-project-knowledge to derive source-backed indexed units, then rerun bootstrap.");
 };
 const inspectServer = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => hostRegistered(project, input, environment, knowledgeExecutable(project))
   .then((registered) => !registered.ok ? missing("Reconcile the project-scoped server with the accepted isolated runtime; preserve unrelated entries.")
     : !registered.value ? missing("Register the knowledge server and local marketplace in the selected host.")
-      : command(knowledgeExecutable(project), ["--project", project, "--verify"], project, 60_000)
+      : command(knowledgeExecutable(project), ["--project", project, "--verify"], project, scaled(60_000, environment.patience))
         .then((result) => checked(result, "Registered runtime passed real catalog, search and fetch protocol calls.", "Populate the accepted store, restore the runtime, then repeat protocol verification.")));
 const inspectReview = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const raw = await nodeProjectFiles.read(join(project, ".monolithic-code-review/sources.json"))();

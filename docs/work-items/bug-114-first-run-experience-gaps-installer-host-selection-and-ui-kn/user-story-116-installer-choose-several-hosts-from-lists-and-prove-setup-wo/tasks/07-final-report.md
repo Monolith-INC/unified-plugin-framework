@@ -1,0 +1,1 @@
+Turn the setup result into the final message and exit code: host labels, backups, login commands, the exact hand-off sentence, control characters removed. Done when every (step, failure) pair gives the documented message and exit code, including from real setup output.

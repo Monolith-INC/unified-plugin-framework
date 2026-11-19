@@ -8,7 +8,7 @@ import {HOST_NAMES} from '../dist/host-names.js';
 import {HOSTS} from '../dist/host-table.js';
 import {parseBootstrap} from '../dist/tooling-input.js';
 
-const plan={python:'python3.12',workflows:[],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
+const plan={python:'python3.12',workflows:['continuity'],pluginRoots:[],knowledge:{knowledgeRoot:'knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
 const context=async(extra={})=>{
   const root=await mkdtemp(join(tmpdir(),'upf-hosts-'));
   const project=join(root,'project');
@@ -24,7 +24,7 @@ test('every setup host can be selected and is described before installation',()=
   assert.equal(new Set(HOST_NAMES.map(host=>HOSTS[host].bareSkills)).size,HOST_NAMES.length,'each host reads bare skills from its own folder');
 });
 
-test('Claude Code catalog is named for this project, keeps earlier entries and refuses a moved source',async()=>{
+test('Claude Code catalog is named for this project, keeps earlier entries and refuses a moved source',{ skip: process.platform === 'win32' }, async()=>{
   const ctx=await context();
   const name=claudeMarketplaceName(ctx.canonical);
   const plugins=[{name:'unified-plugin-framework',root:join(ctx.tools,'hosts/claude/unified-plugin-framework'),kind:'framework'},{name:'superpowers',root:join(ctx.tools,'plugins/superpowers'),kind:'dependency'}];

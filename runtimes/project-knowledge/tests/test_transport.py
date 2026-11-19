@@ -18,6 +18,37 @@ class InstalledTransportTests(unittest.TestCase):
     def setUpClass(cls):
         _, cls.executable, _ = installed_runtime()
 
+    def test_repository_reader_lists_only_read_tools_and_rejects_escapes(self):
+        async def exercise(project: Path):
+            parameters = StdioServerParameters(
+                command=str(self.executable),
+                args=["--project", str(project), "--read-repository"],
+            )
+            async with stdio_client(parameters) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+                    self.assertEqual({tool.name for tool in tools.tools}, {"repository_read", "repository_list"})
+                    found = await session.call_tool("repository_read", {"path": "README.md"})
+                    self.assertEqual(found.content[0].text, "sample project")
+                    for path in ("../outside.txt", "symlink.txt", "linked-folder/outside.txt",
+                                 "hardlink.txt", ".env", str(project / "README.md")):
+                        refused = await session.call_tool("repository_read", {"path": path})
+                        self.assertTrue(refused.is_error, path)
+
+        with tempfile.TemporaryDirectory() as raw:
+            parent = Path(raw)
+            project = parent / "project"
+            project.mkdir()
+            outside = parent / "outside.txt"
+            outside.write_text("outside contents")
+            (project / "README.md").write_text("sample project")
+            (project / ".env").write_text("hidden config")
+            (project / "symlink.txt").symlink_to(outside)
+            (project / "linked-folder").symlink_to(parent, target_is_directory=True)
+            (project / "hardlink.txt").hardlink_to(outside)
+            asyncio.run(asyncio.wait_for(exercise(project), timeout=30))
+
     def test_verify_checks_real_catalog_search_and_fetch(self):
         with tempfile.TemporaryDirectory(prefix="upf knowledge verify ") as raw:
             project = Path(raw)

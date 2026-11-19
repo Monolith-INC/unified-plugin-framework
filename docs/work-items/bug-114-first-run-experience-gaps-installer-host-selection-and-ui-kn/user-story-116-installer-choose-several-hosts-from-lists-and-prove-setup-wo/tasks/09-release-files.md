@@ -1,0 +1,1 @@
+Ship the new installer modules in releases and make the release check build plans the new way, for both hosts and a legacy plan. Done when the release check imports every installer module from the archive.

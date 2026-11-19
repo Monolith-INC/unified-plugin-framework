@@ -1,51 +1,133 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { addAbortListener, once } from "node:events";
 import { createInterface } from "node:readline";
+import { Transform } from "node:stream";
 import { fail, ok, type Result } from "@agent-plugins/project";
 
-/** Process boundary: argv is passed directly; output and credentials never enter failure messages. */
-/** Without `env` the child inherits this process's environment, as `spawn` does by default. */
-export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env?: NodeJS.ProcessEnv): Promise<Result<string>> =>
-  new Promise((resolve) => {
-    const child = spawn(program, [...args], { cwd, ...(env === undefined ? {} : { env }), stdio: ["ignore", "pipe", "pipe"] });
-    const stdout = collect(child.stdout[Symbol.asyncIterator](), []);
-    child.stderr.resume();
-    const timer = setTimeout(() => child.kill(), timeout);
-    child.on("error", () => { clearTimeout(timer); resolve(processFailure(program)); });
-    child.on("close", (code) => { clearTimeout(timer); stdout.then((bytes) => resolve(code === 0 ? ok(bytes) : processFailure(program))).catch(() => resolve(processFailure(program))); });
-  });
-/** Runs `step` over `items` in order; the first failure stops the run, otherwise the result is `done`. */
-export const sequence = <A>(items: readonly A[], step: (item: A) => Promise<Result<unknown>>, done: string): Promise<Result<string>> => {
-  const [item, ...rest] = items;
-  return item === undefined ? Promise.resolve(ok(done)) : step(item).then((result) => result.ok ? sequence(rest, step, done) : result);
+const DEFAULT_LIMIT = 4 * 1024 * 1024;
+const DEFAULT_GRACE = 250;
+interface ProcessOptions {
+  readonly timeout: number;
+  readonly limit?: number;
+  readonly grace?: number;
+  readonly env?: NodeJS.ProcessEnv;
+}
+
+/** Share an explicit allowlist without capturing unrelated credentials from the caller. */
+export const selectEnvironment = (environment: NodeJS.ProcessEnv, keys: readonly string[]): NodeJS.ProcessEnv =>
+  Object.fromEntries(keys.flatMap((key) => environment[key] === undefined ? [] : [[key, environment[key]]]));
+
+const failure = (code: string, program: string, reason: string): Result<never> =>
+  fail(code, `The ${program.split(/[\\/]/).at(-1) ?? "tool"} command ${reason}.`,
+    "Check the executable, environment, and permissions, then rerun the affected setup step.");
+const processFailure = (program: string): Result<never> => failure("tool-command-failed", program, "did not finish successfully");
+const signalGroup = (child: ChildProcess, signal: NodeJS.Signals): boolean => {
+  try {
+    return process.platform !== "win32" && child.pid !== undefined ? process.kill(-child.pid, signal) : child.kill(signal);
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "ESRCH";
+  }
 };
+
+class OutputLimit extends Error {}
+const bounded = (limit: number): Transform => {
+  const progress = { bytes: 0 };
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      const size = progress.bytes + chunk.length;
+      Object.assign(progress, { bytes: size }); // Byte accounting belongs to the stream boundary.
+      return size > limit ? callback(new OutputLimit()) : callback(null, chunk);
+    },
+  });
+};
+
+type ToolProcess = ReturnType<typeof start>;
+const start = (program: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv | undefined) =>
+  spawn(program, [...args], { cwd, env, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "ignore"] });
+
+/** One supervisor owns process-group termination, timing, and pipe cleanup for commands and protocols. */
+const runProcess = <A>(program: string, args: readonly string[], cwd: string, options: ProcessOptions,
+  use: (child: ToolProcess, output: Transform) => Promise<Result<A>>): Promise<Result<A>> => new Promise((settle) => {
+  const child = start(program, args, cwd, options.env);
+  const output = child.stdout.pipe(bounded(options.limit ?? DEFAULT_LIMIT));
+  const expired = new AbortController();
+  const finished = new AbortController();
+  const stop = (): boolean => {
+    const killed = signalGroup(child, "SIGKILL");
+    child.stdin.destroy();
+    child.stdout.destroy();
+    output.destroy();
+    return killed;
+  };
+  const subscription = addAbortListener(expired.signal, () => {
+    signalGroup(child, "SIGTERM");
+    setTimeout(() => {
+      finished.abort();
+      stop();
+      settle(failure("tool-timeout", program, "exceeded its time limit"));
+    }, options.grace ?? DEFAULT_GRACE);
+  });
+  const timer = setTimeout(() => expired.abort(), options.timeout);
+  const finish = (result: Result<A>): boolean => {
+    if (expired.signal.aborted || finished.signal.aborted) return false;
+    finished.abort();
+    clearTimeout(timer);
+    subscription[Symbol.dispose]();
+    settle(result);
+    return stop();
+  };
+  child.stdin.on("error", () => false); // A command may exit without consuming stdin.
+  child.once("error", () => finish(processFailure(program)));
+  output.once("error", (error) => finish(error instanceof OutputLimit
+    ? failure("tool-command-failed", program, "exceeded its output limit") : processFailure(program)));
+  Promise.resolve().then(() => use(child, output)).then(finish, () => finish(processFailure(program)));
+});
+
 const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[]): Promise<string> => {
   const next = await stream.next();
   return next.done ? Buffer.concat(chunks).toString("utf8") : collect(stream, [...chunks, next.value]);
 };
-const processFailure = (program: string): Result<never> => fail("tool-command-failed", `The ${program.split(/[\\/]/).at(-1) ?? "tool"} command did not finish successfully.`,
-  "Check the executable, network and permissions; preserve completed setup and rerun the affected step. No automatic retry was made.");
 
-/** Fresh host protocol connection; no model turn, user thread or inference cost. */
-export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }): Promise<Result<unknown>> => {
-  const child = spawn("codex", ["app-server", "--stdio"], { cwd, stdio: ["pipe", "pipe", "pipe"] });
-  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
-  child.stderr.resume();
-  child.stdin.on("error", () => child.stdout.destroy());
-  child.on("error", () => child.stdout.destroy());
-  const timer = setTimeout(() => child.kill(), 25_000);
-  const send = (value: unknown): boolean => child.stdin.write(`${JSON.stringify(value)}\n`);
-  const response = async (id: number): Promise<unknown> => {
-    const line = await lines.next();
-    const value: unknown = line.done ? null : JSON.parse(line.value);
-    return value !== null && typeof value === "object" && "id" in value && value.id === id ? value
-      : line.done ? Promise.reject(new Error("host-ended")) : response(id);
-  };
-  send({ id: 1, method: "initialize", params: { clientInfo: { name: "upf-bootstrap", version: "1.0.0" } } });
-  return response(1).then(() => {
+/** Before a deadline, stderr is discarded and stdout is capped. Omit env to inherit it. */
+/** A time limit stretched for a retry after a timeout; `patience` is 1 on every first run. */
+export const scaled = (milliseconds: number, patience = 1): number => milliseconds * patience;
+export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env?: NodeJS.ProcessEnv): Promise<Result<string>> =>
+  commandOutput(program, args, cwd, { timeout, ...(env === undefined ? {} : { env }) });
+
+const commandOutput = (program: string, args: readonly string[], cwd: string, options: ProcessOptions): Promise<Result<string>> =>
+  runProcess(program, args, cwd, options, async (child, output) => {
+    child.stdin.end();
+    const [[code], text] = await Promise.all([once(child, "close"), collect(output[Symbol.asyncIterator](), [])]);
+    return code === 0 ? ok(text) : processFailure(program);
+  });
+
+export const boundedOutput = (program: string, args: readonly string[], cwd: string, timeout: number, env: NodeJS.ProcessEnv): Promise<Result<string>> =>
+  commandOutput(program, args, cwd, { timeout, env, limit: 32_768 });
+
+/** Runs step over items in order and stops on the first failure. */
+export const sequence = <A>(items: readonly A[], step: (item: A) => Promise<Result<unknown>>, done: string): Promise<Result<string>> => {
+  const [item, ...rest] = items;
+  return item === undefined ? Promise.resolve(ok(done)) : step(item).then((result) => result.ok ? sequence(rest, step, done) : result);
+};
+
+const replyWithId = async (lines: AsyncIterator<string>, id: number): Promise<unknown> => {
+  const line = await lines.next();
+  const value: unknown = line.done ? null : JSON.parse(line.value);
+  return value !== null && typeof value === "object" && "id" in value && value.id === id ? value
+    : line.done ? Promise.reject(new Error("host-ended")) : replyWithId(lines, id);
+};
+
+/** Probe the host protocol without starting a model turn or user thread. */
+export const codexAppServerRequest = (cwd: string, request: { readonly method: string; readonly params: unknown }, timeout = 25_000, program = "codex"): Promise<Result<unknown>> =>
+  runProcess(program, ["app-server", "--stdio"], cwd, { timeout }, async (child, output) => {
+    const lines = createInterface({ input: output })[Symbol.asyncIterator]();
+    const send = (value: unknown): boolean => child.stdin.write(`${JSON.stringify(value)}\n`);
+    send({ id: 1, method: "initialize", params: { clientInfo: { name: "upf-bootstrap", version: "1.0.0" },
+      capabilities: { experimentalApi: false, requestAttestation: false } } });
+    await replyWithId(lines, 1);
     send({ method: "initialized", params: {} });
     send({ id: 2, ...request });
-    return response(2);
-  }).then(ok).catch(() => fail("host-unavailable", "Fresh host verification could not finish.",
-    "Restore Codex state access and trusted-project configuration, then repeat bootstrap verification; configuration is preserved."))
-    .finally(() => { clearTimeout(timer); child.kill(); });
-};
+    return ok(await replyWithId(lines, 2));
+  }).then((result) => result.ok || result.error.code !== "tool-command-failed" ? result
+    : fail("host-unavailable", "Fresh host verification could not finish.",
+      "Restore Codex state access and trusted-project configuration, then repeat bootstrap verification."));
