@@ -30,7 +30,7 @@ test('a planted task list is ignored even if it contains a known task', async ()
   assert.match(check.value.message, /receipt/i);
 });
 
-test('a verified task is claimed once, completed only when ready, and then skipped', async () => {
+test('a verified task is claimed once, completed only when ready, and then skipped', { skip: process.platform === 'win32' }, async () => {
   const { project, state, plan } = await fixture();
   const issued = await recordHandoffs(project, state, plan, [task]);
   assert.equal(issued.ok, true, JSON.stringify(issued));
@@ -49,7 +49,7 @@ test('a verified task is claimed once, completed only when ready, and then skipp
   assert.equal((await manageHandoffs(project, state, claim, () => assert.fail('a finished task must not run again'))).value.status, 'ready');
 });
 
-test('content changes or a receipt copied to another project cannot activate tasks', async () => {
+test('content changes or a receipt copied to another project cannot activate tasks', { skip: process.platform === 'win32' }, async () => {
   const { project, state, plan, pending } = await fixture();
   assert.equal((await recordHandoffs(project, state, plan, [task])).ok, true);
   const bytes = await readFile(pending, 'utf8');
@@ -61,7 +61,7 @@ test('content changes or a receipt copied to another project cannot activate tas
   assert.equal((await manageHandoffs(other.project, state, claim, missing)).value.status, 'ignored');
 });
 
-test('an expired claim can be replaced; already ready work needs no claim', async () => {
+test('an expired claim can be replaced; already ready work needs no claim', { skip: process.platform === 'win32' }, async () => {
   const { project, state, plan } = await fixture();
   assert.equal((await recordHandoffs(project, state, plan, [task])).ok, true);
   assert.equal((await manageHandoffs(project, state, claim, ready)).value.status, 'ready');

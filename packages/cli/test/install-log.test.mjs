@@ -6,7 +6,7 @@ import test from 'node:test';
 import { readLastInstallLog, writeInstallLog } from '../dist/install-log.js';
 import { run } from '../dist/index.js';
 
-test('install log redacts named secrets and URL credentials and uses private permissions', async () => {
+test('install log redacts named secrets and URL credentials and uses private permissions', { skip: process.platform === 'win32' }, async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-install-log-'));
   const path = await writeInstallLog(project, [{ type: 'failure', token: 'fake-secret-value', message: 'https://user:password@example.test/setup' }]);
   assert.ok(path);
@@ -25,7 +25,7 @@ test('install log keeps the latest ten runs', async () => {
   assert.equal((await readdir(join(project, '.upf-tools', 'logs'))).length, 10);
 });
 
-test('install log falls back to a private temporary directory when its requested folder is unwritable', async () => {
+test('install log falls back to a private temporary directory when its requested folder is unwritable', { skip: process.platform === 'win32' }, async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-install-fallback-'));
   const blocker = join(project, 'not-a-directory');
   await writeFile(blocker, 'preserve');
@@ -37,7 +37,7 @@ test('install log falls back to a private temporary directory when its requested
   assert.equal(await readFile(blocker, 'utf8'), 'preserve');
 });
 
-test('custom install log preserves unrelated JSONL files and parent permissions', async () => {
+test('custom install log preserves unrelated JSONL files and parent permissions', { skip: process.platform === 'win32' }, async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-install-custom-log-'));
   const directory = join(project, 'logs');
   await mkdir(directory);

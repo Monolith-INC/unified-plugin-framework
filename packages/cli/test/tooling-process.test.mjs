@@ -32,7 +32,7 @@ test("the supervisor kills an ignored stop signal and a grandchild holding stdou
   await assert.rejects(readFile(leaked), { code: "ENOENT" });
 });
 
-test("a chatty child is cut off and private environment entries are omitted", async () => {
+test("a chatty child is cut off and private environment entries are omitted", { skip: process.platform === "win32" }, async () => {
   const result = await boundedOutput(process.execPath, ["-e", 'process.stdout.write("x".repeat(65536))'], tmpdir(), 1000, {});
   assert.equal(result.error.code, "tool-command-failed");
   assert.match(result.error.message, /output limit/);

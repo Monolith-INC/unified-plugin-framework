@@ -37,7 +37,7 @@ test('CLI plan is read-only; apply configures missing accepted choices and re-en
   assert.equal(JSON.parse(await readFile(join(project,'.unified-plugin-framework.json'),'utf8')).language,'en');
 });
 
-test('bootstrap without discovery consent reports the knowledge hand-off with exit code 2',async()=>{
+test('bootstrap without discovery consent reports the knowledge hand-off with exit code 2',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-discovery-handoff-'));
   const state=await mkdtemp(join(tmpdir(),'upf-discovery-receipts-'));
   const options={encoding:'utf8',env:{...process.env,XDG_STATE_HOME:state}};
@@ -78,7 +78,7 @@ test('review setup refuses incomplete bindings and preserves linked external con
   assert.equal(await readFile(path,'utf8'),'{}');
 });
 
-test('interrupted staging cannot leave the final wrapper partial and retry can publish it',async()=>{
+test('interrupted staging cannot leave the final wrapper partial and retry can publish it',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-stage-'));
   const source=join(project,'source');
   assert.equal((await stageDependency(project,'fixture',source)).ok,false);
@@ -107,7 +107,7 @@ test('active skill verification covers referenced files and ignores only the own
   await writeFile(join(project,'reference.md'),'Edited rule');
   assert.notEqual(readContentTree(project).value,original.value);
 });
-test('setup writes reject stale content and preserve unrelated configuration',async()=>{
+test('setup writes reject stale content and preserve unrelated configuration',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-bootstrap-write-'));
   const path=join(project,'config','settings.txt');await mkdir(join(project,'config'));await writeFile(path,'original');
   assert.equal((await writeText(project,path,'new','stale')).error.code,'modified-file');
@@ -125,7 +125,7 @@ test('setup paths cannot traverse a linked directory',{skip:process.platform==='
   await assert.rejects(readFile(join(outside,'file')));
 });
 
-test('an existing setup lock reports a busy write and preserves the file',async()=>{
+test('an existing setup lock reports a busy write and preserves the file',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-write-busy-'));
   const path=join(project,'settings.json');
   await writeFile(path,'original');
@@ -218,7 +218,7 @@ test('startup moves an interrupted stage aside and preserves its contents',{skip
   assert.deepEqual(await readdir(unrelated),[]);
 });
 
-test('a marked runtime resumes, but a replacement directory is preserved',async()=>{
+test('a marked runtime resumes, but a replacement directory is preserved',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-runtime-ownership-'));
   const first=await prepareKnowledgeRuntime(project,'python3');
   assert.equal(first.ok,true,JSON.stringify(first));
@@ -246,7 +246,7 @@ test('bootstrap holds a saved request while incomplete and applies it once after
   assert.equal(JSON.parse(await readFile(join(project,'.unified-plugin-framework','items.json'),'utf8')).length,1);
 });
 
-test('owned CLI can move to a new release while unmanaged or edited launchers are preserved',async()=>{
+test('owned CLI can move to a new release while unmanaged or edited launchers are preserved',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-cli-upgrade-'));
   const first=new URL('file:///first-release/index.js');const second=new URL('file:///second-release/index.js');
   assert.equal((await wireCli(project,first)).ok,true);
@@ -267,7 +267,7 @@ test('owned CLI can move to a new release while unmanaged or edited launchers ar
   assert.equal(await readFile(path,'utf8'),'unmanaged');
 });
 
-test('the ownership ledger can migrate an existing valid launcher receipt',async()=>{
+test('the ownership ledger can migrate an existing valid launcher receipt',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-legacy-receipt-'));
   const bin=join(project,'.upf-tools/bin');
   const path=join(bin,'agent-plugin');

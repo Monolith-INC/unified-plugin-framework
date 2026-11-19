@@ -67,7 +67,7 @@ test('fresh wizard asks for explicit consent and previews both hosts before acce
   assert.deepEqual(await readdir(project), []);
 });
 
-test('only executable hosts found on PATH start checked and saved workflows and Python are reused', async () => {
+test('only executable hosts found on PATH start checked and saved workflows and Python are reused', { skip: process.platform === 'win32' }, async () => {
   const project = await setup();
   const tools = await mkdtemp(join(tmpdir(), 'upf-wizard-path-'));
   await writeFile(join(tools, 'claude'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });

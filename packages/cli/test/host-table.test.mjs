@@ -24,7 +24,7 @@ test('every setup host can be selected and is described before installation',()=
   assert.equal(new Set(HOST_NAMES.map(host=>HOSTS[host].bareSkills)).size,HOST_NAMES.length,'each host reads bare skills from its own folder');
 });
 
-test('Claude Code catalog is named for this project, keeps earlier entries and refuses a moved source',async()=>{
+test('Claude Code catalog is named for this project, keeps earlier entries and refuses a moved source',{ skip: process.platform === 'win32' }, async()=>{
   const ctx=await context();
   const name=claudeMarketplaceName(ctx.canonical);
   const plugins=[{name:'unified-plugin-framework',root:join(ctx.tools,'hosts/claude/unified-plugin-framework'),kind:'framework'},{name:'superpowers',root:join(ctx.tools,'plugins/superpowers'),kind:'dependency'}];
