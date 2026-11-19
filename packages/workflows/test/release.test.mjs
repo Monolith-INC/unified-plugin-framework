@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { buildVendorBundle, releasePayloads, SHIPPED_PLUGINS, withAssembledSource } from "../dist/index.js";
+import { buildVendorBundle, releasePayloads, SHIPPED_PLUGINS, withAssembledSource, withPayloadsRoot } from "../dist/index.js";
 
 const framework = fileURLToPath(new URL("../../../plugins/unified-plugin-framework/", import.meta.url));
 
@@ -13,6 +13,18 @@ const unusedAdapter = Object.freeze({ vendor: "claude" });
 
 test("the framework, knowledge and reference plugins are shipped", () => {
   assert.deepEqual([...SHIPPED_PLUGINS], ["hello-world", "unified-plugin-framework", "project-knowledge"]);
+});
+
+test("verify writes payloads to a scratch folder it removes; build keeps them in the package", () => {
+  const packagePayloads = join(mkdtempSync(join(tmpdir(), "upf-package-")), "payloads");
+  const seen = withPayloadsRoot("verify", packagePayloads, (root) => {
+    writeFileSync(join(root, "probe"), "x");
+    return root;
+  });
+  assert.notEqual(seen, packagePayloads);
+  assert.equal(existsSync(seen), false);
+  assert.equal(existsSync(packagePayloads), false);
+  assert.equal(withPayloadsRoot("build", packagePayloads, (root) => root), packagePayloads);
 });
 
 test("withAssembledSource hands over an assembled copy and removes it afterwards", () => {

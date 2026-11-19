@@ -112,6 +112,7 @@ const runMain=async(args,io)=>{
  const parsed=options(args);
  return parsed.help ? {ok:true,message:`${usage}\n`,exitCode:0}
   : Number(io.nodeVersion.split('.')[0])<22 ? stopEarly('Node.js 22+ is required.',`Install Node.js 22 or newer, ${RERUN}`)
+  : isSourceCheckout(resolve(parsed.project ?? parsed.dest ?? io.cwd())) ? stopEarly(SOURCE_CHECKOUT,'Install into a separate test project instead, then run the installer there.')
   : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? stopEarly('Interactive installation needs a terminal.','Run the one-command installer in a terminal or supply --input for automation.')
     : prepare(parsed,io);
 };
@@ -125,6 +126,11 @@ export const main=async(args,io=NODE_IO)=>{
   return 1;
  }
 };
+// A UPF source checkout holds the framework's own plugin and CLI sources. Installing into it makes sessions there load
+// the frozen installed skills instead of the editable ones in plugins/, so dogfooding happens in a separate project.
+const SOURCE_MARKERS=Object.freeze(['plugins/unified-plugin-framework/plugin.json','packages/cli/package.json']);
+const isSourceCheckout=project=>SOURCE_MARKERS.every(marker=>existsSync(join(project,marker)));
+const SOURCE_CHECKOUT='This folder is a Unified Plugin Framework source checkout; installing UPF here would make its sessions load installed skills instead of the editable ones in plugins/.';
 const prepare=async(args,io)=>{
  const acceptedPlan=args.input===undefined ? null : await readFile(resolve(args.input),'utf8').then(JSON.parse).catch(()=>null);
  const python=pythonExecutable(args.python ?? acceptedPlan?.python,io) ?? await reusablePrivatePython(args.project ?? args.dest ?? io.cwd(),io);

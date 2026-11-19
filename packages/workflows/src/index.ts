@@ -115,7 +115,7 @@ import {
   type Staged,
 } from "./release.js";
 
-export { SHIPPED_PLUGINS, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+export { SHIPPED_PLUGINS, withPayloadsRoot, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
 
 /** Runs `use` on a temporary, assembled copy of the plugin at `sourceRoot`, then removes the copy. */
 export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: string) => A): Staged<A> =>

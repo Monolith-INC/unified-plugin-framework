@@ -135,6 +135,8 @@ pnpm test
 pnpm payloads:verify
 ```
 
+Try your changes in a separate test project, never in this repository. An installed copy here would make sessions load the frozen installed skills instead of the editable ones in `plugins/`, so the installer refuses a UPF source checkout. To try a plugin change, install it into the test project, for example with `agent-plugin install --source plugins/<plugin> --vendor claude --target <test project>`, or run the release installer there.
+
 Read [AGENTS.md](AGENTS.md) for repository rules and [the architecture guide](docs/architecture.md) for implementation boundaries. Release packaging and artifact checks are documented in the [installation guide](docs/vendor-payload-installation.md#building-and-checking-the-complete-distribution).
 
 ## License and origins

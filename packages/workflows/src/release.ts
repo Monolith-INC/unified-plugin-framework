@@ -76,6 +76,23 @@ export const withAssembledSource = <A>(
   }
 };
 
+// Effect boundary: creates a scratch folder for `use` and always removes it.
+const inScratch = <A>(use: (payloadsRoot: string) => A): A => {
+  const scratch = mkdtempSync(join(tmpdir(), "upf-payloads-"));
+  try {
+    return use(scratch);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+};
+
+/**
+ * Hands `use` the folder an operation writes payloads to. `build` keeps them in the package's payloads folder for
+ * inspection; `verify` writes them to a scratch folder removed afterwards, so checking leaves no build output behind.
+ */
+export const withPayloadsRoot = <A>(operation: string, packagePayloads: string, use: (payloadsRoot: string) => A): A =>
+  operation === "verify" ? inScratch(use) : use(packagePayloads);
+
 /**
  * Install finds a payload by the unscoped part of the plugin's manifest name, so a shipped plugin's directory must be
  * named after it. An unreadable manifest passes here and is left to the compiler to report.
