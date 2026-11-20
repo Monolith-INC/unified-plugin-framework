@@ -21,6 +21,13 @@ check blocked "edit on main" "$(edit "$repo/a.txt")"
 check blocked "git commit on main" "$(cmd "git commit -m x")"
 check allowed "other bash on main" "$(cmd "git status")"
 check allowed "text mentioning git push is not a push" "$(cmd "echo note: git push and gh pr create later")"
+check blocked "new ticket branch requires the start command" "$(cmd "git switch -c feature/AGE-5-work")"
+check blocked "new branch after a chained switch still requires start" "$(cmd "git switch main && git checkout -b feature/AGE-5-work")"
+check blocked "new ticket worktree requires the start command" "$(cmd "git worktree add -b feature/AGE-5-work /tmp/work")"
+check allowed "git -C selects a directory when resuming a branch" "$(cmd "git -C . switch feature/AGE-5-work")"
+check blocked "git -C still guards actual branch creation" "$(cmd "git -C . switch -c feature/AGE-5-work")"
+check blocked "git branch cannot create a ticket directly" "$(cmd "git branch feature/AGE-5-work")"
+check allowed "listing ticket branches is read-only" "$(cmd "git branch --list feature/AGE-5-work")"
 check blocked "git commit after cd" "$(cmd "cd /tmp && git commit -m x")"
 check allowed "edit outside the project" "$(edit /tmp/elsewhere.txt)"
 
@@ -98,16 +105,27 @@ git -C "$repo" switch -q main
 git -C "$repo" worktree add -q -b feature/AGE-4-wt "$repo-wt" main
 check allowed "edit in a ticket worktree while the main checkout is on main" "$(edit "$repo-wt/a.txt")"
 check blocked "edit in the main checkout on main" "$(edit "$repo/a.txt")"
+git -C "$repo" config workflow.ticketFlow '{"branch":"feature/AGE-1-work","merge":"","tip":""}'
+check blocked "linked worktree shares the active ticket guard" "$(edit "$repo-wt/a.txt")"
 git -C "$repo" worktree remove -f "$repo-wt"
 git -C "$repo" switch -q feature/AGE-1-work
 
-# Rule 8: reminder after a merge.
+git -C "$repo" config workflow.ticketFlow '{"branch":"feature/AGE-3-impl","merge":"","tip":""}'
+check blocked "different active ticket blocks file edits" "$(edit "$repo/a.txt")"
+check blocked "different active ticket blocks commits" "$(cmd "git commit -m x")"
+git -C "$repo" config workflow.ticketFlow '{"branch":"feature/AGE-1-work","merge":"","tip":""}'
+check allowed "active ticket can continue" "$(edit "$repo/a.txt")"
+sha=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" config workflow.ticketFlow "$(jq -nc --arg sha "$sha" '{branch:"feature/AGE-1-work",merge:$sha,tip:$sha}')"
+check blocked "delivered ticket requires closeout before new edits" "$(edit "$repo/a.txt")"
+
+# Rule 8: instructions after a merge, rather than treating the command as proof.
 after=$(dirname "$hook")/after-merge.sh
-out=$(cmd "gh pr merge --squash --delete-branch" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
-if [ $rc -eq 2 ] && [[ $out == *"to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
+out=$(cmd "gh pr merge --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
+if [ $rc -eq 2 ] && [[ $out == *"verify the merge and refresh main"* && $out == *"Then move the ticket to Done"* ]]; then echo "PASS reminder after merge"; else echo "FAIL reminder after merge ($rc: $out)"; fail=1; fi
 out=$(cmd "git status" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
 if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for other commands"; else echo "FAIL no reminder for other commands"; fail=1; fi
 out=$(cmd "gh pr merge 5 --auto --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?
-if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no reminder for --auto"; else echo "FAIL no reminder for --auto"; fail=1; fi
+if [ $rc -eq 0 ] && [ -z "$out" ]; then echo "PASS no closeout for a queued merge"; else echo "FAIL queued merge reminder ($rc: $out)"; fail=1; fi
 
 exit $fail

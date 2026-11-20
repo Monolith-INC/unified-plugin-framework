@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Claude Code PreToolUse hook for the project rules:
 #   1. work only on a ticket branch: feature/<KEY>-<n>-<slug>
-#   2. the branch was cut from main
+#   2. start new ticket branches through ticket-flow.py and finish the active ticket first
 #   5. push or open a pull request only after HEAD passed review
 #   6. the pull request title starts with the ticket key
 #   7. merge only while the owner's approval stands (git config workflow.mergeApproval)
@@ -10,7 +10,7 @@
 # Checked before file edits, `git commit`, `git push`, `gh pr create` and
 # `gh pr merge`, in the checkout the action targets (file directory or the
 # command's working directory). A detached HEAD (rebase, bisect) is not judged.
-# Anything this misses is stopped by GitHub branch protection.
+# GitHub protects main independently of these local agent hooks.
 
 block() { echo "Blocked: $1" >&2; exit 2; }
 
@@ -20,6 +20,7 @@ project=${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}
 [ -n "$project" ] || exit 0
 tool=$(jq -r '.tool_name // ""' <<<"$input") || block "the workflow hook could not read the tool call."
 project_common=$(git -C "$project" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+flow="$(cd "$(dirname "$0")" && pwd)/ticket-flow.py"
 
 # checkout_of <dir>: prints the checkout root when <dir> belongs to this project.
 checkout_of() {
@@ -52,9 +53,36 @@ case $tool in
     [[ $command =~ ${start}(git${git_opts}[[:space:]]+push|gh[[:space:]]+pr[[:space:]]+create)${end} ]] && publishes=y
     [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+create${end} ]] && creates=y
     [[ $command =~ ${start}gh[[:space:]]+pr[[:space:]]+merge${end} ]] && merges=y
+    branch_create="^[[:space:]]*git${git_opts}[[:space:]]+(switch|checkout|worktree[[:space:]]+add)[[:space:]]+(.*)"
+    new_flag='(^|[[:space:]])(-[cCbB]|--create|--force-create)[[:space:]=]+'
+    ticket_ref='feature/[A-Z][A-Z0-9]*-[0-9]+-[a-zA-Z0-9_-]+'
+    # Check each simple command so "switch main && switch -c ..." is covered too.
+    while IFS= read -r branch_args; do
+      [[ $branch_args =~ ^[[:space:]]*git${git_opts}[[:space:]] ]] || continue
+      branch_dir=$(jq -r '.tool_cwd // .cwd // ""' <<<"$input")
+      branch_dir=${branch_dir:-$project}
+      if [[ $branch_args =~ [[:space:]]-C[[:space:]]+([^[:space:]]+) ]]; then
+        c=${BASH_REMATCH[1]}
+        [[ $c == /* ]] && branch_dir=$c || branch_dir=$branch_dir/$c
+      fi
+      checkout_of "$branch_dir" >/dev/null || continue
+      if [[ $branch_args =~ $ticket_ref ]]; then
+        destination=${BASH_REMATCH[0]}
+        if { [[ $branch_args =~ $branch_create ]] && [[ ${BASH_REMATCH[3]} =~ $new_flag ]]; } \
+          || [[ $branch_args =~ [[:space:]]branch[[:space:]]+(-[fF][[:space:]]+)?[\"\']?feature/ ]]; then
+          block "start $destination from main with: python3 .claude/hooks/ticket-flow.py start $destination"
+        fi
+      fi
+    done < <(tr ';&|' '\n' <<<"$command")
     # Rule 7: merging needs the owner's approval, standing unless withdrawn in chat.
     if [ -n "${merges:-}" ] && [ "$(git -C "$project" config --get workflow.mergeApproval)" = withdrawn ]; then
       block "the owner withdrew merge approval. Ask for explicit approval; when it is given, run: git config workflow.mergeApproval standing"
+    fi
+    if [ -n "${merges:-}" ]; then
+      merge_target="${start}gh[[:space:]]+pr[[:space:]]+merge[[:space:]]+([0-9]+)${end}"
+      pr_number=""
+      [[ $command =~ $merge_target ]] && pr_number=${BASH_REMATCH[2]}
+      (cd "$project" && python3 -B "$flow" guard-merge "$pr_number") || exit 2
     fi
     [[ -n ${commits:-} || -n ${publishes:-} ]] || exit 0
     # Judge the checkout named by `git -C <dir>`, else the command's working directory.
@@ -73,8 +101,10 @@ if [ -z "$branch" ]; then
   exit 0
 fi
 [[ $branch =~ ^feature/([A-Z][A-Z0-9]*-[0-9]+)-.+ ]] \
-  || block "branch '$branch' is not a ticket branch. Create one from main: git switch -c feature/<KEY>-<n>-<slug> main"
+  || block "branch '$branch' is not a ticket branch. Start one with python3 .claude/hooks/ticket-flow.py start feature/<KEY>-<n>-<slug>"
 key=${BASH_REMATCH[1]}
+
+(cd "$repo" && python3 -B "$flow" guard "$branch") || exit 2
 
 # Rule 2: where the branch was created locally, that point must be on main.
 # Branches already on origin, renamed, or with an expired reflog are not judged.

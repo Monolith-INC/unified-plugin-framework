@@ -149,6 +149,9 @@ jobs:
       - name: Test ticket-first hook
         run: bash .claude/hooks/tests/require-ticket-branch.test.sh
 
+      - name: Test ticket start and closeout
+        run: python3 -B -m unittest discover -s .claude/hooks/tests -p test_ticket_flow.py -v
+
       - name: Test Codex hook adapter
         run: python3 -B -m unittest discover -s .codex/hooks/tests -v
 

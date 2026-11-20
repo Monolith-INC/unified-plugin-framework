@@ -16,6 +16,14 @@ Scope issue searches and new work to this project. Do not create a replacement p
 
 Follow the linked Linear implementation plan. Keep pure planning separate from filesystem, network and process effects. Preserve immutable inputs and return explicit results. Reuse inherited toolkit behavior rather than creating duplicate implementations. Keep original dependency source files unchanged.
 
+## One ticket at a time
+
+After planning and ticket creation, take one ticket through delivery before starting the next. Check the current work session, working tree, branch and any open pull request for the active ticket. Resume unfinished work on its existing branch. If pre-existing work makes it unclear which ticket to finish first, surface the conflict and ask for the order before starting another. Preserve all existing work while resolving it.
+
+1. **Start from the current default branch.** With a clean checkout on `main`, run `python3 .claude/hooks/ticket-flow.py start feature/{key}-{slug}`. It pulls with `--ff-only`, checks `origin/main` and unfinished work, and creates the ticket branch. If you are taking over an existing ticket branch, switch to it and use `ticket-flow.py resume`. For an older branch, use the helper by absolute path from a refreshed `main` checkout. Bring the updated hooks into that branch before resuming implementation. Use the existing work session for the ticket.
+2. **Finish the active ticket.** Keep implementation, checks, review, and any fixes on its branch. Use a pull request to deliver changes to protected `main`. When merging with `gh`, put the PR number immediately after `gh pr merge` so the hook can verify it. An open draft, a queued merge, or a closed pull request without delivery leaves the work unfinished.
+3. **Close out before moving on.** Run `python3 .claude/hooks/ticket-flow.py closeout <PR>` on the ticket checkout. It verifies the merged PR matches the branch tip and refreshes `main` in its checkout. Mark the ticket Done in Linear, confirm the update, and run `ticket-flow.py finish --done <TICKET>` using the same script path. This closes a bound harness session and tells you which `main` checkout to use for the next ticket. The checks are shared by Claude Code and Codex and apply within this clone and its linked worktrees. Branch deletion requires `CODEX DELETION AUTHORIZED`.
+
 ## Checks
 
 Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify when implementation changes require them.
