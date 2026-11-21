@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
 import {safePath,sweepSetupWrites,writeText} from '../dist/tooling-files.js';
-import {configureKnowledge,configureReview,installedMaks,installedMaksHooks,reviewBindingsValid,wireCli,installedCli,wireMaks,wireMaksHooks} from '../dist/tooling-runtime.js';
+import {configureKnowledge,configureReview,hasMaksHooks,installedMaks,installedMaksHooks,mergeMaksHooks,reviewBindingsValid,wireCli,installedCli,wireMaks,wireMaksHooks} from '../dist/tooling-runtime.js';
 import {nodeToolingIO} from '../dist/tooling-node.js';
 import {bmadRuntimeReady,skillDrift,stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
@@ -261,6 +261,8 @@ test('wireMaks and wireMaksHooks create the maks launcher and wire host hooks wh
   assert.equal(codex.hooks.SessionStart.length,1);
   assert.match(codex.hooks.PreToolUse[0].matcher,/apply_patch/);
   assert.equal(codex.hooks.Stop.length,1);
+  const winMerged=mergeMaksHooks(null,'C:\\Users\\demo\\project\\.upf-tools\\bin\\maks',true);
+  assert.equal(hasMaksHooks(winMerged,true),true,'Windows double-escaped maks paths must be recognized');
 });
 
 test('bmadRuntimeReady requires _bmad scripts and config when staged bmad-method ships setup.py', async()=>{

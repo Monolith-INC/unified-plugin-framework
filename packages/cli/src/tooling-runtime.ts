@@ -183,7 +183,7 @@ export const wireMaks = async (project: string, python: string): Promise<Result<
 };
 
 const hasMaksMarker = (command: unknown): boolean =>
-  typeof command === "string" && command.replaceAll("\\", "/").includes(MAKS_MARKER);
+  typeof command === "string" && command.replace(/[\\/]+/g, "/").includes(MAKS_MARKER);
 
 const isMaksHookEntry = (entry: unknown): boolean => {
   if (!object(entry)) return false;
