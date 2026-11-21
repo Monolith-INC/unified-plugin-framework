@@ -69,6 +69,12 @@ const PRD = bmad(
   "Document & Spec",
 );
 
+const BMAD_SUPPORT: readonly PluginSkillRef[] = Object.freeze([
+  bmad("bmad", "BMad hub skill for project runtime setup, status and initiative management."),
+  bmad("bmod-core-tools", "BMad core-tools module manifest required by BMad runtime checks."),
+  bmad("bmod-method", "BMad method module manifest required by BMad runtime checks."),
+]);
+
 /** Discovery led by Superpowers' brainstorming flow, with BMad Method's elicitation, hardening and verification layers. */
 export const brainstormingDiscoveryAdapter: DiscoveryAdapter = Object.freeze({
   workflow: "discovery",
@@ -95,4 +101,5 @@ export const brainstormingDiscoveryAdapter: DiscoveryAdapter = Object.freeze({
   ]),
   bareSkillPlugins: Object.freeze([BMAD]),
   knowledgeStores: Object.freeze([]),
+  supportSkills: BMAD_SUPPORT,
 });

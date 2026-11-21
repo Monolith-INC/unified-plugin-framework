@@ -32,7 +32,7 @@ else {
 }
 `, { mode: 0o700 });
   await writeFile(join(scriptsDir, "query.py"), `import sys, pathlib
-if "catalog" not in sys.argv or pathlib.Path(${JSON.stringify(marker)}).exists():
+if len(sys.argv) < 2 or sys.argv[1] != "catalog" or "--project" not in sys.argv or "--root" not in sys.argv or pathlib.Path(${JSON.stringify(marker)}).exists():
     raise SystemExit(1)
 pathlib.Path(${JSON.stringify(verification)}).write_text("verified")
 print("id\\ttier\\ttitle\\noverview\\t1\\tProject overview")
@@ -85,4 +85,36 @@ else process.exit(1);
   assert.equal(content.failure.code, "host-sign-in-needed");
   assert.match(content.failure.message, /not signed in: Codex/);
   assert.match(content.failure.recovery, /Sign in to the assistant/);
+});
+
+test("acquisition accepts newer compatible host CLI versions and skips older ones", { skip: process.platform === "win32" }, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), "upf-acquisition-semver-"));
+  const project = join(fixture, "project");
+  const bin = join(fixture, "bin");
+  const scriptsDir = join(project, ".upf-tools/plugins/monolithic-agent-knowledge-store/source/scripts");
+  const root = join(project, "Project_Knowledge");
+  await Promise.all([bin, scriptsDir, root].map((path) => mkdir(path, { recursive: true })));
+  await writeFile(join(bin, "codex"), `#!${process.execPath}
+if (process.argv[2] === "--version") console.log("codex-cli 0.150.0");
+else process.exit(1);
+`, { mode: 0o700 });
+  await writeFile(join(bin, "claude"), `#!${process.execPath}
+const args = process.argv.slice(2);
+if (args[0] === "--version") console.log("2.1.327 (Claude Code)");
+else if (args[0] === "auth") console.log('{"loggedIn":true}');
+else console.log("UPF_DISCOVERY_COMPLETE");
+`, { mode: 0o700 });
+  await writeFile(join(scriptsDir, "query.py"), `import sys
+if len(sys.argv) < 2 or sys.argv[1] != "catalog":
+    raise SystemExit(1)
+print("id\\ttier\\ttitle\\nidentity/purpose\\t1\\tPurpose")
+`, { mode: 0o700 });
+  const report = { status: "action-required", steps: [
+    ...["knowledge-runtime", "knowledge-settings", "host-discovery"].map((step) => ({ step, status: "ready", evidence: "fixture" })),
+    { step: "knowledge-content", status: "action-required", failure: { code: "knowledge-discovery-needed" } },
+  ] };
+  const python = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
+  const plan = { hosts: ["codex", "claude"], python, knowledge: { knowledgeRoot: "Project_Knowledge" }, consent: { headlessDiscovery: true } };
+  const result = await finishKnowledge(report, project, plan, {}, ["codex", "claude"], new Map(), { PATH: bin });
+  assert.equal(result.status, "ready");
 });

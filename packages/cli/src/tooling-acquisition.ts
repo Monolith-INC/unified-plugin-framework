@@ -36,8 +36,19 @@ const executable = async (host: HostName, cwd: string, path: string | undefined)
   return candidates.find((candidate) => candidate !== undefined && !within(cwd, candidate));
 };
 
-const pinned = (version: Result<string>, host: HostName): boolean =>
-  version.ok && version.value.trim().split(/\s+/).includes(PINS.hostClis[host].version);
+const SEMVER_TOKEN = /\b(\d+)\.(\d+)\.(\d+)\b/;
+const parseSemver = (text: string): readonly [number, number, number] | undefined => {
+  const match = SEMVER_TOKEN.exec(text);
+  return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])] as const;
+};
+const versionAtLeast = (found: readonly [number, number, number], minimum: readonly [number, number, number]): boolean =>
+  found[0] > minimum[0] || (found[0] === minimum[0] && (found[1] > minimum[1] || (found[1] === minimum[1] && found[2] >= minimum[2])));
+const supportedVersion = (version: Result<string>, host: HostName): boolean => {
+  if (!version.ok) return false;
+  const found = parseSemver(version.value);
+  const minimum = parseSemver(PINS.hostClis[host].version);
+  return found !== undefined && minimum !== undefined && versionAtLeast(found, minimum);
+};
 const approved = (report: ToolingReport, plan: AcceptedPlan, candidates: readonly HostName[]): boolean =>
   plan.consent.headlessDiscovery && ready(report, "knowledge-runtime") && ready(report, "knowledge-settings") && candidates.length > 0;
 const signedIn = (host: HostName, auth: Result<string>): boolean => {
@@ -66,11 +77,12 @@ const runHost = async (host: HostName, context: DiscoveryRun): Promise<Result<st
   const run = (args: readonly string[], timeout: number) =>
     program === undefined ? Promise.resolve(pending()) : boundedOutput(program, args, scratch, timeout, env);
   const version = await run(["--version"], 5_000);
-  const auth = pinned(version, host) ? await run(host === "codex" ? ["login", "status"] : ["auth", "status"], 10_000) : pending();
-  if (!signedIn(host, auth)) return { signedOut: pinned(version, host) };
+  const supported = supportedVersion(version, host);
+  const auth = supported ? await run(host === "codex" ? ["login", "status"] : ["auth", "status"], 10_000) : pending();
+  if (!signedIn(host, auth)) return { signedOut: supported };
   const discovery = await run(headlessDiscovery(host, { project, python, queryScript, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000);
   return discovery.ok && discovery.value.trim() === DISCOVERY_COMPLETE
-    ? boundedOutput(python, [queryScript, "--root", root, "catalog"], scratch, 60_000, env)
+    ? boundedOutput(python, [queryScript, "catalog", "--project", project, "--root", root], scratch, 60_000, env)
         .then((checked) => checked.ok && checked.value.trim().split("\n").length > 1 ? checked : pending())
     : pending();
 };

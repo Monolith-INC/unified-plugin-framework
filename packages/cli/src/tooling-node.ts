@@ -7,7 +7,7 @@ import { command, scaled } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
 import { DISCOVERY_MARKER } from "./tooling-recovery.js";
 import { HOST_STEPS } from "./tooling-bootstrap.js";
-import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
+import { bmadRuntimeReady, discoverHost, driftedSkills, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
 import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
@@ -123,12 +123,19 @@ const inspectReview = async (project: string, input: BootstrapInput): Promise<Re
     && raw.value.knowledge.root === input.knowledge.knowledgeRoot
     ? ready("Review settings point to the project's single knowledge root.") : missing("Run review-setup for provider bindings if absent, then point review knowledge to the accepted project root.");
 };
+const formatDrift = (drifted: readonly { readonly name: string; readonly paths: readonly string[] }[]): string =>
+  drifted.map(({ name, paths }) => paths.length > 0 ? `${name} (${paths.join(", ")})` : name).join("; ");
+
 const inspectDiscovery = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => discoverHost(project, input, environment).then((result) => {
   const expected = [...new Set([...frameworkSkills(project, input.host).map(({ name }) => name), ...requiredSkills(project, input)])];
   const missingNames = result.ok ? expected.filter((name) => !result.value.some((skill) => skill.name === name)) : [];
+  const drifted = result.ok ? driftedSkills(project, input, result.value) : [];
   return !result.ok ? result : missingNames.length > 0 ? missing(`Activate the pinned skills in this host: ${missingNames.join(", ")}; then repeat fresh discovery.`)
     : !frameworkSkillsMatch(project, result.value, input.host) ? missing("Reactivate the framework plugins so the host replaces its copy cached from an earlier install; then repeat fresh discovery.")
-    : !activeSkillsMatch(project, input, result.value) ? fail("active-skill-drift", "A discovered dependency skill differs from the pinned staged source.",
+    : !stagedBindings(project, input).ok || drifted.length > 0 ? fail("active-skill-drift",
+      drifted.length > 0
+        ? `Discovered dependency skill(s) differ from the pinned staged source: ${formatDrift(drifted)}.`
+        : "A discovered dependency skill differs from the pinned staged source.",
       "Preserve any edited skill, reconcile the active copy with its pinned source and repeat discovery; names or ownership markers alone are insufficient.")
       : ready("Fresh host discovery found and verified the selected framework, knowledge and workflow dependency skills.");
 });
@@ -144,9 +151,13 @@ const inspectDependencies = async (project: string, input: BootstrapInput, resol
   const bindings = pluginBindings(project, resolved);
   const staged = stagedBindings(project, input);
   const markers = await Promise.all(pluginNames(input).map((name) => readText(join(pluginTarget(project, name), "upf-source.json"))));
+  const bmadReady = await bmadRuntimeReady(project, input);
   return !pending.ok ? pending : pending.value.length > 0
     ? missing(`Fetch and verify the pinned sources of ${pending.value.map(({ plugin }) => plugin).join(", ")}, then stage and activate them.`)
-    : !bindings.ok ? bindings : staged.ok && markers.every((marker) => marker.ok && marker.value !== null)
-      ? ready("Selected dependency sources pass the existing binding gate and staged wrappers are present.")
-      : missing("Stage the accepted clean pinned dependency sources and activate them through the host plugin installer.");
+    : !bindings.ok ? bindings
+      : !staged.ok || !markers.every((marker) => marker.ok && marker.value !== null)
+        ? missing("Stage the accepted clean pinned dependency sources and activate them through the host plugin installer.")
+        : !bmadReady
+          ? missing("Initialize the BMad project runtime (_bmad/scripts and _bmad/config.toml) from the staged bmad skill, then rerun setup.")
+          : ready("Selected dependency sources pass the existing binding gate, staged wrappers are present and required project runtimes are initialized.");
 };

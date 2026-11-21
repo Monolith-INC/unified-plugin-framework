@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "@agent-plugins/compiler";
 import { installVendorBundle } from "@agent-plugins/installer";
@@ -43,6 +43,24 @@ export const installKnowledge = async (project: string, input: BootstrapInput, p
     .then((checked) => checked.ok ? ok(input.python) : fail("python-missing", "Python 3.12+ is required for the standalone knowledge store.",
       "Install Python 3.12 or newer, or pass --python <executable>, then rerun setup."));
 
+const knowledgeSupportFiles = (relRoot: string, language: string): readonly (readonly [string, string])[] => [
+  ["manifest.md", `---\nschema_version: 1\nstore_root: ${relRoot}\nlanguage: ${language}\n---\n\n# Project Knowledge Store\n\nFive-tier Markdown knowledge store (\`identity\`, \`structure\`, \`mechanics\`, \`rules\`, \`evolution\`).\n`],
+  ["QUERY_GUIDE.md", `# Project Knowledge Query Guide\n\nUse \`query.py\` with Python 3.12+ (stdlib only) to inspect current project facts before broad file reads.\n\n- Store root: \`${relRoot}\`\n- Locator: \`project-knowledge.json\`\n- Commands: \`catalog\`, \`find\`, \`fetch\` (\`--history\`), \`glossary\`, \`links\`, \`rebuild-catalog\`, \`curate\`, \`validate-lineage\`\n`],
+  ["glossary.md", "# Project Glossary\n\nSourced project terms and aliases. Every entry cites its authoritative source.\n\n| Term | Aliases | Definition | Source |\n| --- | --- | --- | --- |\n"],
+];
+
+const isExistError = (error: unknown): boolean => object(error) && error.code === "EEXIST";
+
+const ensureMissingSupportFile = async (project: string, file: string, content: string): Promise<Result<string>> => {
+  if (!await safePath(project, file)) {
+    return fail("symlink-escape", "The knowledge support file escapes the project or follows a symbolic link.",
+      "Preserve the linked path and choose an unlinked location inside the project.");
+  }
+  return writeFile(file, content, { encoding: "utf8", flag: "wx" })
+    .then(() => ok(file))
+    .catch((error: unknown) => isExistError(error) ? ok(file) : setupFailure("Could not scaffold a project knowledge support file."));
+};
+
 /** Writes canonical `project-knowledge.json` for new installs; updates legacy `.project-knowledge.json` if it is the sole locator; fails on conflicts. */
 export const configureKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
   const visiblePath = join(project, "project-knowledge.json");
@@ -58,14 +76,21 @@ export const configureKnowledge = async (project: string, input: BootstrapInput)
   const targetPath = visibleObj === null && legacyObj !== null ? legacyPath : visiblePath;
   const existingValue = visibleObj === null && legacyObj !== null ? legacy.value : visible.value;
   const selected = visibleObj ?? legacyObj ?? {};
+  const answersObj = object(input.answers) ? input.answers : null;
+  const answerLanguage = answersObj !== null && typeof answersObj.language === "string" && answersObj.language.length > 0 ? answersObj.language : "en";
+  const language = typeof selected.language === "string" && selected.language.length > 0 ? selected.language : answerLanguage;
+  const tracked = typeof selected.tracked === "boolean" ? selected.tracked : true;
   const conflicts = Object.entries(input.knowledge).some(([key, value]) => selected[key] !== undefined && selected[key] !== value);
+  const storeDir = join(project, input.knowledge.knowledgeRoot);
   return conflicts
     ? setupFailure("Saved project knowledge choices differ from the accepted plan; reconcile them explicitly.")
-    : directory(project, join(project, input.knowledge.knowledgeRoot)).then((created) =>
+    : directory(project, storeDir).then((created) =>
         created.ok
-          ? nodeProjectFiles.write(targetPath, { ...selected, schemaVersion: 1, ...input.knowledge }, existingValue)().then((saved) =>
-              saved.ok ? ok(targetPath) : saved,
-            )
+          ? nodeProjectFiles.write(targetPath, { ...selected, schemaVersion: 1, language, tracked, ...input.knowledge }, existingValue)()
+              .then((saved) => saved.ok
+                ? sequence(knowledgeSupportFiles(input.knowledge.knowledgeRoot, language),
+                    ([name, content]) => ensureMissingSupportFile(project, join(storeDir, name), content), targetPath)
+                : saved)
           : created,
       );
 };

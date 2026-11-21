@@ -58,6 +58,7 @@ export type WorkflowAdapter<Operation extends string> = {
   readonly catalog: readonly PluginSkillRef[];
   readonly bareSkillPlugins: readonly string[];
   readonly knowledgeStores: readonly PluginKnowledgeStore[];
+  readonly supportSkills?: readonly PluginSkillRef[];
   readonly contentViews?: readonly ContentView[];
   readonly protocol?: string;
 };
@@ -144,11 +145,16 @@ const catalogRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [stri
 const setupRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
   adapter.knowledgeStores.map(({ plugin, setup }) => [`${plugin} knowledge store setup`, { plugin, skill: setup }] as const);
 
-/** Every plugin skill a session of this adapter may use: its operations, its catalog and its recovery setup skills. */
+/** Support skills installed beside mapped skills (such as runtime hubs and module manifests). */
+const supportRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
+  (adapter.supportSkills ?? []).map((ref) => ["support", ref] as const);
+
+/** Every plugin skill a session of this adapter may use: its operations, its catalog, its recovery setup skills and support skills. */
 const requiredRefs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] => [
   ...refs(adapter),
   ...catalogRefs(adapter),
   ...setupRefs(adapter),
+  ...supportRefs(adapter),
 ];
 
 /** Each plugin an adapter needs, once, in first-reference order. */
