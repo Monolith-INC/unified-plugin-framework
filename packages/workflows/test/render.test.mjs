@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { CODE_REVIEW_OPERATIONS, DISCOVERY_OPERATIONS, renderSkill, reviewToolkitAdapter } from "../dist/index.js";
+import { CODE_REVIEW_OPERATIONS, DISCOVERY_OPERATIONS, brainstormingDiscoveryAdapter, renderSkill, reviewToolkitAdapter } from "../dist/index.js";
 
 const templateText = (operation) =>
   readFileSync(new URL(`../../../skills/${operation}/SKILL.md`, import.meta.url), "utf8");
@@ -61,4 +61,13 @@ test("rendering fails when a served plugin has no pin, naming the plugin and the
   const result = renderSkill(templateText("review-task"), reviewToolkitAdapter, "review-task", { lockVersion: 1, plugins: [] });
   assert.equal(result.ok, false);
   assert.match(result.message, /monolithic-code-review-toolkit has no pin in io\.github\.monolith-inc\.upf\/onboarded\.lock\.json: pin it with agent-plugin upgrade-check/);
+});
+
+test("rendered discovery skills require offering fitting BMad paths before starting and non-empty knowledge readiness", () => {
+  const result = renderSkill(templateText("discover-quick"), brainstormingDiscoveryAdapter, "discover-quick", committedLock);
+  assert.equal(result.ok, true, result.message);
+  assert.match(result.text, /Before starting the lead workflow, offer the user the fitting paths/);
+  assert.match(result.text, /bmad-forge-idea/);
+  assert.match(result.text, /never report ready while the store is empty/);
+  assert.match(result.text, /query\.py curate/);
 });

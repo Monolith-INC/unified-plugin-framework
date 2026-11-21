@@ -86,10 +86,16 @@ const inspectSkills = async (project: string, input: BootstrapInput): Promise<Re
     ? ready("Verified framework host payload is installed with ownership records.") : missing("Install the shipped framework payload, then activate it through the host plugin mechanism.");
 };
 const knowledgeSettings = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
-  const raw = await nodeProjectFiles.read(join(project, ".project-knowledge.json"))();
-  return !raw.ok ? raw : object(raw.value) && raw.value.schemaVersion === 1
-    && Object.entries(input.knowledge).every(([key, value]) => object(raw.value) && raw.value[key] === value)
-    ? ready("Accepted knowledge/document settings match the saved project configuration.") : missing("Create or reconcile the accepted shared knowledge/document settings.");
+  const [visible, legacy] = await Promise.all([
+    nodeProjectFiles.read(join(project, "project-knowledge.json"))(),
+    nodeProjectFiles.read(join(project, ".project-knowledge.json"))(),
+  ]);
+  const visibleMatch = visible.ok && object(visible.value) && visible.value.knowledgeRoot === input.knowledge.knowledgeRoot;
+  const legacyMatch = legacy.ok && object(legacy.value) && legacy.value.schemaVersion === 1
+    && Object.entries(input.knowledge).every(([key, value]) => object(legacy.value) && legacy.value[key] === value);
+  return !visible.ok && !legacy.ok ? legacy : visibleMatch || legacyMatch
+    ? ready("Accepted knowledge/document settings match the saved project configuration.")
+    : missing("Create or reconcile the accepted shared knowledge/document settings.");
 };
 const inspectKnowledgeContent = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const root = join(project, input.knowledge.knowledgeRoot);

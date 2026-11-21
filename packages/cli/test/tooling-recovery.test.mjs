@@ -5,7 +5,7 @@ import { RECOVERY_CODES, UNEXPECTED, exitCodeOf, headlessDiscovery, recoveryFor 
 
 const expected = {
   auto: ["network-unavailable", "checksum-mismatch", "python-missing", "invalid-saved-plan", "stale-lock", "write-busy", "host-cli-missing", "tool-timeout", "tool-command-failed", "partial-step", "dependency-fetch", "knowledge-discovery-needed", "tooling-missing", "host-unavailable", "host-skill-errors", "host-activation-needed", "tooling-storage"],
-  "hand-off": ["review-setup-needed"],
+  "hand-off": ["review-setup-needed", "continuity-setup-needed"],
   "user-action": ["host-sign-in-needed", "tracker-attention", "authentication-needed", "connection-unavailable", "tracker-error", "outcome-unknown", "invalid-reply", "invalid-scope", "setup-needed", "invalid-pagination", "invalid-parent", "invalid-request", "not-found", "outside-project", "unmapped-kind", "unmapped-state", "unsupported-operation"],
   stop: ["platform-unsupported", "extractor-missing", "unsupported-runtime", "invalid-settings", "write-denied", "storage-error", "project-busy", "invalid-json", "unreadable-input", "usage", "answers-required", "invalid-bootstrap", "host-required", "distribution-incomplete", "handoff-storage", "missing-input"],
   preserve: ["host-configuration-conflict", "settings-changed", "unsupported-settings", "symlink-escape", "modified-file", "unmanaged-file", "active-skill-drift", "dependency-fetch-mismatch", "dependency-source", "dependency-pin", "dependency-binding", "artifact-conflict", "invalid-local-store"],
