@@ -9,7 +9,7 @@ Use the project's supplied team template for each item kind, preserving its head
 
 ## Publish and resume
 
-Keep the proposed change set and validation report under artifactsPath. Show item kinds, parents, source/AC links, before/after content and unresolved questions. Use existing user authorization when it covers these writes; otherwise obtain approval for the concrete proposal. Preserve the draft on rejection.
+A chat outline is never a reviewable planning deliverable. Write the concrete plan file, proposed change set and validation report under artifactsPath before declaring a plan ready for review or requesting implementation approval. If creating that file requires user approval, ask explicitly for permission to write the plan file rather than silently omitting it. Report the saved file path and status clearly so the user can inspect the deliverable before approving implementation. Show item kinds, parents, source/AC links, before/after content and unresolved questions. Use existing user authorization when it covers these writes; otherwise obtain approval for the concrete proposal. Preserve the draft on rejection.
 
 Before each write, read the current item and compare with the version used to draft; refresh only affected changes if content differs. Create parents before children with create_work_item; use update_work_item for existing refs. A split keeps the original as the source/summary and places replacement stories under its existing parent, preserving source links. Do not close or delete the original without authorization.
 

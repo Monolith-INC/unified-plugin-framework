@@ -149,7 +149,7 @@ flowchart TD
 | Break down | Writes a story's implementation plan and its tasks | `generate-breakdown-work-items` |
 | Amend | Applies later corrections consistently across the whole tree | `amend-workitems` |
 
-The tracking templates name no plugin. The adapter contributes reviewed toolkit content while the project's adapter handles every work-item read and write. Its native tracker conductors are not invoked. The team's template and saved language take precedence over toolkit defaults; complete sections and existing item identities are preserved on resume.
+The tracking templates name no plugin. The adapter contributes reviewed toolkit content while the project's adapter handles every work-item read and write. Its native tracker conductors are not invoked. The team's template and saved language take precedence over toolkit defaults; complete sections and existing item identities are preserved on resume. Planning requests always produce a durable plan file under `artifactsPath` and report its exact path and status before requesting implementation approval; any write-approval requirement for creating the plan file is handled explicitly rather than silently omitting it.
 
 ### Code review: choose by where you are
 

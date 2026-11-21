@@ -43,12 +43,16 @@ test("all entry points use provider-free reviewed content and the same project l
     assert.match(result.text, /team template/);
     assert.match(result.text, /saved language/);
     assert.match(result.text, /uncertain create/);
+    assert.match(result.text, /chat outline is never a reviewable planning deliverable/i);
+    assert.match(result.text, /Report the saved file path and status clearly/i);
     assert.match(result.text, /MIT License/);
     assert.match(result.text, /Théo Carranza/);
     return operation;
   });
   const full = template("track-from-design");
   ["track-enrich", "track-validate", "track-decompose", "track-split", "track-breakdown"].map((op) => assert.ok(full.includes(op)));
+  assert.match(template("track-breakdown"), /Never declare the plan ready for review or ask for implementation approval while the plan exists only in chat/);
+  assert.match(template("track-from-design"), /Never ask for implementation approval when a plan exists only as a chat outline/);
 });
 
 test("missing plugin, version drift, source drift and knowledge failures all carry recovery", () => {
