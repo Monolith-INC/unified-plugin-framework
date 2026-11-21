@@ -21,6 +21,7 @@ project=${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}
 tool=$(jq -r '.tool_name // ""' <<<"$input") || block "the workflow hook could not read the tool call."
 project_common=$(git -C "$project" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
 flow="$(cd "$(dirname "$0")" && pwd)/ticket-flow.py"
+inventory_guard="$(cd "$(dirname "$0")" && pwd)/inventory-guard.py"
 
 # checkout_of <dir>: prints the checkout root when <dir> belongs to this project.
 checkout_of() {
@@ -40,12 +41,13 @@ case $tool in
     path=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // ""' <<<"$input")
     repo=$(checkout_of "$(dirname "$path")") || exit 0
     # Rule 9: a new markdown file with a plan/spec/design word in its name lives in
-    # docs/work-items/. Existing files can still be edited (moving them is cleanup work).
-    rel=${path#"$repo"/}; [[ $rel == /* ]] && rel=${path#"$project"/}   # repo path may be symlink-resolved
-    rel=$(tr '[:upper:]' '[:lower:]' <<<"$rel")
+    # docs/work-items/ or AI_Codex/Implementation_Plans/. Existing files can still be edited.
+    raw_rel=${path#"$repo"/}; [[ $raw_rel == /* ]] && raw_rel=${path#"$project"/}   # repo path may be symlink-resolved
+    edits_path=$raw_rel
+    rel=$(tr '[:upper:]' '[:lower:]' <<<"$raw_rel")
     name=$(basename "$rel")
-    if [ ! -e "$path" ] && [[ $name == *.md && $rel != docs/work-items/* && $name =~ (^|[-_.[:space:]])(plans?|specs?|designs?)([-_.[:space:]]|$) ]]; then
-      block "plans and specs go in docs/work-items/. Write it there instead of $path"
+    if [ ! -e "$path" ] && [[ $name == *.md && $rel != docs/work-items/* && $rel != ai_codex/implementation_plans/* && $name =~ (^|[-_.[:space:]])(plans?|specs?|designs?)([-_.[:space:]]|$) ]]; then
+      block "plans and specs go in docs/work-items/ or AI_Codex/Implementation_Plans/. Write it there instead of $path"
     fi ;;
   Bash)
     command=$(jq -r '.tool_input.command // ""' <<<"$input")
@@ -105,6 +107,9 @@ fi
 key=${BASH_REMATCH[1]}
 
 (cd "$repo" && python3 -B "$flow" guard "$branch") || exit 2
+if [ -n "${edits_path:-}" ] && [ -f "$inventory_guard" ]; then
+  (cd "$repo" && python3 -B "$inventory_guard" check --branch "$branch" --path "$edits_path") || exit 2
+fi
 
 # Rule 2: where the branch was created locally, that point must be on main.
 # Branches already on origin, renamed, or with an expired reflog are not judged.

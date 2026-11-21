@@ -14,7 +14,7 @@ Read the authoritative story/task, plan and acceptance criteria through `project
 
 {{delegate}}
 
-For each acceptance criterion, identify the implementation and observable evidence, or a concrete gap and recovery. Distinguish code inspection, focused automated checks and actual installed-host behavior. A passed test does not establish unrelated acceptance criteria; unavailable credentials, platform checks or host behavior remain explicit limits.
+For each acceptance criterion, identify the implementation and observable evidence, or a concrete gap and recovery. Verify that every modified, created and deleted file is accounted for in the plan's approved **File Inventory** (or has explicit user permission recorded), and report any unapproved out-of-scope file as a gap. Distinguish code inspection, focused automated checks and actual installed-host behavior. A passed test does not establish unrelated acceptance criteria; unavailable credentials, platform checks or host behavior remain explicit limits.
 
 Run the project's final required checks once against the current relevant code before publication. Reuse valid evidence when its relevant inputs have not changed; do not repeat a full suite at every task or claim an earlier result covers changed code. Rerun only the affected checks during development. A failing check returns to the unfinished task and its recovery; preserve prior progress and do not report completion.
 

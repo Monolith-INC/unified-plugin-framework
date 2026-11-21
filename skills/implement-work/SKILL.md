@@ -14,6 +14,8 @@ Use the project's selected language, document paths, coding rules, branch policy
 
 Read the story/task and linked approved plan through `project-operations`. Read current checkout/diff and the relevant shared knowledge through catalog, search and targeted fetch. When a feature/epic lacks an implementable story/task plan, use `track-breakdown` or the appropriate existing tracking operation before coding; preserve its original requirements rather than creating another plan here.
 
+Before editing any file, ensure the approved implementation plan includes an explicit **File Inventory** listing every existing file to modify or delete and every new file to create. Treat that inventory as the authorized edit boundary: if implementation requires touching any file outside the approved inventory, pause and ask the user for permission before editing it, then record the approved addition.
+
 Proceed within existing implementation authorization. Ask only for missing decisions that change scope or authority; historical session approvals do not grant new permission. Follow the project's branch policy and preserve unrelated edits. Do not mandate an extra worktree, branch stack or agent/reviewer per task. For a project using one branch from main, finish that branch before starting the next.
 
 ## Execute and resume
