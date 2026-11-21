@@ -182,10 +182,13 @@ export const wireMaks = async (project: string, python: string): Promise<Result<
     .catch(() => setupFailure("Could not write the .upf-tools/bin/maks knowledge launcher."));
 };
 
+const hasMaksMarker = (command: unknown): boolean =>
+  typeof command === "string" && command.replaceAll("\\", "/").includes(MAKS_MARKER);
+
 const isMaksHookEntry = (entry: unknown): boolean => {
   if (!object(entry)) return false;
-  if (typeof entry.command === "string" && entry.command.includes(MAKS_MARKER)) return true;
-  return Array.isArray(entry.hooks) && entry.hooks.some((hook: unknown) => object(hook) && typeof hook.command === "string" && hook.command.includes(MAKS_MARKER));
+  if (hasMaksMarker(entry.command)) return true;
+  return Array.isArray(entry.hooks) && entry.hooks.some((hook: unknown) => object(hook) && hasMaksMarker(hook.command));
 };
 
 const maksHookSpecs = (maksCmd: string, includeStop: boolean): Readonly<Record<string, Readonly<Record<string, unknown>>>> => ({
