@@ -3,6 +3,8 @@
   "kind": "valid",
   "description": "Scoped npm-style plugin name is accepted.",
   "validateExitCode": 0,
-  "diagnosticCodes": [],
+  "diagnosticCodes": [
+    "manifest.name.legacy_scope"
+  ],
   "requireManifest": true
 }

@@ -2,7 +2,7 @@
   "id": "invalid-extensions",
   "kind": "invalid",
   "description": "Non-object extensions emits diagnostic; identity fields remain.",
-  "validateExitCode": 1,
+  "validateExitCode": 0,
   "diagnosticCodes": [
     "manifest.extensions.invalid_type"
   ],

@@ -207,9 +207,13 @@ function mcpEntry(server: PluginMcpServer, name: string): Result<JsonValue> {
   switch (server.transport) {
     case "stdio": return server.cwd !== undefined
       ? fail("claude.mcp.unsupported", "Claude plugin MCP declarations cannot preserve a portable working directory.", name)
-      : success({ command: server.command, ...(server.args === undefined ? {} : { args: server.args }) });
-    case "streamable-http": return success({ type: "http", url: server.url });
-    case "sse": return success({ type: "sse", url: server.url });
+      : success({
+          command: server.command,
+          ...(server.args === undefined ? {} : { args: server.args }),
+          ...(server.env === undefined ? {} : { env: server.env }),
+        });
+    case "streamable-http": return success({ type: "http", url: server.url, ...(server.headers === undefined ? {} : { headers: server.headers }) });
+    case "sse": return success({ type: "sse", url: server.url, ...(server.headers === undefined ? {} : { headers: server.headers }) });
     case "config-path": return fail("claude.mcp.unsupported", "Claude payloads cannot inline an opaque MCP config-path declaration.", name);
   }
 }

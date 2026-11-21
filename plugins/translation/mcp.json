@@ -1,9 +1,13 @@
 {
-  "terminology": {
-    "command": "node",
-    "args": [
-      "${PLUGIN_ROOT}/servers/terminology.js"
-    ],
-    "cwd": "${PLUGIN_DATA}/terminology"
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "terminology": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${PLUGIN_ROOT}/servers/terminology.js"
+      ],
+      "cwd": "${PLUGIN_DATA}/terminology"
+    }
   }
 }

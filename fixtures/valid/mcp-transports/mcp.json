@@ -1,16 +1,20 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "local": {
+      "type": "stdio",
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/server.js"],
+      "args": [
+        "${PLUGIN_ROOT}/server.js"
+      ],
       "cwd": "${PLUGIN_DATA}/runtime"
     },
     "docs": {
       "type": "streamable-http",
-      "url": "https://example.com/${PLUGIN_ROOT}/mcp"
+      "url": "https://example.com/mcp"
     },
     "events": {
-      "transport": "sse",
+      "type": "sse",
       "url": "https://example.com/events"
     }
   }

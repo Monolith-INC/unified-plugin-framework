@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "project-knowledge",
   "version": "0.1.0",
   "description": "Standalone project knowledge setup and discovery guidance.",

@@ -14,6 +14,8 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 
 import {
+  LEGACY_DISTRIBUTION_EXTENSION,
+  UPF_DISTRIBUTION_EXTENSION,
   isPathInside,
   loadPluginRoot,
   resolveContained,
@@ -93,9 +95,13 @@ export interface CanonicalDistribution {
   };
 }
 
+export type CanonicalManifest = PluginManifest & {
+  readonly version: string;
+};
+
 export interface CanonicalPlugin {
   readonly root: string;
-  readonly manifest: PluginManifest;
+  readonly manifest: CanonicalManifest;
   readonly skills: readonly CanonicalSkill[];
   readonly mcpServers: readonly PluginMcpServer[];
   readonly rules: readonly CanonicalRule[];
@@ -285,7 +291,8 @@ export interface CompilerTestHooks {
 
 export const BUNDLE_MANIFEST_FILE = "bundle.json" as const;
 export const BUNDLE_PAYLOAD_DIRECTORY = "payload" as const;
-export const CANONICAL_DISTRIBUTION_EXTENSION = "org.agent-plugins.distribution" as const;
+export { UPF_DISTRIBUTION_EXTENSION };
+export const CANONICAL_DISTRIBUTION_EXTENSION = LEGACY_DISTRIBUTION_EXTENSION;
 
 export const compilerDiagnosticCodes = Object.freeze({
   vendorUnsupported: "adapter.vendor.unsupported",
@@ -772,14 +779,27 @@ export function normalizeCanonicalPlugin(source: string): Result<CanonicalPlugin
       ),
     );
   }
+  if (inspection.manifest.version === undefined || inspection.manifest.version.length === 0) {
+    return failure(
+      diagnostic(
+        compilerDiagnosticCodes.canonicalInvalid,
+        "Canonical plugin compilation requires a manifest version.",
+        "version",
+      ),
+    );
+  }
+  const manifest: CanonicalManifest = {
+    ...inspection.manifest,
+    version: inspection.manifest.version,
+  };
 
   const skills = readCanonicalSkills(root, inspection);
   if (!skills.ok) return skills;
-  const distribution = parseCanonicalDistribution(inspection.manifest);
+  const distribution = parseCanonicalDistribution(manifest);
   if (!distribution.ok) return distribution;
   const mcpServers = [...(inspection.mcpServers ?? [])].sort(compareMcpServers);
   const withoutDigest = {
-    manifest: inspection.manifest,
+    manifest,
     skills: skills.value,
     mcpServers,
     rules: distribution.value.rules,
@@ -1083,7 +1103,11 @@ function readCanonicalSkills(
 function parseCanonicalDistribution(
   manifest: PluginManifest,
 ): Result<ParsedCanonicalDistribution> {
-  const extension = manifest.extensions?.[CANONICAL_DISTRIBUTION_EXTENSION];
+  const namespace =
+    manifest.extensions?.[UPF_DISTRIBUTION_EXTENSION] !== undefined
+      ? UPF_DISTRIBUTION_EXTENSION
+      : CANONICAL_DISTRIBUTION_EXTENSION;
+  const extension = manifest.extensions?.[namespace];
   if (extension === undefined) {
     return success({
       rules: Object.freeze([]),
@@ -1097,8 +1121,8 @@ function parseCanonicalDistribution(
       },
     });
   }
-  if (!isRecord(extension)) return invalidCanonicalDistribution(CANONICAL_DISTRIBUTION_EXTENSION);
-  const unknown = canonicalUnknownFields(extension, ["rules", "hookIntents", "compatibility"]);
+  if (!isRecord(extension)) return invalidCanonicalDistribution(namespace);
+  const unknown = canonicalUnknownFields(extension, ["rules", "hookIntents", "compatibility"], namespace);
   const rules = parseCanonicalRules(extension["rules"]);
   const hooks = parseCanonicalHookIntents(extension["hookIntents"]);
   const compatibility = parseCanonicalCompatibility(extension["compatibility"]);
@@ -1112,7 +1136,7 @@ function parseCanonicalDistribution(
     return failure(diagnostics[0] as Diagnostic, ...diagnostics.slice(1));
   }
   if (!rules.ok || !hooks.ok || !compatibility.ok) {
-    return invalidCanonicalDistribution(CANONICAL_DISTRIBUTION_EXTENSION);
+    return invalidCanonicalDistribution(namespace);
   }
   return success({
     rules: rules.value,

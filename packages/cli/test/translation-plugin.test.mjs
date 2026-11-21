@@ -88,17 +88,17 @@ test("partial recovery keeps manifest and skills when MCP fails", () => {
   assert.ok(inspection.diagnostics.some((d) => String(d.code).startsWith("mcpServer")));
 });
 
-test("malformed extensions diagnose while remaining identity can survive", () => {
+test("malformed extensions warn and are ignored while remaining identity survives", () => {
   const result = withCapturedIo(() =>
     run(["inspect", join(repoRoot, "fixtures/invalid/translation-malformed-extension")]),
   );
-  assert.equal(result.exitCode, 1);
+  assert.equal(result.exitCode, 0);
   const inspection = JSON.parse(result.stdout);
   assert.ok(
-    JSON.parse(result.stderr.length ? result.stderr : "[]").length >= 0 ||
-      inspection.diagnostics.some((d) => d.code === "manifest.extensions.invalid_type"),
+    inspection.diagnostics.some(
+      (d) => d.code === "manifest.extensions.invalid_type" && d.severity === "warning",
+    ),
   );
-  assert.ok(inspection.diagnostics.some((d) => d.code === "manifest.extensions.invalid_type"));
   assert.equal(inspection.manifest?.name, "translation-malformed-extension");
 });
 

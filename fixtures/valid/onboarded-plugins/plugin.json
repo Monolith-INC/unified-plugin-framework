@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "onboarded-plugins",
   "version": "1.0.0",
   "description": "Declares one onboarded plugin for the code review workflow adapter.",

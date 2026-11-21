@@ -5,23 +5,61 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { UPF_EXTENSION, diagnosticCodes, inspectManifest, inspectPlugin, loadPluginRoot } from "../dist/index.js";
+import {
+  LEGACY_DISTRIBUTION_EXTENSION,
+  MCP_SCHEMA_URL,
+  PLUGIN_SCHEMA_URL,
+  UPF_EXTENSION,
+  diagnosticCodes,
+  inspectManifest,
+  inspectPlugin,
+  loadPluginRoot,
+} from "../dist/index.js";
 
-test("inspectManifest keeps a valid author and license and reports malformed ones", () => {
+const SCHEMA = { $schema: PLUGIN_SCHEMA_URL };
+
+test("inspectManifest keeps valid v1.0.0 metadata (author, homepage, repository, license, keywords) and reports malformed ones", () => {
   const author = { name: "Monolith-INC", email: "dev@example.com", url: "https://github.com/Monolith-INC" };
-  const valid = inspectManifest({ name: "demo", version: "1.0.0", author, license: "Apache-2.0" });
+  const valid = inspectManifest({
+    ...SCHEMA,
+    name: "acme.demo",
+    author,
+    homepage: "https://docs.example.com",
+    repository: "https://github.com/Monolith-INC/demo",
+    license: "Apache-2.0",
+    keywords: ["portable", "skills"],
+  });
   assert.deepEqual(valid.diagnostics, []);
-  assert.deepEqual(valid.manifest, { name: "demo", version: "1.0.0", author, license: "Apache-2.0" });
+  assert.deepEqual(valid.manifest, {
+    ...SCHEMA,
+    name: "acme.demo",
+    author,
+    homepage: "https://docs.example.com",
+    repository: "https://github.com/Monolith-INC/demo",
+    license: "Apache-2.0",
+    keywords: ["portable", "skills"],
+  });
 
-  const codes = (manifest) => inspectManifest({ name: "demo", version: "1.0.0", ...manifest }).diagnostics.map(({ code, path }) => [code, path]);
-  [{ author: "Monolith-INC" }, { author: { name: "" } }, { author: { name: "A", email: 1 } }, { author: { name: "A", role: "x" } }]
-    .map((manifest) => assert.deepEqual(codes(manifest), [[diagnosticCodes.manifestAuthorInvalid, "author"]], JSON.stringify(manifest)));
+  const codes = (manifest) =>
+    inspectManifest({ ...SCHEMA, name: "demo", ...manifest }).diagnostics.map(({ code, path }) => [code, path]);
+  [
+    { author: "Monolith-INC" },
+    { author: { name: "" } },
+    { author: { name: "A", email: 1 } },
+    { author: { name: "A", role: "x" } },
+  ].map((manifest) =>
+    assert.deepEqual(codes(manifest), [[diagnosticCodes.manifestAuthorInvalid, "author"]], JSON.stringify(manifest)),
+  );
   assert.deepEqual(codes({ license: ["MIT"] }), [[diagnosticCodes.manifestLicenseInvalidType, "license"]]);
-  assert.equal(inspectManifest({ name: "demo", version: "1.0.0", author: { name: "" } }).manifest?.author, undefined);
+  assert.deepEqual(codes({ homepage: 123 }), [[diagnosticCodes.manifestHomepageInvalidType, "homepage"]]);
+  assert.deepEqual(codes({ repository: false }), [[diagnosticCodes.manifestRepositoryInvalidType, "repository"]]);
+  assert.deepEqual(codes({ keywords: "not-an-array" }), [[diagnosticCodes.manifestKeywordsInvalidType, "keywords"]]);
+  assert.equal(inspectManifest({ ...SCHEMA, name: "demo", author: { name: "" } }).manifest, undefined);
 });
 
 test("inspectManifest reports structured manifest diagnostics", () => {
   const inspection = inspectManifest({
+    version: 123,
     description: 42,
     extensions: [],
   });
@@ -36,12 +74,17 @@ test("inspectManifest reports structured manifest diagnostics", () => {
     [
       {
         severity: "error",
+        code: diagnosticCodes.manifestSchemaRequired,
+        path: "$schema",
+      },
+      {
+        severity: "error",
         code: diagnosticCodes.manifestNameRequired,
         path: "name",
       },
       {
         severity: "error",
-        code: diagnosticCodes.manifestVersionRequired,
+        code: diagnosticCodes.manifestVersionInvalidType,
         path: "version",
       },
       {
@@ -50,7 +93,7 @@ test("inspectManifest reports structured manifest diagnostics", () => {
         path: "description",
       },
       {
-        severity: "error",
+        severity: "warning",
         code: diagnosticCodes.manifestExtensionsInvalidType,
         path: "extensions",
       },
@@ -60,6 +103,7 @@ test("inspectManifest reports structured manifest diagnostics", () => {
 
 test("inspectPlugin returns partial component data alongside diagnostics", () => {
   const inspection = inspectPlugin({
+    ...SCHEMA,
     name: "partial-plugin",
     version: "1.0.0",
     skills: [
@@ -75,14 +119,17 @@ test("inspectPlugin returns partial component data alongside diagnostics", () =>
     mcpServers: [
       {
         name: "valid-server",
+        type: "stdio",
         command: "node",
         args: ["server.js"],
       },
       {
         name: "missing-command",
+        type: "stdio",
       },
       {
         name: "invalid-args",
+        type: "stdio",
         command: "node",
         args: ["server.js", 42],
       },
@@ -90,6 +137,7 @@ test("inspectPlugin returns partial component data alongside diagnostics", () =>
   });
 
   assert.deepEqual(inspection.manifest, {
+    ...SCHEMA,
     name: "partial-plugin",
     version: "1.0.0",
   });
@@ -108,7 +156,7 @@ test("inspectPlugin returns partial component data alongside diagnostics", () =>
     },
   ]);
   assert.deepEqual(
-    inspection.diagnostics.map((diagnostic) => diagnostic.code),
+    inspection.diagnostics.filter((d) => d.severity === "error").map((diagnostic) => diagnostic.code),
     [
       diagnosticCodes.skillPathRequired,
       diagnosticCodes.skillInvalidType,
@@ -116,62 +164,52 @@ test("inspectPlugin returns partial component data alongside diagnostics", () =>
       diagnosticCodes.mcpServerArgInvalidType,
     ],
   );
+  assert.ok(
+    inspection.diagnostics.some(
+      (d) => d.severity === "warning" && d.code === diagnosticCodes.manifestInlineComponentsLegacy,
+    ),
+  );
 });
 
-test("inspectPlugin accepts path and object map component declarations", () => {
-  assert.deepEqual(
-    inspectPlugin({
-      name: "path-plugin",
-      version: "1.0.0",
-      skills: "skills",
-      mcpServers: "mcp.json",
-    }),
-    {
-      manifest: {
-        name: "path-plugin",
-        version: "1.0.0",
-      },
-      skills: [
-        {
-          path: "skills",
-        },
-      ],
-      mcpServers: [
-        {
-          transport: "config-path",
-          path: "mcp.json",
-        },
-      ],
-      diagnostics: [],
-    },
-  );
+test("inspectPlugin accepts legacy path and object map component declarations with warnings", () => {
+  const pathPlugin = inspectPlugin({
+    ...SCHEMA,
+    name: "path-plugin",
+    version: "1.0.0",
+    skills: "skills",
+    mcpServers: "mcp.json",
+  });
+  assert.deepEqual(pathPlugin.manifest, { ...SCHEMA, name: "path-plugin", version: "1.0.0" });
+  assert.deepEqual(pathPlugin.skills, [{ path: "skills" }]);
+  assert.deepEqual(pathPlugin.mcpServers, [{ transport: "config-path", path: "mcp.json" }]);
+  assert.equal(pathPlugin.diagnostics.some((d) => d.severity === "error"), false);
+  assert.ok(pathPlugin.diagnostics.some((d) => d.code === diagnosticCodes.mcpLegacyFormat));
 
-  assert.deepEqual(
-    inspectPlugin({
-      name: "mapped-plugin",
-      version: "1.0.0",
-      mcpServers: {
-        local: {
-          command: "node",
-          args: ["server.js"],
-        },
-        shared: "mcp/shared.json",
-      },
-    }).mcpServers,
-    [
-      {
-        transport: "stdio",
-        name: "local",
+  const mapped = inspectPlugin({
+    ...SCHEMA,
+    name: "mapped-plugin",
+    version: "1.0.0",
+    mcpServers: {
+      local: {
         command: "node",
         args: ["server.js"],
       },
-      {
-        transport: "config-path",
-        name: "shared",
-        path: "mcp/shared.json",
-      },
-    ],
-  );
+      shared: "mcp/shared.json",
+    },
+  });
+  assert.deepEqual(mapped.mcpServers, [
+    {
+      transport: "stdio",
+      name: "local",
+      command: "node",
+      args: ["server.js"],
+    },
+    {
+      transport: "config-path",
+      name: "shared",
+      path: "mcp/shared.json",
+    },
+  ]);
 });
 
 test("all stable diagnostic codes are reachable through inspection", () => {
@@ -179,15 +217,28 @@ test("all stable diagnostic codes are reachable through inspection", () => {
     inspectPlugin(null),
     inspectPlugin({
       name: "",
-      version: "",
+      version: 123,
       description: 42,
       author: "nobody",
+      homepage: 42,
+      repository: 42,
       license: 42,
+      keywords: 42,
       extensions: [],
       skills: 42,
       mcpServers: 42,
     }),
+    inspectManifest({
+      $schema: "https://agent-plugins.org/schemas/2.0.0/plugin.schema.json",
+      name: "future",
+    }),
+    inspectManifest({
+      schemaVersion: "1.0.0",
+      name: "@acme/legacy-name",
+      extensions: { [LEGACY_DISTRIBUTION_EXTENSION]: {} },
+    }),
     inspectPlugin({
+      ...SCHEMA,
       name: "invalid-components",
       version: "1.0.0",
       skills: [
@@ -202,14 +253,19 @@ test("all stable diagnostic codes are reachable through inspection", () => {
         null,
         {
           name: "",
+          type: "stdio",
           command: "",
           args: "invalid-args",
+          env: 42,
           cwd: 42,
         },
         {
-          name: "invalid-arg",
-          command: "node",
+          name: "bad-stdio",
+          type: "stdio",
+          command: "${PLUGIN_ROOT}/bin/run",
           args: ["server.js", 42],
+          env: { PLUGIN_ROOT: "/bad" },
+          cwd: "relative-without-dot",
         },
         {
           name: "bad-transport",
@@ -224,28 +280,44 @@ test("all stable diagnostic codes are reachable through inspection", () => {
           transport: "sse",
         },
         {
+          name: "bad-remote",
+          type: "streamable-http",
+          url: "http://example.com/mcp",
+          headers: { "X-Dup": "1", "x-dup": "2" },
+        },
+        {
+          name: "bad-headers-type",
+          type: "streamable-http",
+          url: "https://example.com/mcp",
+          headers: "nope",
+        },
+        {
           name: "path-missing",
           transport: "config-path",
         },
       ],
     }),
     inspectManifest({
+      ...SCHEMA,
       name: "Invalid_Name",
       version: "1.0.0",
       schemaVersion: "2.0.0",
       hooks: {},
     }),
     inspectManifest({
+      ...SCHEMA,
       name: "typed-schema",
       version: "1.0.0",
       schemaVersion: 1,
     }),
     inspectManifest({
+      ...SCHEMA,
       name: "malformed-onboarded-section",
       version: "1.0.0",
       extensions: { [UPF_EXTENSION]: [] },
     }),
     inspectManifest({
+      ...SCHEMA,
       name: "invalid-onboarded-plugins",
       version: "1.0.0",
       extensions: {
@@ -265,13 +337,14 @@ test("all stable diagnostic codes are reachable through inspection", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "filesystem-codes", version: "1.0.0" }),
+    JSON.stringify({ ...SCHEMA, name: "filesystem-codes", version: "1.0.0" }),
   );
   mkdirSync(join(root, "skills", "broken"), { recursive: true });
-  const filesystemInspections = [
-    loadPluginRoot(join(root, "missing-root")),
-    loadPluginRoot(root),
-  ];
+  writeFileSync(
+    join(root, "mcp.json"),
+    JSON.stringify({ $schema: "https://agent-plugins.org/schemas/9.0.0/mcp.schema.json", mcpServers: {} }),
+  );
+  const filesystemInspections = [loadPluginRoot(join(root, "missing-root")), loadPluginRoot(root)];
 
   const emittedCodes = new Set(
     [...inspections, ...filesystemInspections].flatMap((inspection) =>
@@ -289,11 +362,12 @@ test("all stable diagnostic codes are reachable through inspection", () => {
   );
 });
 
-test("loadPluginRoot discovers skills and mcp.json without execution", () => {
+test("loadPluginRoot discovers skills and v1.0.0 mcp.json with zero diagnostics", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-hello-"));
   writeFileSync(
     join(root, "plugin.json"),
     JSON.stringify({
+      ...SCHEMA,
       name: "hello-world",
       version: "1.0.0",
       description: "temp",
@@ -307,10 +381,13 @@ test("loadPluginRoot discovers skills and mcp.json without execution", () => {
   writeFileSync(
     join(root, "mcp.json"),
     JSON.stringify({
+      $schema: MCP_SCHEMA_URL,
       mcpServers: {
         docs: {
+          type: "stdio",
           command: "node",
           args: ["server.js"],
+          env: { CONFIG: "${PLUGIN_ROOT}/config.json" },
         },
       },
     }),
@@ -318,6 +395,7 @@ test("loadPluginRoot discovers skills and mcp.json without execution", () => {
 
   const inspection = loadPluginRoot(root);
   assert.deepEqual(inspection.manifest, {
+    ...SCHEMA,
     name: "hello-world",
     version: "1.0.0",
     description: "temp",
@@ -335,6 +413,8 @@ test("loadPluginRoot discovers skills and mcp.json without execution", () => {
       name: "docs",
       command: "node",
       args: ["server.js"],
+      env: { CONFIG: "${PLUGIN_ROOT}/config.json" },
+      placeholders: ["PLUGIN_ROOT"],
     },
   ]);
   assert.deepEqual(inspection.diagnostics, []);
@@ -401,7 +481,7 @@ test("loadPluginRoot discovers only immediate skills deterministically and ignor
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-skill-discovery-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "skill-discovery", version: "1.0.0" }),
+    JSON.stringify({ ...SCHEMA, name: "skill-discovery", version: "1.0.0" }),
   );
   mkdirSync(join(root, "skills"), { recursive: true });
   writeFileSync(join(root, "skills", "README.md"), "ignored file\n");
@@ -438,7 +518,7 @@ test("loadPluginRoot reports missing SKILL.md without executing skill content", 
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-missing-skill-md-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "missing-skill-md", version: "1.0.0" }),
+    JSON.stringify({ ...SCHEMA, name: "missing-skill-md", version: "1.0.0" }),
   );
   mkdirSync(join(root, "skills", "broken"), { recursive: true });
   writeFileSync(join(root, "skills", "broken", "run.sh"), "#!/bin/sh\necho should-not-run\n");
@@ -455,70 +535,89 @@ test("loadPluginRoot reports missing SKILL.md without executing skill content", 
   ]);
 });
 
-test("inspectManifest rejects unsupported schema, unknown fields, and invalid names", () => {
-  const unsupported = inspectManifest({
+test("inspectManifest enforces $schema, warns on unknown fields, and supports legacy schemaVersion", () => {
+  const unsupportedSchema = inspectManifest({
+    $schema: "https://agent-plugins.org/schemas/9.9.9/plugin.schema.json",
     name: "good-name",
-    version: "1.0.0",
+  });
+  assert.equal(unsupportedSchema.manifest, undefined);
+  assert.ok(
+    unsupportedSchema.diagnostics.some(
+      (d) => d.code === diagnosticCodes.manifestSchemaUnsupported && d.message.includes(PLUGIN_SCHEMA_URL),
+    ),
+  );
+
+  const unsupportedLegacy = inspectManifest({
+    name: "good-name",
     schemaVersion: "9.9.9",
   });
-  assert.equal(unsupported.manifest, undefined);
+  assert.equal(unsupportedLegacy.manifest, undefined);
   assert.ok(
-    unsupported.diagnostics.some((diagnostic) => diagnostic.code === diagnosticCodes.manifestSchemaVersionUnsupported),
+    unsupportedLegacy.diagnostics.some((d) => d.code === diagnosticCodes.manifestSchemaVersionUnsupported),
   );
 
   const unknown = inspectManifest({
+    ...SCHEMA,
     name: "good-name",
-    version: "1.0.0",
     hooks: true,
   });
-  assert.equal(unknown.manifest, undefined);
-  assert.ok(unknown.diagnostics.some((diagnostic) => diagnostic.code === diagnosticCodes.manifestUnknownField));
+  assert.deepEqual(unknown.manifest, { ...SCHEMA, name: "good-name" });
+  assert.deepEqual(
+    unknown.diagnostics.map(({ severity, code, path }) => ({ severity, code, path })),
+    [{ severity: "warning", code: diagnosticCodes.manifestUnknownField, path: "hooks" }],
+  );
 
   const invalidName = inspectManifest({
+    ...SCHEMA,
     name: "Bad_Name",
-    version: "1.0.0",
   });
   assert.equal(invalidName.manifest, undefined);
-  assert.ok(invalidName.diagnostics.some((diagnostic) => diagnostic.code === diagnosticCodes.manifestNameInvalid));
+  assert.ok(invalidName.diagnostics.some((d) => d.code === diagnosticCodes.manifestNameInvalid));
 
-  const preserved = inspectManifest({
+  const legacy = inspectManifest({
     name: "good-name",
     version: "1.0.0",
     schemaVersion: "1.0.0",
     extensions: { "com.example": { flag: true } },
   });
-  assert.deepEqual(preserved.manifest, {
+  assert.deepEqual(legacy.manifest, {
     name: "good-name",
     version: "1.0.0",
     schemaVersion: "1.0.0",
     extensions: { "com.example": { flag: true } },
   });
-  assert.deepEqual(preserved.diagnostics, []);
+  assert.deepEqual(
+    legacy.diagnostics.map(({ severity, code }) => ({ severity, code })),
+    [{ severity: "warning", code: diagnosticCodes.manifestSchemaLegacy }],
+  );
 });
 
-
-test("loadPluginRoot models MCP transports and explicit placeholders", () => {
+test("loadPluginRoot models MCP transports, headers, env, and spec-accurate placeholders", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-mcp-transports-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "mcp-transports", version: "1.0.0" }),
+    JSON.stringify({ ...SCHEMA, name: "mcp-transports", version: "1.0.0" }),
   );
   writeFileSync(
     join(root, "mcp.json"),
     JSON.stringify({
+      $schema: MCP_SCHEMA_URL,
       mcpServers: {
         local: {
+          type: "stdio",
           command: "node",
           args: ["${PLUGIN_ROOT}/server.js"],
+          env: { CACHE_DIR: "${PLUGIN_DATA}/cache" },
           cwd: "${PLUGIN_DATA}/runtime",
         },
         docs: {
           type: "streamable-http",
-          url: "https://example.com/${PLUGIN_ROOT}/mcp",
+          url: "https://example.com/mcp",
+          headers: { "X-Tenant": "public" },
         },
         events: {
-          transport: "sse",
-          url: "https://example.com/events",
+          type: "sse",
+          url: "http://localhost:8080/events",
         },
       },
     }),
@@ -531,19 +630,20 @@ test("loadPluginRoot models MCP transports and explicit placeholders", () => {
       name: "local",
       command: "node",
       args: ["${PLUGIN_ROOT}/server.js"],
+      env: { CACHE_DIR: "${PLUGIN_DATA}/cache" },
       cwd: "${PLUGIN_DATA}/runtime",
       placeholders: ["PLUGIN_DATA", "PLUGIN_ROOT"],
     },
     {
       transport: "streamable-http",
       name: "docs",
-      url: "https://example.com/${PLUGIN_ROOT}/mcp",
-      placeholders: ["PLUGIN_ROOT"],
+      url: "https://example.com/mcp",
+      headers: { "X-Tenant": "public" },
     },
     {
       transport: "sse",
       name: "events",
-      url: "https://example.com/events",
+      url: "http://localhost:8080/events",
     },
   ]);
   assert.deepEqual(inspection.diagnostics, []);
@@ -553,7 +653,7 @@ test("missing mcp.json remains valid", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-no-mcp-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "no-mcp", version: "1.0.0" }),
+    JSON.stringify({ ...SCHEMA, name: "no-mcp", version: "1.0.0" }),
   );
   const inspection = loadPluginRoot(root);
   assert.equal(Object.hasOwn(inspection, "mcpServers"), false);
@@ -562,6 +662,7 @@ test("missing mcp.json remains valid", () => {
 
 test("MCP inference rejects ambiguous command+url and invalid cwd drops the server", () => {
   const ambiguous = inspectPlugin({
+    ...SCHEMA,
     name: "ambiguous-mcp",
     version: "1.0.0",
     mcpServers: [
@@ -578,6 +679,7 @@ test("MCP inference rejects ambiguous command+url and invalid cwd drops the serv
       },
       {
         name: "bad-cwd",
+        type: "stdio",
         command: "node",
         cwd: 42,
       },
@@ -585,7 +687,7 @@ test("MCP inference rejects ambiguous command+url and invalid cwd drops the serv
   });
   assert.equal(Object.hasOwn(ambiguous, "mcpServers"), false);
   assert.deepEqual(
-    ambiguous.diagnostics.map((diagnostic) => diagnostic.code),
+    ambiguous.diagnostics.filter((d) => d.severity === "error").map((diagnostic) => diagnostic.code),
     [
       diagnosticCodes.mcpServerTransportRequired,
       diagnosticCodes.mcpServerTransportUnsupported,

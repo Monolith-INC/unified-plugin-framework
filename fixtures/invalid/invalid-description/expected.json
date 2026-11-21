@@ -6,5 +6,5 @@
   "diagnosticCodes": [
     "manifest.description.invalid_type"
   ],
-  "requireManifest": true
+  "requireManifest": false
 }

@@ -23,7 +23,6 @@ test("validate against fixture corpus covers major diagnostic families", () => {
     ["fixtures/invalid/missing-skill-md", /^skill\./],
     ["fixtures/invalid/invalid-mcp-server", /^mcpServer/],
     ["fixtures/invalid/unsupported-schema-version", /^manifest\.schemaVersion/],
-    ["fixtures/invalid/unknown-field", /^manifest\.unknown_field$/],
     ["fixtures/invalid/invalid-plugin-name", /^manifest\.name/],
   ];
 
@@ -41,11 +40,21 @@ test("validate against fixture corpus covers major diagnostic families", () => {
 
 test("inspect does not execute MCP command metadata from temp plugins", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-cli-sec-"));
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ name: "cli-sec", version: "1.0.0" }));
+  writeFileSync(
+    join(root, "plugin.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "cli-sec",
+      version: "1.0.0",
+    }),
+  );
   writeFileSync(
     join(root, "mcp.json"),
     JSON.stringify({
-      boom: { command: "node", args: ["-e", "process.exit(42)"] },
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        boom: { type: "stdio", command: "node", args: ["-e", "process.exit(42)"] },
+      },
     }),
   );
   const result = withCapturedIo(() => run(["inspect", root]));

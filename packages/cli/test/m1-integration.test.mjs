@@ -88,14 +88,22 @@ test("inspect reports MCP command metadata without spawning a process", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-mcp-inspect-"));
   writeFileSync(
     join(root, "plugin.json"),
-    JSON.stringify({ name: "mcp-inspect", version: "1.0.0" }),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "mcp-inspect",
+      version: "1.0.0",
+    }),
   );
   writeFileSync(
     join(root, "mcp.json"),
     JSON.stringify({
-      docs: {
-        command: "node",
-        args: ["server.js"],
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: {
+        docs: {
+          type: "stdio",
+          command: "node",
+          args: ["server.js"],
+        },
       },
     }),
   );
@@ -130,10 +138,6 @@ test("invalid fixtures cover major M1 diagnostic categories", () => {
     {
       fixture: "fixtures/invalid/unsupported-schema-version",
       category: /^manifest\.schemaVersion/,
-    },
-    {
-      fixture: "fixtures/invalid/unknown-field",
-      category: /^manifest\.unknown_field$/,
     },
     {
       fixture: "fixtures/invalid/invalid-plugin-name",

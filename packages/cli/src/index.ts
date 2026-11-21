@@ -387,7 +387,13 @@ function validatePlugin(io: CliIo, pluginPath: string): number {
   const inspection = loadPluginRoot(pluginPath);
   return inspection.diagnostics.some((diagnostic) => diagnostic.severity === "error")
     ? printError(io, JSON.stringify(inspection.diagnostics, null, 2), 1)
-    : printText(io, JSON.stringify({ ok: true }), 0);
+    : printText(
+        io,
+        JSON.stringify(
+          inspection.diagnostics.length === 0 ? { ok: true } : { ok: true, diagnostics: inspection.diagnostics },
+        ),
+        0,
+      );
 }
 
 function printInspection(io: CliIo, inspection: PluginInspection): number {

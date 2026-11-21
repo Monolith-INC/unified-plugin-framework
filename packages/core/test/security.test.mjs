@@ -48,7 +48,14 @@ test("malformed JSON and hostile layouts yield diagnostics without throwing", ()
 
 test("nested executable-looking files are never treated as portable skills", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-nested-exec-"));
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ name: "nested-exec", version: "1.0.0" }));
+  writeFileSync(
+    join(root, "plugin.json"),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+      name: "nested-exec",
+      version: "1.0.0",
+    }),
+  );
   mkdirSync(join(root, "skills", "visible", "bin"), { recursive: true });
   writeFileSync(
     join(root, "skills", "visible", "SKILL.md"),

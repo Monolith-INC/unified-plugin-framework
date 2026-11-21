@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "hello-world",
   "version": "1.0.0",
   "description": "Minimum valid Agent Plugins reference plugin.",
