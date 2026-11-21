@@ -14,7 +14,7 @@ export const EXIT_CODES: Readonly<Record<RecoveryClass, ExitCode>> = Object.free
 });
 
 /** Tasks the first agent session may run; a closed set, so a hand-off file can never carry free text. */
-export const TASK_KINDS = Object.freeze(["knowledge-discovery", "review-setup", "host-sign-in"] as const);
+export const TASK_KINDS = Object.freeze(["knowledge-discovery", "review-setup", "continuity-setup", "host-sign-in"] as const);
 export type TaskKind = (typeof TASK_KINDS)[number];
 
 export type RecoveryAction =
@@ -73,6 +73,7 @@ const BY_CODE: ReadonlyMap<string, Recovery> = new Map<string, Recovery>([
   ["knowledge-discovery-needed", auto({ kind: "acquire-knowledge" }, 1, { class: "hand-off", instruction: "Project knowledge will be collected in your first session: say \"Use the project-bootstrap skill to finish setup\"." })],
   ["tooling-missing", auto({ kind: "retry" }, 1, stop("Follow the reported recovery for this setup capability, then run the installer again."))],
   ["review-setup-needed", handOff("review-setup", "Review provider bindings will be set up in your first session: say \"Use the project-bootstrap skill to finish setup\".")],
+  ["continuity-setup-needed", handOff("continuity-setup", "Session continuity will be initialized in your first session: say \"Use the project-bootstrap skill to finish setup\".")],
   ["tracker-attention", final({ class: "user-action", instruction: "Set the tracker's access key in your environment (for Linear, LINEAR_API_KEY), then run the installer again." })],
   ["authentication-needed", final({ class: "user-action", instruction: "Set the tracker credential in your environment, then run the installer again." })],
   ["connection-unavailable", final({ class: "user-action", instruction: "Restore the tracker connection, then run the installer again." })],

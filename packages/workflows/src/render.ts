@@ -72,7 +72,7 @@ const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): str
     : [
         "## Optional skills",
         "",
-        "Once, at the start, offer the user these skills to add to the session. Use any they choose at the point it fits.",
+        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Run every skill they pick at the point it fits, or proceed directly if they decline.",
         "",
         ...listed(qualify, offered),
       ].join("\n");
@@ -111,7 +111,7 @@ const readiness = (
     "Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message.",
     "",
     `1. **Available:** ${andList(checked.map(qualify))} ${checked.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${andList(pins.map(({ plugin }) => `\`${plugin}\``))} for this host, then continue once it is.${testedWith(pins)}`,
-    `2. **Project knowledge store:** \`.project-knowledge.json\` names a \`knowledgeRoot\`. If not, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults, then continue.`,
+    `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with \`monolithic-agent-knowledge-store:discover-project-knowledge\` (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
     ...sharedStoreStep(qualify, adapter.knowledgeStores),
   ].join("\n");
 

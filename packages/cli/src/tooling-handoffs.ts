@@ -173,9 +173,19 @@ export const manageHandoffs = async (directoryPath: string, state: string, actio
 const PROBES: Readonly<Record<TaskKind, readonly ToolingStep[]>> = {
   "knowledge-discovery": ["knowledge-runtime", "knowledge-content", "knowledge-server"],
   "review-setup": ["review"],
+  "continuity-setup": ["settings"],
   "host-sign-in": ["host-discovery"],
 };
+const continuityInitialized = async (project: string): Promise<boolean> => {
+  const raw = await readRecord(project, join(project, ".unified-plugin-framework.json"));
+  const parsed = raw.ok && raw.value !== null ? parseJson(raw.value) : null;
+  const journalRoot = parsed?.ok && object(parsed.value) && object(parsed.value.continuity) && typeof parsed.value.continuity.journalRoot === "string"
+    ? parsed.value.continuity.journalRoot
+    : null;
+  return journalRoot !== null && await lstat(join(project, journalRoot)).then((info) => info.isDirectory()).catch(() => false);
+};
 export const handoffReady = (project: string, environment: HostEnvironment): Ready => async (task, plan) => {
+  if (task === "continuity-setup") return continuityInitialized(project);
   const steps = PROBES[task];
   const programs = new Map(task === "review-setup" ? [] : await Promise.all(plan.hosts.map(async (host) =>
     [host, await prepareHostCli(project, host, plan.python, false)] as const)));

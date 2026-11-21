@@ -83,3 +83,14 @@ test('linked and oversized task files are ignored', { skip: process.platform ===
   await writeFile(other.pending, Buffer.alloc(300 * 1024));
   assert.equal((await manageHandoffs(other.project, other.state, list, missing)).value.status, 'ignored');
 });
+
+test('continuity-setup is a valid handoff task kind that can be recorded and completed', { skip: process.platform === 'win32' }, async () => {
+  const { project, state, plan } = await fixture();
+  const issued = await recordHandoffs(project, state, plan, ['continuity-setup']);
+  assert.equal(issued.ok, true, JSON.stringify(issued));
+  assert.deepEqual((await manageHandoffs(project, state, list, missing)).value.tasks, ['continuity-setup']);
+  const claimed = await manageHandoffs(project, state, { kind: 'claim', task: 'continuity-setup' }, missing);
+  assert.equal(claimed.value.status, 'claimed');
+  const finished = await manageHandoffs(project, state, { kind: 'finish', task: 'continuity-setup', token: claimed.value.token }, ready);
+  assert.equal(finished.value.status, 'done');
+});
