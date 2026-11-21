@@ -47,7 +47,7 @@ Complete setup supports Codex and Claude Code on Linux and requires Bash, curl, 
 
 For Linear, set the credential environment required by the existing adapter (normally `LINEAR_API_KEY`); never enter the token into setup answers. New team/project selections use names or URLs resolved by the connector. Unavailable authentication or ambiguous scope is reported explicitly. A local tracker can be verified by a read-only search even when empty; setup never creates test work items.
 
-The complete archive contains the CLI and production Node dependencies, canonical framework/knowledge sources and lock, all five unchanged pinned upstream repositories with supporting files/licenses, and the knowledge runtime source. Installed releases stage bundled plugins locally; missing or changed bundled content fails rather than downloading plugin repositories.
+The complete archive contains the CLI and production Node dependencies, canonical framework sources and lock, and all six unchanged pinned upstream repositories (including `monolithic-agent-knowledge-store`) with supporting files and licenses. Installed releases stage bundled plugins locally; missing or changed bundled content fails rather than downloading plugin repositories.
 
 After confirmation, the installer places the verified distribution under `.upf-tools/distributions/<version>` and saves the accepted plan at `.upf-tools/setup-plan.json`. The report shows shared results once and verification for each selected host. It includes a local log and recovery instructions when available. Rerunning setup reuses completed steps. If the saved plan cannot be read, the installer asks the questions again and, after confirmation, keeps the old file beside the new one as `setup-plan.json.broken-<time>`.
 
@@ -101,7 +101,7 @@ UPF_RELEASE_VERSION=<version> pnpm release:distribution
 UPF_RELEASE_VERSION=<version> node packages/cli/scripts/check-distribution.mjs
 ```
 
-The build fetches and verifies all pinned sources before packaging and deploys the existing CLI using pnpm's production deployment. Publication includes the complete archive and installer in `SHA256SUMS` and build attestations. CI tests relocation outside the checkout, CLI execution, both host payloads, all five dependency staging operations with fetching denied, re-entry, and refusal of source/staged drift. This is artifact evidence; live Codex activation and a real-project workflow trial remain distinct checks.
+The build fetches and verifies all pinned sources before packaging and deploys the existing CLI using pnpm's production deployment. Publication includes the complete archive and installer in `SHA256SUMS` and build attestations. CI tests relocation outside the checkout, CLI execution, both host payloads, all six dependency staging operations with fetching denied, re-entry, and refusal of source/staged drift. This is artifact evidence; live Codex activation and a real-project workflow trial remain distinct checks.
 
 ## Installation
 
@@ -111,9 +111,6 @@ Install a released plugin for one host by naming the plugin, the release version
 agent-plugin install unified-plugin-framework --version <version> --vendor claude --target <target-directory>
 agent-plugin install unified-plugin-framework --version <version> --vendor cursor --target <target-directory>
 agent-plugin install unified-plugin-framework --version <version> --vendor codex --target <target-directory>
-agent-plugin install project-knowledge --version <version> --vendor claude --target <target-directory>
-agent-plugin install project-knowledge --version <version> --vendor cursor --target <target-directory>
-agent-plugin install project-knowledge --version <version> --vendor codex --target <target-directory>
 ```
 
 The command downloads the release's `SHA256SUMS`, then `<plugin>-<host>.bundle.json.gz`. Before anything is written it checks:

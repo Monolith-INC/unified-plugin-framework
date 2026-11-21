@@ -94,15 +94,20 @@ const chunk = <A>(items: readonly A[], size: number): readonly (readonly A[])[] 
   );
 };
 
+const groupName = (group: string | undefined): string => {
+  const trimmed = group?.trim() ?? "";
+  return trimmed === "" ? DEFAULT_GROUP : trimmed;
+};
+
 /** Splits options into ordered groups of at most `maxPerGroup` items so long lists fit host UI limits. Pure. */
 export const groupOptions = (
   options: readonly QuestionOption[],
   maxPerGroup: number = DEFAULT_MAX_PER_GROUP,
 ): readonly OptionGroup[] => {
-  const groupNames = [...new Set(options.map((option) => option.group?.trim() || DEFAULT_GROUP))];
+  const groupNames = [...new Set(options.map((option) => groupName(option.group)))];
   return Object.freeze(
     groupNames.flatMap((name) => {
-      const members = options.filter((option) => (option.group?.trim() || DEFAULT_GROUP) === name);
+      const members = options.filter((option) => groupName(option.group) === name);
       const chunks = chunk(members, maxPerGroup);
       return chunks.map((slice, index) =>
         Object.freeze({
@@ -208,19 +213,20 @@ export const renderNumberedFallback = (question: Question): string => {
   }
 };
 
-const DOC_OR_TICKET_PATTERN = /\bAGE-\d+\b|docs\/|\b[\w-]+\.md\b/i;
+const DOC_OR_TICKET_PATTERN =
+  /\b[A-Z]{2,10}-\d+\b|(?:docs|packages|skills|scripts|\.upf-tools|io\.github\.monolith-inc\.upf)\/|\b[\w.-]+\.(?:md|json|toml)\b/i;
 const ACRONYM_PATTERN = /\b[A-Z]{2,}\b/g;
 const ALLOWED_TOKENS: ReadonlySet<string> = new Set(["OK"]);
 
 const isExplainedInText = (text: string, token: string): boolean =>
   new RegExp(`\\(${token}\\)|${token}\\s*\\(`).test(text);
 
-const unexplainedAcronyms = (text: string): readonly string[] =>
+const unexplainedAcronyms = (text: string, context: string = ""): readonly string[] =>
   [...new Set([...text.matchAll(ACRONYM_PATTERN)].map(([match]) => match))].filter(
-    (token) => !ALLOWED_TOKENS.has(token) && !isExplainedInText(text, token),
+    (token) => !ALLOWED_TOKENS.has(token) && !isExplainedInText(text, token) && !isExplainedInText(context, token),
   );
 
-const checkTextField = (field: string, text: string): readonly WordingFinding[] => {
+const checkTextField = (field: string, text: string, context: string = ""): readonly WordingFinding[] => {
   const docFindings: readonly WordingFinding[] = DOC_OR_TICKET_PATTERN.test(text)
     ? [
         Object.freeze({
@@ -230,7 +236,7 @@ const checkTextField = (field: string, text: string): readonly WordingFinding[] 
         }),
       ]
     : [];
-  const acronymFindings: readonly WordingFinding[] = unexplainedAcronyms(text).map((token) =>
+  const acronymFindings: readonly WordingFinding[] = unexplainedAcronyms(text, context).map((token) =>
     Object.freeze({
       code: "unexplained-acronym" as const,
       field,
@@ -251,11 +257,15 @@ const checkExplanation = (explanation: string): readonly WordingFinding[] =>
       ])
     : checkTextField("explanation", explanation);
 
-const checkOption = (option: QuestionOption, index: number): readonly WordingFinding[] =>
-  concatAll(wordingFindings)([
-    checkTextField(`options[${index}].label`, option.label),
-    option.description === undefined ? wordingFindings.empty : checkTextField(`options[${index}].description`, option.description),
-  ]);
+const checkOption =
+  (explanation: string) =>
+  (option: QuestionOption, index: number): readonly WordingFinding[] =>
+    concatAll(wordingFindings)([
+      checkTextField(`options[${index}].label`, option.label, explanation),
+      option.description === undefined
+        ? wordingFindings.empty
+        : checkTextField(`options[${index}].description`, option.description, explanation),
+    ]);
 
 /** Checks a fixed-answer question for plain wording, safety defaults, and escape hatches. Pure. */
 export const checkQuestionWording = (question: Question): readonly WordingFinding[] => {
@@ -263,7 +273,7 @@ export const checkQuestionWording = (question: Question): readonly WordingFindin
   switch (question.kind) {
     case "single":
     case "several": {
-      const optionFindings = concatAll(wordingFindings)(question.options.map(checkOption));
+      const optionFindings = concatAll(wordingFindings)(question.options.map(checkOption(question.explanation)));
       const otherFindings: readonly WordingFinding[] =
         (question.allowOther as boolean) === true
           ? wordingFindings.empty
@@ -278,8 +288,8 @@ export const checkQuestionWording = (question: Question): readonly WordingFindin
     }
     case "confirm": {
       const labelFindings = concatAll(wordingFindings)([
-        checkTextField("acceptLabel", question.acceptLabel),
-        checkTextField("declineLabel", question.declineLabel),
+        checkTextField("acceptLabel", question.acceptLabel, question.explanation),
+        checkTextField("declineLabel", question.declineLabel, question.explanation),
       ]);
       const defaultFindings: readonly WordingFinding[] =
         (question.safeDefault as string) === "decline"

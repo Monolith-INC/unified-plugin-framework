@@ -8,7 +8,7 @@ import type { HostName } from "./host-names.js";
 import { boundedOutput, selectEnvironment } from "./tooling-process.js";
 import { DISCOVERY_COMPLETE, DISCOVERY_MARKER, headlessDiscovery, PINS, recoveryFor } from "./tooling-recovery.js";
 import { readText, safePath, writeText } from "./tooling-files.js";
-import { knowledgeExecutable } from "./tooling-runtime.js";
+import { knowledgeQueryScript } from "./tooling-runtime.js";
 import { HOSTS } from "./host-table.js";
 import { NODE_HOST_CLI_IO } from "./tooling-host-cli.js";
 
@@ -52,14 +52,15 @@ type Skipped = { readonly signedOut: boolean };
 /** One discovery attempt's fixed inputs; `environment` is the caller's, filtered before any host sees it. */
 interface DiscoveryRun {
   readonly project: string;
-  readonly runtime: string;
+  readonly python: string;
+  readonly queryScript: string;
   readonly root: string;
   readonly scratch: string;
   readonly privatePrograms: ReadonlyMap<HostName, string>;
   readonly environment: NodeJS.ProcessEnv;
 }
 const runHost = async (host: HostName, context: DiscoveryRun): Promise<Result<string> | Skipped> => {
-  const { project, runtime, root, scratch } = context;
+  const { project, python, queryScript, root, scratch } = context;
   const env = selectEnvironment(context.environment, DISCOVERY_ENV);
   const program = context.privatePrograms.get(host) ?? await executable(host, project, env.PATH);
   const run = (args: readonly string[], timeout: number) =>
@@ -67,9 +68,10 @@ const runHost = async (host: HostName, context: DiscoveryRun): Promise<Result<st
   const version = await run(["--version"], 5_000);
   const auth = pinned(version, host) ? await run(host === "codex" ? ["login", "status"] : ["auth", "status"], 10_000) : pending();
   if (!signedIn(host, auth)) return { signedOut: pinned(version, host) };
-  const discovery = await run(headlessDiscovery(host, { project, runtime, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000);
+  const discovery = await run(headlessDiscovery(host, { project, python, queryScript, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000);
   return discovery.ok && discovery.value.trim() === DISCOVERY_COMPLETE
-    ? boundedOutput(runtime, ["--project", project, "--root", root, "--verify"], scratch, 60_000, env)
+    ? boundedOutput(python, [queryScript, "--root", root, "catalog"], scratch, 60_000, env)
+        .then((checked) => checked.ok && checked.value.trim().split("\n").length > 1 ? checked : pending())
     : pending();
 };
 
@@ -89,15 +91,15 @@ const verifyAndMark = async (project: string, plan: AcceptedPlan, candidates: re
   privatePrograms: ReadonlyMap<HostName, string>, environment: NodeJS.ProcessEnv): Promise<Result<string>> => {
   const canonical = await realpath(project);
   const temp = await realpath(tmpdir());
-  const runtime = knowledgeExecutable(canonical);
+  const queryScript = knowledgeQueryScript(canonical);
   const root = resolve(canonical, plan.knowledge.knowledgeRoot);
   const marker = join(root, DISCOVERY_MARKER);
-  const pathsSafe = await Promise.all([runtime, root, marker].map((path) => safePath(canonical, path)));
+  const pathsSafe = await Promise.all([queryScript, root, marker].map((path) => safePath(canonical, path)));
   const previous = pathsSafe.every(Boolean) ? await readText(marker) : pending();
   if (!previous.ok || within(canonical, temp)) return pending();
   const scratch = await mkdtemp(join(temp, "upf-discovery-"));
   try {
-    const verified = await tryEligibleHosts(candidates, { project: canonical, runtime, root, scratch, privatePrograms, environment });
+    const verified = await tryEligibleHosts(candidates, { project: canonical, python: plan.python, queryScript, root, scratch, privatePrograms, environment });
     return verified.ok ? writeText(canonical, marker, "verified\n", previous.value, plan.python) : verified;
   } finally {
     await rmdir(scratch).catch(() => undefined);

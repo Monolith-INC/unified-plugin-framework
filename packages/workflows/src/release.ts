@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 
@@ -180,6 +180,9 @@ export const buildVendorBundle = (
   adapter: VendorAdapter,
   adapters: readonly WorkflowAdapter<string>[],
 ): Result<VendorBundle> => {
+  if (!existsSync(sourceRoot) || !lstatSync(sourceRoot).isDirectory()) {
+    return failureOf([], buildDiagnostic("release.source.unreadable", sourceRoot)("Plugin source could not be read; pass a plugin directory."));
+  }
   const assemblyFailure = buildDiagnostic("release.assembly.failed", sourceRoot);
   try {
     const staged = withAssembledSource(sourceRoot, adapters, compileAssembled(adapter));

@@ -110,6 +110,12 @@ key=${BASH_REMATCH[1]}
 if [ -n "${edits_path:-}" ] && [ -f "$inventory_guard" ]; then
   (cd "$repo" && python3 -B "$inventory_guard" check --branch "$branch" --path "$edits_path") || exit 2
 fi
+if [ -n "${commits:-}" ] && [ -f "$inventory_guard" ]; then
+  while IFS= read -r staged_path; do
+    [ -n "$staged_path" ] || continue
+    (cd "$repo" && python3 -B "$inventory_guard" check --branch "$branch" --path "$staged_path") || exit 2
+  done < <(git -C "$repo" diff --cached --name-only)
+fi
 
 # Rule 2: where the branch was created locally, that point must be on main.
 # Branches already on origin, renamed, or with an expired reflog are not judged.
@@ -122,13 +128,19 @@ if [[ $created == *" branch: Created from "* ]] && [ -n "$main" ] \
 fi
 
 if [ -n "${publishes:-}" ]; then
+  if [ -f "$inventory_guard" ] && [ -n "$main" ]; then
+    while IFS= read -r diff_path; do
+      [ -n "$diff_path" ] || continue
+      (cd "$repo" && python3 -B "$inventory_guard" check --branch "$branch" --path "$diff_path") || exit 2
+    done < <(git -C "$repo" diff --name-only "$main...HEAD")
+  fi
   head=$(git -C "$repo" rev-parse HEAD)
   # Rule 5: push or open a pull request only after the confirming review of HEAD.
   [ "$(git -C "$repo" config --get "branch.$branch.reviewed")" = "$head" ] \
     || block "HEAD $head has not passed review. Run the review loop, then record it: git config branch.$branch.reviewed $head"
   # Rule 10: implementation changes need the pnpm checks to pass on HEAD.
   if [ -n "$main" ] && git -C "$repo" diff --name-only "$main...HEAD" \
-      | grep -qE '^(packages/|plugins/|fixtures/|scripts/|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$|[^/]+\.config\.[cm]?[jt]s$)'; then
+      | grep -qE '^(packages/|plugins/|skills/|fixtures/|scripts/|io\.github\.monolith-inc\.upf/|plugin\.json$|package\.json$|pnpm-[a-z-]+\.yaml$|tsconfig[^/]*\.json$|[^/]+\.config\.[cm]?[jt]s$)'; then
     [ "$(git -C "$repo" config --get "branch.$branch.checked")" = "$head" ] \
       || block "this branch changes implementation and HEAD $head has not passed the checks. Run pnpm install --frozen-lockfile, pnpm build, pnpm typecheck, pnpm test and pnpm payloads:verify, then record it: git config branch.$branch.checked $head"
   fi

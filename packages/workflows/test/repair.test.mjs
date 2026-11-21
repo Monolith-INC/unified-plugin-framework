@@ -131,16 +131,14 @@ test("repairActions satisfies the monoid laws (left identity, right identity, as
 });
 
 test("every assembled workflow skill hands severe failures to repair-workflow and repair-workflow skill is complete", () => {
-  const assembled = Object.values(WORKFLOWS)
-    .flatMap((adapter) =>
-      Object.keys(adapter.fulfil).map((operation) => ({
-        adapter,
-        operation,
-        path: new URL(`skills/${operation}/SKILL.md`, framework),
-      })),
-    )
-    .filter(({ path }) => existsSync(path));
-  assert.equal(assembled.length, 19);
+  const assembled = Object.values(WORKFLOWS).flatMap((adapter) =>
+    Object.keys(adapter.fulfil).map((operation) => ({
+      adapter,
+      operation,
+      path: new URL(`skills/${operation}/SKILL.md`, framework),
+    })),
+  );
+  assert.equal(assembled.length, 25);
   assembled.map(({ adapter, operation, path }) => {
     const result = renderSkill(readFileSync(path, "utf8"), adapter, operation, lock);
     assert.equal(result.ok, true, `${operation}: ${result.message}`);

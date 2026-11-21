@@ -4,7 +4,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-import { runAdapterCheck } from "../dist/adapter-check.js";
+import { parseAdapterCheck, runAdapterCheck } from "../dist/adapter-check.js";
+import { planRepair } from "@agent-plugins/workflows";
 import { run } from "../dist/index.js";
 import {
   capture,
@@ -69,7 +70,6 @@ test("adapter-check rejects bad input with exit 2 instead of a readiness result"
   const cases = [
     ["adapter-check", "toString", "--framework", framework],
     ["adapter-check", "planning", "--framework", framework],
-    ["adapter-check", "code-review"],
     ["adapter-check", "code-review", "--framework", framework, "--plugin-root"],
     ["adapter-check", "code-review", "--framework", framework, "--colour", "red"],
     ["adapter-check", "code-review", "--framework", join(repoRoot, "does-not-exist")],
@@ -80,6 +80,26 @@ test("adapter-check rejects bad input with exit 2 instead of a readiness result"
     assert.equal(capture(() => run(argv)).exitCode, 2, argv.join(" "));
     return argv;
   });
+});
+
+test("adapter-check defaults --framework to the installed framework root and supports canonical project-knowledge.json", () => {
+  const dir = mkdtempSync(join(tmpdir(), "upf-visible-locator-"));
+  writeJson(join(dir, "project-knowledge.json"), { schemaVersion: 1, knowledgeRoot: "Project_Knowledge" });
+  const result = capture(() => run(["adapter-check", "code-review", "--project", dir]));
+  assert.equal(result.exitCode, 1);
+  assert.equal(JSON.parse(result.stderr).step, "installed");
+
+  writeJson(join(dir, ".project-knowledge.json"), { schemaVersion: 1, knowledgeRoot: ".project-knowledge/knowledge" });
+  const conflict = capture(() => run(["adapter-check", "code-review", "--project", dir]));
+  assert.equal(conflict.exitCode, 2);
+  assert.match(conflict.stderr, /Conflicting project knowledge locators/);
+
+  const plan = planRepair({ workflow: "code-review", operation: "review-story", failureKind: "manifest-or-lock-drift", summary: "Lock mismatch." });
+  const diagnostic = plan.actions.find((action) => action.kind === "safe-auto");
+  const parsed = parseAdapterCheck(diagnostic.command.replace(/^agent-plugin adapter-check /, "").split(" "), dir);
+  assert.equal(parsed.kind, "ok");
+  const proposal = plan.actions.find((action) => action.kind === "propose-with-consent");
+  assert.match(proposal.command, /--input /);
 });
 
 test("adapter-check reports a broken framework manifest as a configuration error", () => {

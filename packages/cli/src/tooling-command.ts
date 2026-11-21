@@ -85,8 +85,8 @@ const reportExit = (report: ToolingReport, apply: boolean): number => {
 const classified = (report: ToolingReport) => ({ ...report, steps: report.steps.map((step) => step.status === "ready" ? step
   : { ...step, failure: { ...step.failure, class: recoveryFor(step.step, step.failure.code).onFailure.class } }) });
 const backupPaths = (project: string): Promise<readonly string[]> => readdir(join(project, ".upf-tools", "bin"), { withFileTypes: true })
-  .then((entries) => entries.filter((entry) => entry.isFile() && entry.name.startsWith("agent-plugin.upf-backup-"))
-    .map((entry) => join(project, ".upf-tools", "bin", entry.name)).sort())
+  .then((entries) => [...entries.filter((entry) => entry.isFile() && entry.name.startsWith("agent-plugin.upf-backup-"))
+    .map((entry) => join(project, ".upf-tools", "bin", entry.name))].sort())
   .catch(() => []);
 const fullHost = (run: HostRun) => HOST_STEPS.every((step) => run.tooling.steps.some((entry) => entry.step === step));
 const respond = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo,

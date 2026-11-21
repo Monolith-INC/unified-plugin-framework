@@ -1,4 +1,5 @@
 import {
+  PROJECT_KNOWLEDGE_DISCOVER,
   PROJECT_KNOWLEDGE_SETUP,
   type NonEmpty,
   type PluginKnowledgeStore,
@@ -47,11 +48,11 @@ const DISCOVERY_FACILITATION_RULES: readonly string[] = Object.freeze([
   "- **Show stage progress:** as each stage completes, briefly recap the settled decisions and name the next stage until the user approves the written design file.",
 ]);
 
-const leadAndLayers = (qualify: Qualify, [lead, ...layers]: NonEmpty<PluginSkillRef>): string =>
+const leadAndLayers = (adapter: WorkflowAdapter<string>, qualify: Qualify, [lead, ...layers]: NonEmpty<PluginSkillRef>): string =>
   [
     `Run ${qualify(lead)} throughout, passing along the user's request and any starting material.`,
     ...(layers.length === 0 ? [] : ["", "Add these at the stages shown:", "", ...listed(qualify, layers)]),
-    ...DISCOVERY_FACILITATION_RULES,
+    ...(adapter.workflow === "discovery" ? DISCOVERY_FACILITATION_RULES : []),
   ].join("\n");
 
 const delegate = (adapter: WorkflowAdapter<string>, qualify: Qualify, served: NonEmpty<PluginSkillRef>): string => {
@@ -59,7 +60,7 @@ const delegate = (adapter: WorkflowAdapter<string>, qualify: Qualify, served: No
     case "one-of":
       return oneOf(qualify, served);
     case "lead-and-layers":
-      return leadAndLayers(qualify, served);
+      return leadAndLayers(adapter, qualify, served);
     case "content-view":
       return contentView(adapter, served);
   }
@@ -79,7 +80,6 @@ const offeredCatalog = (adapter: WorkflowAdapter<string>, served: readonly Plugi
   adapter.catalog.filter((entry) => !served.some(sameEntry(entry)));
 
 const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[]): readonly string[] => {
-  const byLabel = new Map(offered.map((ref) => [qualify(ref), ref] as const));
   const groups = groupOptions(
     offered.map((ref) => ({
       label: qualify(ref),
@@ -90,10 +90,7 @@ const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[
   return groups.flatMap((group) => [
     `### ${group.name}`,
     "",
-    ...group.options.map((option) => {
-      const ref = byLabel.get(option.label);
-      return `- ${option.label}${ref?.use === undefined ? "" : ` — ${ref.use}`}`;
-    }),
+    ...group.options.map((option) => `- ${option.label}${option.description === undefined ? "" : ` — ${option.description}`}`),
     "",
   ]);
 };
@@ -147,7 +144,7 @@ const readiness = (
     "Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message. If a recovery step fails or hits a severe problem no listed recovery fixes, hand over to `repair-workflow` with the failing step, error summary and original operation so the work can resume once repaired.",
     "",
     `1. **Available:** ${andList(checked.map(qualify))} ${checked.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${andList(pins.map(({ plugin }) => `\`${plugin}\``))} for this host, then continue once it is.${testedWith(pins)}`,
-    `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with \`monolithic-agent-knowledge-store:discover-project-knowledge\` (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
+    `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with ${qualify(PROJECT_KNOWLEDGE_DISCOVER)} (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
     ...sharedStoreStep(qualify, adapter.knowledgeStores),
     "",
     SHARED_INTERACTION_SECTION,

@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
 import {safePath,sweepSetupWrites,writeText} from '../dist/tooling-files.js';
-import {configureReview,reviewBindingsValid,wireCli,installedCli,prepareKnowledgeRuntime} from '../dist/tooling-runtime.js';
+import {configureKnowledge,configureReview,reviewBindingsValid,wireCli,installedCli} from '../dist/tooling-runtime.js';
 import {nodeToolingIO} from '../dist/tooling-node.js';
 import {stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
@@ -218,17 +218,16 @@ test('startup moves an interrupted stage aside and preserves its contents',{skip
   assert.deepEqual(await readdir(unrelated),[]);
 });
 
-test('a marked runtime resumes, but a replacement directory is preserved',{ skip: process.platform === 'win32' }, async()=>{
-  const project=await mkdtemp(join(tmpdir(),'upf-runtime-ownership-'));
-  const first=await prepareKnowledgeRuntime(project,'python3');
-  assert.equal(first.ok,true,JSON.stringify(first));
-  await writeFile(join(first.value,'interrupted.txt'),'installer progress');
-  assert.deepEqual(await prepareKnowledgeRuntime(project,'python3'),first);
-  await rename(first.value,`${first.value}-previous`);
-  await mkdir(first.value);
-  await writeFile(join(first.value,'notes.md'),'user contents');
-  assert.equal((await prepareKnowledgeRuntime(project,'python3')).error.code,'unmanaged-file');
-  assert.equal(await readFile(join(first.value,'notes.md'),'utf8'),'user contents');
+test('configureKnowledge writes project-knowledge.json for new projects and rejects conflicting locators', async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-knowledge-locator-'));
+  const input={...choices,knowledge:{knowledgeRoot:'Project_Knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
+  const created=await configureKnowledge(project,input);
+  assert.equal(created.ok,true,JSON.stringify(created));
+  assert.equal(created.value,join(project,'project-knowledge.json'));
+  await writeFile(join(project,'.project-knowledge.json'),JSON.stringify({schemaVersion:1,knowledgeRoot:'.project-knowledge/knowledge'}));
+  const conflict=await configureKnowledge(project,input);
+  assert.equal(conflict.ok,false);
+  assert.match(conflict.error.message,/Conflicting knowledge locators/);
 });
 
 test('bootstrap holds a saved request while incomplete and applies it once after required setup',async()=>{

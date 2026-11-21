@@ -19,6 +19,16 @@ Before involving the user, diagnose the failure using read-only checks only:
 
 Never modify user files, rewrite configuration or lock files, reinstall plugins, or run destructive commands without the user's explicit confirmation.
 
+## Presenting questions to the user
+
+For fixed-answer questions during diagnosis or repair (single choice, multiple choice, or yes/no consent), use the host's native selection controls (buttons, multi-select checkboxes, or two-button confirmation) instead of asking the user to type a free-form reply:
+
+- **Single choice:** put the recommended option first and include an **Other** option so the user can type a custom answer.
+- **Multiple choice:** let the user select any combination and include an **Other** option. Split lists with more than 4 options into grouped multi-selection questions of at most 4 options per group.
+- **Confirmation and consent:** show two clear choices with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.
+- **Plain wording:** write every prompt and option in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.
+- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format, and re-ask cleanly if the reply does not match. Keep open-ended questions typed.
+
 ## Scenario 1: Concrete fix available
 
 1. **Explain in one short message:** summarize what failed and why in plain language without internal ticket IDs, raw stack dumps, or unexplained abbreviations.

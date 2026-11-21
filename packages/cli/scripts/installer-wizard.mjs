@@ -76,7 +76,7 @@ const tracker = (io, current, lookup, next) =>
 const collectFolders = async (io, current, documentMode, next) => {
   const docsRoot = current?.docsRoot ?? await text(io, 'docs', 'docs');
   const vaultRoot = current?.vaultRoot ?? (documentMode === 'shared' ? docsRoot : await text(io, 'vault', 'docs/vault'));
-  const knowledgeRoot = current?.knowledgeRoot ?? await text(io, 'knowledge', '.project-knowledge/knowledge');
+  const knowledgeRoot = current?.knowledgeRoot ?? await text(io, 'knowledge', 'Project_Knowledge');
   return next({ documentMode, docsRoot, vaultRoot, knowledgeRoot });
 };
 const knowledgeChoices = (io, current, next) => current?.documentMode !== undefined
@@ -151,15 +151,22 @@ const confirm = async (io, project, plan, version, report, missingHosts) => {
 
 const savedSettings = async project => {
   const settings = await readJson(join(project, '.unified-plugin-framework.json'));
-  const knowledge = await readJson(join(project, '.project-knowledge.json'));
+  const visibleKnowledge = await readJson(join(project, 'project-knowledge.json'));
+  const legacyKnowledge = await readJson(join(project, '.project-knowledge.json'));
   const saved = await savedPlanOf(project);
   if (!settings.ok) return settings;
-  if (!knowledge.ok) return knowledge;
-  if ([settings.value, knowledge.value].some(value => value !== null && !object(value))) {
+  if (!visibleKnowledge.ok) return visibleKnowledge;
+  if (!legacyKnowledge.ok) return legacyKnowledge;
+  if ([settings.value, visibleKnowledge.value, legacyKnowledge.value].some(value => value !== null && !object(value))) {
     return fail('invalid-settings', 'Saved project settings are not objects.', 'Preserve and repair existing settings before rerunning setup.');
   }
+  if (visibleKnowledge.value !== null && legacyKnowledge.value !== null
+    && visibleKnowledge.value.knowledgeRoot !== legacyKnowledge.value.knowledgeRoot) {
+    return fail('invalid-settings', 'Conflicting knowledge locators found in project-knowledge.json and .project-knowledge.json.', 'Reconcile both files to one shared knowledgeRoot before rerunning setup.');
+  }
+  const knowledge = visibleKnowledge.value ?? legacyKnowledge.value;
   return !saved.ok && saved.error.code !== 'invalid-saved-plan' ? saved
-    : ok({ settings: settings.value, knowledge: knowledge.value, savedPlan: saved.ok ? saved.value : null, savedPlanInvalid: !saved.ok });
+    : ok({ settings: settings.value, knowledge, savedPlan: saved.ok ? saved.value : null, savedPlanInvalid: !saved.ok });
 };
 // A saved plan only supplies earlier answers: one that is not valid JSON or not a valid plan is set aside after confirmation.
 const savedPlanOf = project => readFile(join(project, '.upf-tools/setup-plan.json'), 'utf8')

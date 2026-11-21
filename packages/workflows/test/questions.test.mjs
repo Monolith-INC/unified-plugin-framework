@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   SHARED_INTERACTION_SECTION,
   WORKFLOWS,
   brainstormingDiscoveryAdapter,
+  checkAdapterReadiness,
   checkQuestionWording,
   concatAll,
   groupOptions,
   renderNativeQuestionGuidance,
   renderNumberedFallback,
   renderSkill,
+  reviewToolkitAdapter,
   wordingFindings,
 } from "../dist/index.js";
 
@@ -131,13 +133,17 @@ test("checkQuestionWording passes clean plain-language questions and flags defec
   const explainedAcronym = {
     ...singleQuestion,
     explanation: "Choose whether to write a Product Requirements Document (PRD) now.",
+    options: [
+      { label: "Write PRD", description: "Create the PRD right now.", recommended: true },
+      { label: "Skip for now", description: "Keep only a short summary." },
+    ],
   };
   assert.deepEqual(checkQuestionWording(explainedAcronym), []);
 
   const defective = {
     kind: "single",
-    explanation: "See AGE-113 and docs/user-journey.md before picking a PRD mode.",
-    options: [{ label: "ADR format", description: "Check SKILL.md for details." }],
+    explanation: "See ENG-42 and packages/cli/src/index.ts before picking a PRD mode.",
+    options: [{ label: "ADR format", description: "Check plugin.json for details." }],
     allowOther: false,
   };
   const findings = checkQuestionWording(defective);
@@ -158,11 +164,31 @@ test("checkQuestionWording passes clean plain-language questions and flags defec
   assert.ok(confirmCodes.has("unsafe-confirm-default"));
 });
 
-test("every template-assembled skill and pass-through project-bootstrap carries interaction presentation rules", () => {
-  const assembledOperations = Object.values(WORKFLOWS)
-    .flatMap((adapter) => Object.keys(adapter.fulfil).map((operation) => ({ adapter, operation, path: new URL(`skills/${operation}/SKILL.md`, framework) })))
-    .filter(({ path }) => existsSync(path));
-  assert.equal(assembledOperations.length, 19);
+test("ask-user version recoveries carry a clean structured single-choice Question", () => {
+  const result = checkAdapterReadiness({
+    adapter: reviewToolkitAdapter,
+    onboarded: [{ name: "monolithic-code-review-toolkit", version: "^0.6.0", source: "github:x/y", adapter: "code-review" }],
+    lock,
+    installed: new Map([["monolithic-code-review-toolkit", { version: "0.7.0", checksum: "abc", skills: ["review-task", "review-story-preflight", "review-story-postflight", "review-feature", "review-setup"] }]]),
+    projectStore: "/repo/Project_Knowledge",
+    pluginStores: new Map(),
+  });
+  assert.equal(result.status, "not-ready");
+  assert.equal(result.recovery.action, "ask-user");
+  assert.equal(result.recovery.question?.kind, "single");
+  assert.equal(result.recovery.question?.allowOther, true);
+  assert.deepEqual(checkQuestionWording(result.recovery.question), []);
+});
+
+test("every template-assembled skill and pass-through interactive skill carries interaction presentation rules", () => {
+  const assembledOperations = Object.values(WORKFLOWS).flatMap((adapter) =>
+    Object.keys(adapter.fulfil).map((operation) => ({
+      adapter,
+      operation,
+      path: new URL(`skills/${operation}/SKILL.md`, framework),
+    })),
+  );
+  assert.equal(assembledOperations.length, 25);
   assembledOperations.map(({ adapter, operation, path }) => {
     const result = renderSkill(readFileSync(path, "utf8"), adapter, operation, lock);
     assert.equal(result.ok, true, `${operation}: ${result.message}`);
@@ -174,4 +200,8 @@ test("every template-assembled skill and pass-through project-bootstrap carries 
   assert.match(bootstrap, /## Presenting setup questions to the user/);
   assert.match(bootstrap, /Other \(type your own answer\)/);
   assert.match(bootstrap, /Closing the prompt or sending an empty reply never counts as yes/);
+
+  const repair = readFileSync(new URL("skills/repair-workflow/SKILL.md", framework), "utf8");
+  assert.match(repair, /## Presenting questions to the user/);
+  assert.match(repair, /Other \(type your own answer\)/);
 });

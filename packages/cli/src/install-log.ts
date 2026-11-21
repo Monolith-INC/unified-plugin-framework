@@ -44,7 +44,7 @@ const managedLog = (name: string): boolean => /^run-\d{4}-\d{2}-\d{2}T\d{2}-\d{2
 const retainTen = (directory: string): Promise<unknown> => readdir(directory, { withFileTypes: true })
   .then((entries) => Promise.all(entries.filter((entry) => entry.isFile() && managedLog(entry.name))
     .map((entry) => join(directory, entry.name)).map(async (path) => ({ path, modified: (await stat(path)).mtimeMs }))))
-  .then((files) => Promise.all(files.sort((left, right) => right.modified - left.modified).slice(RETAINED_RUNS)
+  .then((files) => Promise.all([...files].sort((left, right) => right.modified - left.modified).slice(RETAINED_RUNS)
     .map(({ path }) => unlink(path).catch(() => undefined)))).catch(() => undefined);
 
 /** Store a redacted run without allowing logging failures to interrupt setup. */
@@ -69,13 +69,13 @@ export const writeInstallLog = (project: string, entries: readonly unknown[], re
 const recentFiles = async (directory: string): Promise<readonly string[]> => readdir(directory, { withFileTypes: true })
   .then((entries) => Promise.all(entries.filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
     .map((entry) => join(directory, entry.name)).map(async (path) => ({ path, modified: (await stat(path)).mtimeMs }))))
-  .then((files) => files.sort((left, right) => right.modified - left.modified).map(({ path }) => path)).catch(() => []);
+  .then((files) => [...files].sort((left, right) => right.modified - left.modified).map(({ path }) => path)).catch(() => []);
 
 /** Read the most recent project log, including the private fallback location. */
 const loadLastInstallLog = async (project: string): Promise<{ readonly path: string; readonly entries: readonly unknown[] } | null> => {
   const fallback = await fallbackDirectories(project);
   const files = [...await recentFiles(join(project, ".upf-tools", "logs")), ...await Promise.all(fallback.map(recentFiles)).then((groups) => groups.flat())];
-  const latest = (await Promise.all(files.map(async (path) => ({ path, modified: (await stat(path)).mtimeMs }))))
+  const latest = [...await Promise.all(files.map(async (path) => ({ path, modified: (await stat(path)).mtimeMs })))]
     .sort((left, right) => right.modified - left.modified)[0]?.path;
   return latest === undefined ? null : readFile(latest, "utf8").then((text) => ({ path: latest,
     entries: text.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line) as unknown) })).catch(() => null);

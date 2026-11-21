@@ -1,8 +1,9 @@
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { WorkflowAdapter } from "./adapter.js";
+import type { Monoid, WorkflowAdapter } from "./adapter.js";
 import { EMPTY_LOCK, LEGACY_LOCK_FILE, LOCK_FILE, parseLock, type OnboardedLock, type ParsedLock } from "./lock.js";
+import { concatAll } from "./questions.js";
 import { renderSkill } from "./render.js";
 
 /** Assembled skills (skill directory name → SKILL.md text), or every problem found. */
@@ -12,14 +13,26 @@ export type Assembled =
 
 const PLACEHOLDER = /\{\{[a-z]+\}\}/;
 
+type ClaimIndex = ReadonlyMap<string, readonly WorkflowAdapter<string>[]>;
+
+const claimIndexMonoid: Monoid<ClaimIndex> = Object.freeze({
+  empty: new Map(),
+  concat: (left: ClaimIndex, right: ClaimIndex): ClaimIndex =>
+    new Map(
+      [...new Set([...left.keys(), ...right.keys()])].map((key) => [
+        key,
+        [...(left.get(key) ?? []), ...(right.get(key) ?? [])],
+      ]),
+    ),
+});
+
 /** Each operation and the adapters claiming it. */
-const claims = (adapters: readonly WorkflowAdapter<string>[]): ReadonlyMap<string, readonly WorkflowAdapter<string>[]> =>
-  adapters
-    .flatMap((adapter) => Object.keys(adapter.fulfil).map((operation) => [operation, adapter] as const))
-    .reduce<ReadonlyMap<string, readonly WorkflowAdapter<string>[]>>(
-      (index, [operation, adapter]) => new Map([...index, [operation, [...(index.get(operation) ?? []), adapter]]]),
-      new Map(),
-    );
+const claims = (adapters: readonly WorkflowAdapter<string>[]): ClaimIndex =>
+  concatAll(claimIndexMonoid)(
+    adapters.flatMap((adapter) =>
+      Object.keys(adapter.fulfil).map((operation) => new Map([[operation, [adapter] as readonly WorkflowAdapter<string>[]]])),
+    ),
+  );
 
 type SkillResult = { readonly ok: true; readonly name: string; readonly text: string } | { readonly ok: false; readonly problem: string };
 
@@ -87,31 +100,36 @@ const ALLOWLIST_FILES: readonly string[] = Object.freeze(["plugin.json", "mcp.js
 const ALLOWLIST_DIRS: readonly string[] = Object.freeze(["skills"]);
 const SAFE_NAMESPACE = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 
-const declaredExtensionDirs = (root: string): readonly string[] => {
+type ExtensionDirsResult = { readonly ok: true; readonly dirs: readonly string[] } | { readonly ok: false; readonly problem: string };
+
+const declaredExtensionDirs = (root: string): ExtensionDirsResult => {
   const manifestPath = join(root, "plugin.json");
-  if (!existsSync(manifestPath)) return [];
+  if (!existsSync(manifestPath)) return { ok: true, dirs: [] };
   try {
     const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as unknown;
     const ext = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
       ? (parsed as Readonly<Record<string, unknown>>).extensions
       : undefined;
-    return typeof ext === "object" && ext !== null && !Array.isArray(ext)
-      ? Object.keys(ext).filter((ns) => SAFE_NAMESPACE.test(ns) && !ns.includes(".."))
-      : [];
+    return {
+      ok: true,
+      dirs:
+        typeof ext === "object" && ext !== null && !Array.isArray(ext)
+          ? Object.keys(ext).filter((ns) => SAFE_NAMESPACE.test(ns) && !ns.includes(".."))
+          : [],
+    };
   } catch {
-    return [];
+    return { ok: false, problem: `Manifest ${manifestPath} is not valid JSON.` };
   }
 };
 
 const isExistingDirectory = (path: string): boolean => existsSync(path) && lstatSync(path).isDirectory();
 
-const copyAllowlisted = (sourceRoot: string, stagingRoot: string): void => {
-  if (!isExistingDirectory(sourceRoot)) throw new Error(`Plugin source ${sourceRoot} is not a readable directory.`);
+const copyAllowlisted = (sourceRoot: string, stagingRoot: string, extensionDirs: readonly string[]): void => {
   mkdirSync(stagingRoot, { recursive: true });
   const files = ALLOWLIST_FILES.filter((name) => existsSync(join(sourceRoot, name)) && !lstatSync(join(sourceRoot, name)).isDirectory());
-  const dirs = [...new Set([...ALLOWLIST_DIRS, ...declaredExtensionDirs(sourceRoot)])].filter((name) => isExistingDirectory(join(sourceRoot, name)));
-  files.map((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name)));
-  dirs.map((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name), { recursive: true }));
+  const dirs = [...new Set([...ALLOWLIST_DIRS, ...extensionDirs])].filter((name) => isExistingDirectory(join(sourceRoot, name)));
+  files.forEach((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name)));
+  dirs.forEach((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name), { recursive: true }));
 };
 
 /**
@@ -123,12 +141,15 @@ export const assemblePluginSource = (
   stagingRoot: string,
   adapters: readonly WorkflowAdapter<string>[],
 ): Assembled => {
+  if (!isExistingDirectory(sourceRoot)) return { ok: false, problems: [`Plugin source ${sourceRoot} is not a readable directory.`] };
   if (existsSync(stagingRoot)) return { ok: false, problems: [`Staging directory ${stagingRoot} already exists.`] };
+  const extDirs = declaredExtensionDirs(sourceRoot);
+  if (!extDirs.ok) return { ok: false, problems: [extDirs.problem] };
   const lock = readLock(sourceRoot);
   if (!lock.ok) return { ok: false, problems: [lock.message] };
   const assembled = assembleSkills(readSkills(sourceRoot), adapters, lock.lock);
   if (!assembled.ok) return assembled;
-  copyAllowlisted(sourceRoot, stagingRoot);
-  [...assembled.skills].map(([name, text]) => writeFileSync(skillFile(stagingRoot, name), text));
+  copyAllowlisted(sourceRoot, stagingRoot, extDirs.dirs);
+  assembled.skills.forEach((text, name) => writeFileSync(skillFile(stagingRoot, name), text));
   return assembled;
 };

@@ -68,6 +68,12 @@ export const PROJECT_KNOWLEDGE_SETUP: PluginSkillRef = Object.freeze({
   skill: "setup-project-knowledge",
 });
 
+/** The onboarded standalone skill that populates the shared project knowledge store. */
+export const PROJECT_KNOWLEDGE_DISCOVER: PluginSkillRef = Object.freeze({
+  plugin: "monolithic-agent-knowledge-store",
+  skill: "discover-project-knowledge",
+});
+
 /** An installed plugin as observed: its manifest version, its content checksum, and its skill names. */
 export interface InstalledPlugin {
   readonly version: string;
@@ -124,7 +130,8 @@ const notReady = (step: ReadinessStep, reason: string, recovery: Recovery): Read
   recovery,
 });
 
-const askUser = (message: string): Recovery => ({ action: "ask-user", message });
+const askUser = (message: string, question?: Question): Recovery =>
+  question === undefined ? { action: "ask-user", message } : { action: "ask-user", message, question };
 
 const refs = (adapter: WorkflowAdapter<string>): readonly (readonly [string, PluginSkillRef])[] =>
   Object.entries(adapter.fulfil).flatMap(([operation, served]) => served.map((ref) => [operation, ref] as const));
@@ -213,6 +220,17 @@ const outsideRange = ({ adapter, onboarded, installed }: BindingFacts): readonly
       : [`${plugin} ${version} (declared ${declared?.version ?? ""})`];
   });
 
+const versionRecoveryQuestion = (workflow: string): Question =>
+  Object.freeze({
+    kind: "single",
+    explanation: `The installed plugin version for ${workflow} does not match the framework pin. How would you like to proceed?`,
+    options: Object.freeze([
+      Object.freeze({ label: "Install the pinned version", description: "Match the tested version recorded by the framework.", recommended: true }),
+      Object.freeze({ label: "Check and adopt the newer version", description: "Run the upgrade check before updating the lock." }),
+    ] as const),
+    allowOther: true,
+  });
+
 const checkInRange = (facts: BindingFacts): Readiness => {
   const outside = outsideRange(facts);
   return outside.length === 0
@@ -222,6 +240,7 @@ const checkInRange = (facts: BindingFacts): Readiness => {
         `Installed versions are outside the declared range: ${outside.join(", ")}.`,
         askUser(
           `Install a version inside the declared range. To adopt the newer one, widen the range in the framework manifest first, then run ${UPGRADE_CHECK(facts.adapter.workflow)} and commit the updated ${LOCK_FILE}.`,
+          versionRecoveryQuestion(facts.adapter.workflow),
         ),
       );
 };
@@ -292,7 +311,10 @@ const checkPinned = (facts: BindingFacts): Readiness => {
     : notReady(
         "installed",
         `Installed plugins do not match ${LOCK_FILE}: ${problems.map(({ text }) => text).join("; ")}.`,
-        askUser(PIN_RECOVERY.get(first.kind)?.(facts.adapter.workflow) ?? ""),
+        askUser(
+          PIN_RECOVERY.get(first.kind)?.(facts.adapter.workflow) ?? "",
+          first.kind === "other-version" ? versionRecoveryQuestion(facts.adapter.workflow) : undefined,
+        ),
       );
 };
 

@@ -155,48 +155,33 @@ export const PINS = Object.freeze({
 
 export const DISCOVERY_COMPLETE = "UPF_DISCOVERY_COMPLETE";
 export const DISCOVERY_MARKER = ".upf-discovery-complete";
-const DISCOVERY_PROMPT = `Use repository_list and repository_read to identify the project structure, conventions and verification commands. Record source-backed project knowledge using the knowledge tools. Each unit needs YAML frontmatter with id, tier, type, area, title, read_when, provenance, sources, and status. Use derived provenance for observations, current status, repository paths for sources, and if_version=new for new units. Read and preserve existing units. Reply with exactly ${DISCOVERY_COMPLETE} once the saved store covers the observed structure, conventions and verification commands.`;
-const KNOWLEDGE_TOOLS = ["knowledge_catalog", "knowledge_find", "knowledge_fetch", "knowledge_links", "knowledge_put", "knowledge_patch", "knowledge_add"] as const;
-const REPOSITORY_TOOLS = ["repository_list", "repository_read"] as const;
 
 export interface DiscoveryInput {
   readonly project: string;
-  readonly runtime: string;
+  readonly python: string;
+  readonly queryScript: string;
   readonly isolatedDirectory: string;
   readonly knowledgeRoot: string;
 }
 
-const discoveryServers = ({ project, runtime, knowledgeRoot }: DiscoveryInput) => [
-  { name: "project-knowledge", command: runtime, args: ["--project", project, "--root", knowledgeRoot], tools: KNOWLEDGE_TOOLS },
-  { name: "project-repository", command: runtime, args: ["--project", project, "--read-repository"], tools: REPOSITORY_TOOLS },
-] as const;
+const discoveryPrompt = ({ project, python, queryScript, knowledgeRoot }: DiscoveryInput): string =>
+  `Inspect the repository at ${JSON.stringify(project)} in read-only mode to identify its structure, conventions and verification commands. Record source-backed project knowledge using \`${JSON.stringify(python)} ${JSON.stringify(queryScript)} --root ${JSON.stringify(knowledgeRoot)} curate\` (never write store files directly). Use derived provenance, current status, repository paths for sources, and preserve existing units. Reply with exactly ${DISCOVERY_COMPLETE} once \`${JSON.stringify(python)} ${JSON.stringify(queryScript)} --root ${JSON.stringify(knowledgeRoot)} catalog\` lists the curated units.`;
 
-const codexServerArgs = ({ name, command, args, tools }: ReturnType<typeof discoveryServers>[number]): readonly string[] => [
-  "-c", `mcp_servers.${name}.command=${JSON.stringify(command)}`,
-  "-c", `mcp_servers.${name}.args=${JSON.stringify(args)}`,
-  "-c", `mcp_servers.${name}.enabled_tools=${JSON.stringify(tools)}`,
-  "-c", `mcp_servers.${name}.required=true`,
-  ...tools.flatMap((tool) => ["-c", `mcp_servers.${name}.tools.${tool}.approval_mode="approve"`]),
+const claudeArgs = (input: DiscoveryInput): readonly string[] => [
+  "-p", "--permission-mode", "dontAsk", "--max-turns", "16",
+  "--setting-sources", "user", "--add-dir", input.project,
+  "--allowedTools", "Read,Glob,Grep,Bash", "--", discoveryPrompt(input),
 ];
-
-const claudeArgs = (input: DiscoveryInput): readonly string[] => {
-  const servers = discoveryServers(input);
-  const mcpServers = Object.fromEntries(servers.map(({ name, command, args }) => [name, { command, args }]));
-  const tools = servers.flatMap(({ name, tools }) => tools.map((tool) => `mcp__${name}__${tool}`));
-  return ["-p", "--tools", "", "--permission-mode", "dontAsk", "--max-turns", "16",
-    "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", JSON.stringify({ mcpServers }),
-    "--allowedTools", tools.join(","), "--", DISCOVERY_PROMPT];
-};
 
 /** The caller must launch from a fresh installer-owned directory outside the repository. */
 export const headlessDiscovery = (host: HostName, input: DiscoveryInput): readonly string[] => {
   switch (host) {
     case "claude": return claudeArgs(input);
-    case "codex": return ["--disable", "hooks", "--disable", "plugins", "--disable", "shell_tool",
+    case "codex": return ["--disable", "hooks", "--disable", "plugins",
       "--disable", "apps", "--disable", "multi_agent", "--disable", "multi_agent_v2",
       "--disable", "browser_use", "--disable", "computer_use", "--disable", "image_generation",
-      "-a", "never", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", "read-only",
-      "--skip-git-repo-check", "-C", input.isolatedDirectory, "-c", 'web_search="disabled"',
-      ...discoveryServers(input).flatMap(codexServerArgs), DISCOVERY_PROMPT];
+      "-a", "never", "exec", "--ignore-user-config", "--ephemeral", "--sandbox", "workspace-write",
+      "--skip-git-repo-check", "-C", input.project, "-c", 'web_search="disabled"',
+      discoveryPrompt(input)];
   }
 };

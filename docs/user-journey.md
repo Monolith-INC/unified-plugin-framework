@@ -14,7 +14,7 @@ See [Project bootstrap and tracker adapters](work-items/2026-11-17-project-boots
 
 ### Complete tooling bootstrap
 
-[AGE-101](work-items/2026-11-17-age-101-tooling-bootstrap.md) extends setup to the full supported toolchain: CLI, host skills and pinned workflow dependencies, shared project knowledge, an isolated retrieval runtime, host registration and review integration. It begins with this repository, then makes the same setup available to future projects. Existing working capabilities are reused; a missing required capability resumes its setup step. Configuration, live operation and host activation are reported separately.
+[AGE-101](work-items/2026-11-17-age-101-tooling-bootstrap.md) extends setup to the full supported toolchain: CLI, host skills and pinned workflow dependencies, shared project knowledge (stdlib Python 3.12+, zero MCP), host registration and review integration. It begins with this repository, then makes the same setup available to future projects. Existing working capabilities are reused; a missing required capability resumes its setup step. Configuration, live operation and host activation are reported separately.
 
 ## The journey
 
@@ -49,7 +49,7 @@ flowchart TD
 | Project tracking | Agile Backlog Toolkit | Implemented: [project tracking workflow](workflows/project-tracking.md) |
 | Implementation | Superpowers | Implemented: [implementation workflow](workflows/implementation.md) |
 | Code review | Monolithic Code Review Toolkit | Shipped: [code review workflow](workflows/code-review.md) |
-| Project knowledge | Project knowledge plugin | Shipped: used by every workflow |
+| Project knowledge | Monolithic Agent Knowledge Store | Shipped: used by every workflow (`knowledge-*`) |
 
 ## Readiness and recovery
 
@@ -58,7 +58,7 @@ Before doing any work, every workflow skill checks its readiness in order. A fai
 ```mermaid
 flowchart TD
     S["User invokes a skill"] --> A{"Plugins available?<br/><small>installed, enabled, pinned</small>"}
-    A -- yes --> P{"Project store set?<br/><small>.project-knowledge.json</small>"}
+    A -- yes --> P{"Project store set?<br/><small>project-knowledge.json</small>"}
     A -- no --> U["Ask the user once<br/><small>install, then continue</small>"]
     U -.-> A
     P -- yes --> G{"Plugin stores aligned?<br/><small>same knowledge root</small>"}

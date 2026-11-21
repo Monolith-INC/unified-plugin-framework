@@ -3,12 +3,12 @@ import type { AcceptedPlan } from "./tooling-input.js";
 import type { HostName } from "./host-names.js";
 import { recoveryFor, type RecoveryAction, type TaskKind } from "./tooling-recovery.js";
 
-export const HOST_STEPS: readonly ToolingStep[] = ["skills", "dependencies", "knowledge-server", "host-discovery"];
+export const HOST_STEPS: readonly ToolingStep[] = Object.freeze(["skills", "dependencies", "knowledge-server", "host-discovery"]);
 type Readiness = ToolingReport["status"];
-export const allReady = {
+export const allReady = Object.freeze({
   empty: "ready" as Readiness,
   concat: (left: Readiness, right: Readiness): Readiness => left === "ready" && right === "ready" ? "ready" : "action-required",
-};
+});
 export const summarizeSteps = (steps: readonly ToolingOutcome[]): ToolingReport => ({
   status: steps.reduce((status, step) => allReady.concat(status, step.status), allReady.empty),
   steps,
@@ -25,10 +25,10 @@ export interface BootstrapEvent {
   readonly action: RecoveryAction["kind"];
   readonly attempt: number;
 }
-export const recoveryEvents = {
-  empty: [] as readonly BootstrapEvent[],
-  concat: (left: readonly BootstrapEvent[], right: readonly BootstrapEvent[]): readonly BootstrapEvent[] => [...left, ...right],
-};
+export const recoveryEvents = Object.freeze({
+  empty: Object.freeze([] as readonly BootstrapEvent[]),
+  concat: (left: readonly BootstrapEvent[], right: readonly BootstrapEvent[]): readonly BootstrapEvent[] => Object.freeze([...left, ...right]),
+});
 export interface HostSetup {
   readonly project: ToolingReport;
   readonly hosts: readonly HostRun[];

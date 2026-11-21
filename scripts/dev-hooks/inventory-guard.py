@@ -17,7 +17,8 @@ from pathlib import Path
 
 INVENTORY_FILENAME = "upf-file-inventory.json"
 ALWAYS_ALLOWED_PREFIXES = ("docs/work-items/", "AI_Codex/Implementation_Plans/")
-_BULLET_PATH_RE = re.compile(r"^\s*[-*]\s+`([^`\n]+)`")
+KNOWN_ROOT_FILES = frozenset({"LICENSE", "NOTICE", "Makefile", "Dockerfile", "CHANGELOG", "README"})
+_BACKTICK_RE = re.compile(r"`([^`\n]+)`")
 
 
 def _git_common_dir(cwd: Path) -> Path:
@@ -35,28 +36,39 @@ def _normalize_rel(path: str) -> str:
     return cleaned.rstrip("/")
 
 
+def _looks_like_path(candidate: str) -> bool:
+    if not candidate or candidate in (".", "..") or " " in candidate or candidate.startswith("-"):
+        return False
+    return "/" in candidate or "." in candidate or candidate in KNOWN_ROOT_FILES
+
+
 def parse_inventory_from_plan(markdown: str) -> tuple[str, ...]:
     """Extract backtick-quoted file paths from a Markdown plan's File Inventory section."""
     lines = markdown.replace("\r\n", "\n").splitlines()
     in_section = False
+    section_level = 2
     paths: list[str] = []
     seen: set[str] = set()
     for line in lines:
         stripped = line.strip()
-        if re.match(r"^##\s+.*File Inventory\b", stripped, re.IGNORECASE):
-            in_section = True
-            continue
-        if in_section and re.match(r"^##\s+", stripped):
-            break
+        heading = re.match(r"^(#{2,4})\s+(.+)$", stripped)
+        if heading:
+            level = len(heading.group(1))
+            if not in_section and re.search(r"\bFile Inventory\b", heading.group(2), re.IGNORECASE):
+                in_section = True
+                section_level = level
+                continue
+            if in_section and level <= section_level:
+                break
         if not in_section:
             continue
-        match = _BULLET_PATH_RE.match(line)
-        if not match:
+        if not (re.match(r"^\s*[-*]\s+", line) or re.match(r"^\s*\d+\.\s+", line) or stripped.startswith("|")):
             continue
-        candidate = _normalize_rel(match.group(1))
-        if candidate and candidate not in seen and ("/" in candidate or "." in candidate):
-            seen.add(candidate)
-            paths.append(candidate)
+        for raw in _BACKTICK_RE.findall(line):
+            candidate = _normalize_rel(raw)
+            if _looks_like_path(candidate) and candidate not in seen:
+                seen.add(candidate)
+                paths.append(candidate)
     return tuple(paths)
 
 
