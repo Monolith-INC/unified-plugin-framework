@@ -56,9 +56,9 @@
           "mappingDigest": "7427702a045bb5bc07829d185ba6307b7cdffbc7df04af1c3511736dd3df1951"
         }
       ],
-      "checksum": "2e9f0e570afdaaa593b3d7211e1b5f8b7b2c26c636b1fff387b95c7ff26232a6",
+      "checksum": "5b1e3e6b1a93e622842fc128df52f60e5719947bce246d453917e4bf34b6deb1",
       "plugin": "monolithic-agent-knowledge-store",
-      "version": "0.3.0"
+      "version": "0.4.1"
     },
     {
       "bindings": [
