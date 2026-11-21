@@ -119,6 +119,17 @@ sha=$(git -C "$repo" rev-parse HEAD)
 git -C "$repo" config workflow.ticketFlow "$(jq -nc --arg sha "$sha" '{branch:"feature/AGE-1-work",merge:$sha,tip:$sha}')"
 check blocked "delivered ticket requires closeout before new edits" "$(edit "$repo/a.txt")"
 
+# AGE-151: implementation file inventory enforcement + AI_Codex/Implementation_Plans allowance
+git -C "$repo" config --unset workflow.ticketFlow
+guard=$(dirname "$hook")/inventory-guard.py
+check allowed "plan in AI_Codex/Implementation_Plans" "$(edit "$repo/AI_Codex/Implementation_Plans/2026-11-21-x-plan.md")"
+(cd "$repo" && python3 -B "$guard" set --branch feature/AGE-1-work --files allowed.txt >/dev/null)
+check allowed "edit inside approved file inventory" "$(edit "$repo/allowed.txt")"
+check blocked "edit outside approved file inventory" "$(edit "$repo/outside.txt")"
+(cd "$repo" && python3 -B "$guard" allow --branch feature/AGE-1-work outside.txt >/dev/null)
+check allowed "edit allowed after inventory amendment" "$(edit "$repo/outside.txt")"
+(cd "$repo" && python3 -B "$guard" clear --branch feature/AGE-1-work >/dev/null)
+
 # Rule 8: instructions after a merge, rather than treating the command as proof.
 after=$(dirname "$hook")/after-merge.sh
 out=$(cmd "gh pr merge --squash" | CLAUDE_PROJECT_DIR=$repo bash "$after" 2>&1); rc=$?

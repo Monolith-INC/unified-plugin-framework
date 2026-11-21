@@ -108,6 +108,9 @@ jobs:
       - name: Test Codex hook adapter
         run: python3 -B -m unittest discover -s scripts/dev-hooks/tests -p test_codex_workflow.py -v
 
+      - name: Test file inventory guard
+        run: python3 -B -m unittest discover -s scripts/dev-hooks/tests -p test_inventory_guard.py -v
+
   distribution:
     name: Complete release distribution / Linux
     runs-on: ubuntu-latest
