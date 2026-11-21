@@ -33,7 +33,7 @@ test("withAssembledSource hands over an assembled copy and removes it afterwards
     text: readFileSync(join(root, "skills", "review-task", "SKILL.md"), "utf8"),
   }));
   assert.equal(staged.ok, true);
-  assert.match(staged.value.text, /monolithic-code-review-toolkit:review-task/);
+  assert.match(staged.value.text, /`monolithic-code-review-toolkit-review-task`/);
   assert.equal(existsSync(staged.value.root), false);
 });
 

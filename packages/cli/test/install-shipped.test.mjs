@@ -66,12 +66,12 @@ test("the framework plugin installs each host's assembled skills, naming the onb
     ]);
     readdirSync(join(target, "skills")).map((skill) => {
       const text = readFileSync(join(target, "skills", skill, "SKILL.md"), "utf8");
-      assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
-        : skill.startsWith("knowledge-") ? /monolithic-agent-knowledge-store:/
+      assert.match(text, skill.startsWith("discover-") ? /`brainstorming` throughout/
+        : skill.startsWith("knowledge-") ? /`(?:setup-project-knowledge|discover-project-knowledge|query-project-knowledge|refresh-project-knowledge|ingest-docs|publish-docs)`/
           : skill.startsWith("project-") ? /agent-plugin project/
             : skill === "repair-workflow" ? /agent-plugin adapter-check/
               : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
-                : skill.startsWith("continuity-") ? /agent-continuity:session-/ : /monolithic-code-review-toolkit:/);
+                : skill.startsWith("continuity-") ? /`session-/ : /`(?:monolithic-code-review-toolkit-review-|review-story-)/);
       assert.doesNotMatch(text, /\{\{/);
       return skill;
     });

@@ -41,8 +41,10 @@ const runInput = async (args: readonly string[], io: CliIo): Promise<number> => 
 };
 const execute = async (project: string, plan: AcceptedPlan, apply: boolean, request: Request | null, io: CliIo, logPath?: string): Promise<number> => {
   const swept = apply ? await sweepSetupWrites(project, plan.python) : ok(project);
-  const hostClis = new Map<HostName, HostCli>(swept.ok && apply && HOST_STEPS.some((step) => plan.steps.includes(step))
-    ? await Promise.all(plan.hosts.map(async (host) => [host, await prepareHostCli(project, host, plan.python, plan.consent.installHostClis)] as const))
+  // Zero-CLI installation: host setup steps materialize files deterministically from pinned host specs.
+  // Host CLIs on PATH are probed only when optional headless knowledge discovery is enabled.
+  const hostClis = new Map<HostName, HostCli>(swept.ok && apply && plan.consent.headlessDiscovery && plan.steps.includes("knowledge-content")
+    ? await Promise.all(plan.hosts.map(async (host) => [host, await prepareHostCli(project, host, plan.python, false)] as const))
     : []);
   const claudeState = io.claudeState();
   const ioFor = (host: HostName, patience?: number) => {

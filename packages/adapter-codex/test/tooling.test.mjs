@@ -14,6 +14,12 @@ test('Codex registration adds only missing tables and accepts existing matching 
   assert.equal(codexToolingRegistration({...existing,marketplaces:{'upf-project':{source:'different'}}},desired).ok,false);
   assert.equal(codexToolingRegistration({mcp_servers:{'project-knowledge':'invalid'}},desired).ok,false);
   assert.deepEqual(CODEX_TOOLING.install('project-knowledge'),['plugin','add','project-knowledge@upf-project','--json']);
+  assert.deepEqual(CODEX_TOOLING.install('project-knowledge','/repo/.upf-tools'),[
+    'plugin','add',
+    '-c','marketplaces.upf-project.source_type="local"',
+    '-c','marketplaces.upf-project.source="/repo/.upf-tools"',
+    'project-knowledge@upf-project','--json',
+  ]);
 });
 
 test('later marketplace setup preserves earlier workflows and unrelated metadata',()=>{

@@ -73,6 +73,11 @@ const BMAD_SUPPORT: readonly PluginSkillRef[] = Object.freeze([
   bmad("bmad", "BMad hub skill for project runtime setup, status and initiative management."),
   bmad("bmod-core-tools", "BMad core-tools module manifest required by BMad runtime checks."),
   bmad("bmod-method", "BMad method module manifest required by BMad runtime checks."),
+  bmad("bmad-agent-analyst", "BMad Analyst persona skill for discovery and requirements elicitation."),
+  bmad("bmad-agent-architect", "BMad Architect persona skill for technical architecture and design."),
+  bmad("bmad-agent-dev", "BMad Developer persona skill for implementation planning and execution."),
+  bmad("bmad-agent-pm", "BMad Product Manager persona skill for product briefs and PRDs."),
+  bmad("bmad-agent-ux-designer", "BMad UX Designer persona skill for interaction and experience design."),
 ]);
 
 /** Discovery led by Superpowers' brainstorming flow, with BMad Method's elicitation, hardening and verification layers. */

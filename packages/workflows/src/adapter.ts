@@ -63,6 +63,16 @@ export type WorkflowAdapter<Operation extends string> = {
   readonly protocol?: string;
 };
 
+/**
+ * Project-local Agent Skills identifier for a dependency skill: preserves its exact upstream kebab-case name unless it
+ * collides with a framework contract operation, in which case it prefixes `<plugin>-` so both live side by side under
+ * `.agents/skills/` and `.claude/skills/` without colons or double hyphens.
+ */
+export const projectSkillName = (
+  ref: Pick<PluginSkillRef, "plugin" | "skill">,
+  contractOperations: ReadonlySet<string>,
+): string => (contractOperations.has(ref.skill) ? `${ref.plugin}-${ref.skill}` : ref.skill);
+
 /** The onboarded standalone skill that creates the shared project knowledge store. */
 export const PROJECT_KNOWLEDGE_SETUP: PluginSkillRef = Object.freeze({
   plugin: "monolithic-agent-knowledge-store",

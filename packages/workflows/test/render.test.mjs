@@ -28,14 +28,18 @@ test("Discovery templates name no plugin and no plugin skill either", () => {
 });
 
 test("rendering fills every placeholder from the adapter", () => {
+  const operations = new Set(CODE_REVIEW_OPERATIONS);
   CODE_REVIEW_OPERATIONS.map((operation) => {
     const result = rendered(operation);
     assert.equal(result.ok, true, result.message);
     assert.doesNotMatch(result.text, /\{\{/);
-    reviewToolkitAdapter.fulfil[operation].map(({ plugin, skill }) => assert.match(result.text, new RegExp(`${plugin}:${skill}`)));
+    reviewToolkitAdapter.fulfil[operation].map(({ plugin, skill }) => {
+      const expected = operations.has(skill) ? `${plugin}-${skill}` : skill;
+      assert.match(result.text, new RegExp(`\`${expected}\``));
+    });
     assert.match(result.text, /\.monolithic-code-review\/sources\.json/);
-    assert.match(result.text, /monolithic-code-review-toolkit:review-setup/);
-    assert.match(result.text, /setup-project-knowledge/);
+    assert.match(result.text, /`review-setup`/);
+    assert.match(result.text, /`setup-project-knowledge`/);
     return operation;
   });
 });

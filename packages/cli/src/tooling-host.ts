@@ -1,20 +1,21 @@
 import { realpathSync } from "node:fs";
-import { cp, lstat, readdir, rename } from "node:fs/promises";
+import { cp, lstat, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sha256 } from "@agent-plugins/compiler";
 import { fail, object, ok, type Result } from "@agent-plugins/project";
-import { adapterPlugins, findWorkflow, LOCK_FILE, parseLock, pinMatches, type BindingFacts } from "@agent-plugins/workflows";
+import { adapterPlugins, checkPluginBinding, findWorkflow, LOCK_FILE, parseLock, pinMatches, projectSkillName, WORKFLOWS, type BindingFacts, type PluginSkillRef } from "@agent-plugins/workflows";
 import { rootArg, rootPluginName, selectedPlugins, sourcesFor, verifySource, type DependencySource, type SourceFetcher } from "./dependency-sources.js";
 import { fetchSources, GIT_FETCHER, unfetched, type FetchContext } from "./dependency-fetch.js";
 import { bundledRoots } from "./distribution.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
-import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
-import { CODEX_TOOLING } from "@agent-plugins/adapter-codex";
-import { checkPluginBinding } from "@agent-plugins/workflows";
+import { NODE_PLUGIN_FACTS_IO, readContentTree } from "./plugin-reader.js";
 import { command, scaled, sequence } from "./tooling-process.js";
-import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment, type HostPlugin } from "./host-table.js";
+import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment } from "./host-table.js";
 import type { HostName } from "./host-names.js";
+import { rewriteSkillFrontmatterName } from "./host-specs.js";
+import { resolveSourceBundle } from "./bundle-source.js";
 import { directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
 
 export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
@@ -22,6 +23,12 @@ export const toolsRoot = (project: string): string => join(project, ".upf-tools"
 export const pluginTarget = (project: string, name: string): string => join(toolsRoot(project), "plugins", name);
 export const pluginNames = (input: BootstrapInput): readonly string[] => selectedPlugins(input.workflows);
 const FRAMEWORK_PLUGIN = FRAMEWORK_ROOT;
+
+/** All workflow contract operation names owned by `unified-plugin-framework`. */
+export const FRAMEWORK_CONTRACT_OPERATIONS: ReadonlySet<string> = new Set(
+  Object.values(WORKFLOWS).flatMap((adapter) => Object.keys(adapter.fulfil)),
+);
+
 /** Source directory of a framework-shipped plugin (`unified-plugin-framework` lives at repo root `.`). */
 export const frameworkPluginRoot = (name: string): string =>
   name === "unified-plugin-framework" ? FRAMEWORK_ROOT : join(FRAMEWORK_ROOT, "plugins", name);
@@ -33,8 +40,7 @@ export const dependencySources = (project: string, input: BootstrapInput): Resul
   const roots = parseRootArgs(project, input.pluginRoots);
   return roots.ok ? sourcesFor(NODE_PLUGIN_FACTS_IO, FRAMEWORK_PLUGIN, input.workflows, roots.roots) : setupFailure(roots.message);
 };
-/** Explicit roots as given, plus the cached checkout for every plugin bootstrap fetches; both pass one binding gate.
- * A plan that cannot be made leaves the input as given: the dependencies step reports why. */
+
 const includedRoots = (project: string, input: BootstrapInput, mode: "verify" | "resolve" = "verify"): Result<readonly PluginRootArg[]> | null => {
   const sources = dependencySources(project, input);
   return sources.ok ? bundledRoots(FRAMEWORK_ROOT, sources.value, mode) : sources;
@@ -84,29 +90,62 @@ const checkedBindings = (bindings: readonly BindingFacts[]): Result<readonly Bin
       "Use the published pinned source, or complete the normal reviewed upgrade-check process before bootstrapping it.") : ok(bindings);
 };
 
-/** Host discovery must match the adapter's bare-skill convention as well as its namespaced dependencies. */
-export const expectedDependencySkills = (bindings: readonly BindingFacts[]): readonly string[] => [...new Set(bindings.flatMap(({ adapter }) =>
-  dependencyRefs(adapter).map(({ plugin, skill }) => adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`)))];
-const dependencyRefs = (adapter: BindingFacts["adapter"]) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog,
-  ...(adapter.supportSkills ?? []), ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup }))];
+export interface MaterializedSkillSpec {
+  readonly plugin: string;
+  readonly sourceSkill: string;
+  readonly targetName: string;
+}
+
+const dependencyRefs = (adapter: BindingFacts["adapter"]): readonly PluginSkillRef[] => [
+  ...Object.values(adapter.fulfil).flat(),
+  ...adapter.catalog,
+  ...(adapter.supportSkills ?? []),
+  ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup })),
+];
+
+/** Unique dependency skills to materialize for the selected workflow bindings, with collision-free target names. */
+export const dependencyMaterializations = (bindings: readonly BindingFacts[]): readonly MaterializedSkillSpec[] => {
+  const specs = bindings.flatMap(({ adapter }) =>
+    dependencyRefs(adapter).map((ref): MaterializedSkillSpec => ({
+      plugin: ref.plugin,
+      sourceSkill: ref.skill,
+      targetName: projectSkillName(ref, FRAMEWORK_CONTRACT_OPERATIONS),
+    })),
+  );
+  return [...new Map(specs.map((spec) => [spec.targetName, spec])).values()];
+};
+
+/** Every expected dependency skill name as materialized into the host's project-local skills directory. */
+export const expectedDependencySkills = (bindings: readonly BindingFacts[]): readonly string[] =>
+  dependencyMaterializations(bindings).map(({ targetName }) => targetName);
 
 export interface DriftedSkill {
   readonly name: string;
   readonly paths: readonly string[];
 }
 
-/** Prefer the UPF-owned marketplace plugin or repo-scoped copy when a host also discovers unrelated global skills. */
+/** Prefer repo-scoped skills when a host also lists global copies. */
 export const selectActiveMatches = (
   discovered: readonly DiscoveredSkill[],
   name: string,
-  plugin: string,
-  bare: boolean,
+  _plugin: string,
+  _bare: boolean,
 ): readonly DiscoveredSkill[] => {
   const matches = discovered.filter((entry) => entry.name === name);
-  const scoped = bare
-    ? matches.filter((entry) => entry.scope === "repo")
-    : matches.filter((entry) => entry.pluginId === `${plugin}@${CODEX_TOOLING.marketplace}`);
-  return scoped.length > 0 ? scoped : matches;
+  const repo = matches.filter((entry) => entry.scope === "repo");
+  return repo.length > 0 ? repo : matches;
+};
+
+const expectedSourceOverrides = async (
+  sourceDir: string,
+  sourceSkill: string,
+  targetName: string,
+): Promise<ReadonlyMap<string, string> | undefined> => {
+  if (sourceSkill === targetName) return undefined;
+  const read = await readText(join(sourceDir, "SKILL.md"));
+  return read.ok && read.value !== null
+    ? new Map([["SKILL.md", rewriteSkillFrontmatterName(read.value, targetName)]])
+    : undefined;
 };
 
 export const skillDrift = (
@@ -115,9 +154,10 @@ export const skillDrift = (
   plugin: string,
   bare: boolean,
   sourceDir: string,
+  overrides?: ReadonlyMap<string, string>,
 ): DriftedSkill | undefined => {
   const matches = selectActiveMatches(discovered, name, plugin, bare);
-  const source = readContentTree(sourceDir);
+  const source = readContentTree(sourceDir, overrides);
   const mismatched = !source.ok
     ? matches.map(({ path }) => path)
     : matches.filter((entry) => {
@@ -127,34 +167,64 @@ export const skillDrift = (
   return matches.length === 0 ? { name, paths: [] } : mismatched.length > 0 ? { name, paths: mismatched } : undefined;
 };
 
-/** Report every expected dependency skill whose active copy differs from its pinned staged source. */
-export const driftedSkills = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): readonly DriftedSkill[] => {
+/** Report every expected dependency skill whose materialized copy differs from its pinned staged source. */
+export const driftedSkills = async (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): Promise<readonly DriftedSkill[]> => {
   const bindings = stagedBindings(project, input);
   if (!bindings.ok) return [];
-  const checked = bindings.value.flatMap(({ adapter }) => dependencyRefs(adapter).flatMap(({ plugin, skill }) => {
-    const bare = adapter.bareSkillPlugins.includes(plugin);
-    const name = bare ? skill : `${plugin}:${skill}`;
-    const drift = skillDrift(discovered, name, plugin, bare, join(pluginTarget(project, plugin), "source/skills", skill));
-    return drift === undefined ? [] : [drift];
+  const specs = dependencyMaterializations(bindings.value);
+  const checked = await Promise.all(specs.map(async ({ plugin, sourceSkill, targetName }) => {
+    const sourceDir = join(pluginTarget(project, plugin), "source/skills", sourceSkill);
+    const overrides = await expectedSourceOverrides(sourceDir, sourceSkill, targetName);
+    return skillDrift(discovered, targetName, plugin, true, sourceDir, overrides);
   }));
-  return [...new Map(checked.map((entry) => [entry.name, entry])).values()];
+  return checked.filter((entry): entry is DriftedSkill => entry !== undefined);
 };
 
-/** Validate the content the host actually discovered, including cache copies and bare skills. */
-export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): boolean =>
-  stagedBindings(project, input).ok && driftedSkills(project, input, discovered).length === 0;
+/** Validate materialized dependency skills against their pinned staged sources. */
+export const activeSkillsMatch = async (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): Promise<boolean> =>
+  stagedBindings(project, input).ok && (await driftedSkills(project, input, discovered)).length === 0;
 
 /** Plugins this framework ships itself, rather than pinned dependencies. */
 export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework"]);
-/** Every skill the installed framework plugins provide, under the name the host discovers it by. */
-export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly plugin: string; readonly source: string }[] =>
-  FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(frameworkTarget(project, host, plugin), "skills"))
-    .map((skill) => ({ name: `${plugin}:${skill}`, plugin, source: join(frameworkTarget(project, host, plugin), "skills", skill) })));
-/** The host serves its own cached copy, current only once activation succeeds; an earlier install's copy can share every name, so compare bytes. */
-export const frameworkSkillsMatch = (project: string, discovered: readonly DiscoveredSkill[], host: HostName): boolean =>
-  frameworkSkills(project, host).every(({ name, plugin, source }) => skillDrift(discovered, name, plugin, false, source) === undefined);
 
-/** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
+export interface FrameworkSkillRecord {
+  readonly name: string;
+  readonly plugin: string;
+  readonly source: string;
+  readonly sha256: string;
+}
+
+/** Every framework skill expected in the host's project-local skills directory, paired with its compiled bundle digest. */
+export const frameworkSkills = (project: string, host: HostName): readonly FrameworkSkillRecord[] =>
+  FRAMEWORK_PLUGINS.flatMap((plugin) => {
+    const compiled = resolveSourceBundle(frameworkPluginRoot(plugin), host);
+    if (!compiled.ok) return [];
+    const skillsDir = join(project, HOSTS[host].bareSkills);
+    return compiled.value.bundle.files
+      .filter((file) => /^skills\/[^/]+\/SKILL\.md$/u.test(file.path))
+      .map((file) => {
+        const name = file.path.split("/")[1] ?? "";
+        return { name, plugin, source: join(skillsDir, name), sha256: sha256(file.content) };
+      });
+  });
+
+/** Verify every compiled framework skill exists in `discovered` and matches the compiled bundle byte-for-byte. */
+export const frameworkSkillsMatch = async (project: string, discovered: readonly DiscoveredSkill[], host: HostName): Promise<boolean> => {
+  const expected = frameworkSkills(project, host);
+  if (expected.length === 0) return false;
+  const checks = await Promise.all(expected.map(async ({ name, sha256: expectedDigest }) => {
+    const matches = selectActiveMatches(discovered, name, "unified-plugin-framework", true);
+    if (matches.length === 0) return false;
+    const files = await Promise.all(matches.map(async ({ path }) => {
+      const text = await readText(path);
+      return text.ok && text.value !== null && sha256(Buffer.from(text.value, "utf8")) === expectedDigest;
+    }));
+    return files.every(Boolean);
+  }));
+  return checks.every(Boolean);
+};
+
+/** Fetch and verify missing pinned sources, then stage complete unmodified trees under `.upf-tools/plugins/<name>/source`. */
 export const stageDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher = GIT_FETCHER): Promise<Result<string>> =>
   fetchDependencies(project, input, fetcher).then((fetched) => fetched.ok ? stageResolved(project, resolvedInput(project, input)) : fetched);
 const stageResolved = (project: string, input: BootstrapInput): Promise<Result<string>> => {
@@ -167,7 +237,7 @@ const stageResolved = (project: string, input: BootstrapInput): Promise<Result<s
     });
 };
 
-/** Installed wrappers are checked against the same binding gate, rather than trusting a marker alone. */
+/** Installed sources are checked against the same binding gate, rather than trusting a marker alone. */
 export const stagedBindings = (project: string, input: BootstrapInput): Result<readonly BindingFacts[]> => pluginBindings(project, {
   ...input, pluginRoots: pluginNames(input).map((name) => `${name}@${pinnedVersion(name)}=${join(pluginTarget(project, name), "source")}`),
 });
@@ -211,49 +281,36 @@ const pinnedVersion = (name: string): string => {
   return lock?.ok ? lock.lock.plugins.find((pin) => pin.plugin === name)?.version ?? "0.0.0" : "0.0.0";
 };
 
-/** The selected host's view of this project's setup; hosts record installs under the real path, so resolve it once here. */
+/** The selected host's view of this project's setup. */
 const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
   canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python,
   ...(environment.hostCli?.kind === "available" ? { program: environment.hostCli.program } : {}),
   ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }), ...(environment.patience === undefined ? {} : { patience: environment.patience }) });
 const realProject = (project: string): string => {
-  try { return realpathSync(project); } catch { return resolve(project); } // A project that cannot be resolved yet is named as given.
+  try { return realpathSync(project); } catch { return resolve(project); }
 };
-/** Framework payloads are built per host, so each host has its own copy; dependency sources are shared and wrapped per host. */
+
+/** Legacy host payload path helper retained for compatibility. */
 export const frameworkTarget = (project: string, host: HostName, name: string): string => join(toolsRoot(project), HOSTS[host].frameworkDir, name);
-const hostPlugins = (project: string, input: BootstrapInput, names: readonly string[]): readonly HostPlugin[] => names.map((name) =>
-  FRAMEWORK_PLUGINS.includes(name) ? { name, root: frameworkTarget(project, input.host, name), kind: "framework" } : { name, root: pluginTarget(project, name), kind: "dependency" });
-const wrapperManifest = (name: string): string => JSON.stringify({ name, version: pinnedVersion(name), skills: "./source/skills/" }, null, 2);
-/** A staged dependency gets the selected host's manifest beside its unmodified source; a different existing manifest is preserved. */
-const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Promise<Result<string>> => {
-  switch (plugin.kind) {
-    case "framework": return Promise.resolve(ok(plugin.root));
-    case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name, input.python);
-  }
-};
-const ensureWrapper = (project: string, path: string, name: string, python: string): Promise<Result<string>> => {
-  const expected = wrapperManifest(name);
-  return readText(path).then((existing) => !existing.ok ? existing
-    : existing.value === null ? writeText(project, path, expected, null, python)
-      : existing.value === expected ? ok(path) : fail("modified-file", `An existing ${name} host manifest differs from its pinned wrapper.`, "Preserve it and reconcile the wrapper before rerunning."));
-};
 
 export const registerHost = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<string>> =>
   HOSTS[input.host].register(hostContext(project, input, environment, knowledgeCommand));
 export const hostRegistered = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<boolean>> =>
   HOSTS[input.host].registered(hostContext(project, input, environment, knowledgeCommand));
 
+/**
+ * Deterministic, zero-CLI host plugin activation: records the pinned host spec receipt, materializes all required
+ * dependency skills into the host's project-local skills directory (`.agents/skills` or `.claude/skills`), and
+ * initializes required project runtimes (`_bmad/`).
+ */
 export const installHostPlugins = (project: string, input: BootstrapInput, environment: HostEnvironment, names: readonly string[]): Promise<Result<string>> => {
   const host = HOSTS[input.host];
   const context = hostContext(project, input, environment);
-  const bare = barePlugins(project, input);
-  return host.catalog(context, hostPlugins(project, input, [...FRAMEWORK_PLUGINS, ...pluginNames(input)].filter((name) => !bare.includes(name))))
-    .then((listed) => listed.ok ? host.register(context) : listed)
-    .then((registered) => registered.ok ? sequence(hostPlugins(project, input, names.filter((name) => !bare.includes(name))),
-      (plugin) => wrapped(project, input, plugin).then((manifest) => manifest.ok ? host.activate(context, plugin) : manifest), "Host plugins activated.") : registered)
-    .then((installed) => installed.ok ? activateBare(project, input, names) : installed)
+  return host.register(context)
+    .then((registered) => registered.ok ? materializeDependencies(project, input, names) : registered)
     .then((activated) => activated.ok ? ensureBmadRuntime(project, input, environment, names) : activated);
 };
+
 const BMAD_PLUGIN = "bmad-method";
 const BMAD_RUNTIME_FILES: readonly string[] = Object.freeze([
   "_bmad/scripts/resolve_customization.py",
@@ -294,32 +351,58 @@ const ensureBmadRuntime = async (
   return command(input.python, [script, "--project-root", project, "--skill", skillDir, "--root", bareDir], project, scaled(60_000, environment.patience));
 };
 
-const barePlugins = (project: string, input: BootstrapInput): readonly string[] => {
-  const bindings = pluginBindings(project, input);
-  return bindings.ok ? [...new Set(bindings.value.flatMap(({ adapter }) => adapter.bareSkillPlugins))] : [];
+const materializeDependencies = (project: string, input: BootstrapInput, names: readonly string[]): Promise<Result<string>> => {
+  const bindings = stagedBindings(project, input);
+  const fallback = bindings.ok ? bindings : pluginBindings(project, input);
+  const specs = fallback.ok ? dependencyMaterializations(fallback.value).filter(({ plugin }) => names.includes(plugin)) : [];
+  return sequence(specs, (spec) => materializeSkill(project, HOSTS[input.host].bareSkills, spec), "Dependency skills materialized.");
 };
-const activateBare = (project: string, input: BootstrapInput, names: readonly string[]): Promise<Result<string>> => {
-  const bindings = pluginBindings(project, input);
-  const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog, ...(adapter.supportSkills ?? [])]
-    .filter(({ plugin }) => names.includes(plugin) && adapter.bareSkillPlugins.includes(plugin))) : [];
-  return sequence([...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()],
-    (ref) => copyBare(project, HOSTS[input.host].bareSkills, ref.plugin, ref.skill, input.python), "Bare dependency skills activated.");
-};
-const copyBare = async (project: string, folder: string, plugin: string, skill: string, python: string): Promise<Result<string>> => {
-  const source = join(pluginTarget(project, plugin), "source/skills", skill);
-  const target = join(project, folder, skill);
-  const expected = `${plugin}/${skill}@${pinnedVersion(plugin)}`;
+
+const materializeSkill = async (project: string, folder: string, spec: MaterializedSkillSpec): Promise<Result<string>> => {
+  const source = join(pluginTarget(project, spec.plugin), "source/skills", spec.sourceSkill);
+  const target = join(project, folder, spec.targetName);
+  if (!await safePath(project, target)) {
+    return fail("symlink-escape", `Skill directory ${spec.targetName} follows a linked path.`, "Preserve the link and reconcile the active skill directory.");
+  }
+  const ownerPrefix = `${spec.plugin}/${spec.sourceSkill}@`;
+  const expected = `${ownerPrefix}${pinnedVersion(spec.plugin)}`;
+  const overrides = await expectedSourceOverrides(source, spec.sourceSkill, spec.targetName);
+  const sourceDigest = readContentTree(source, overrides);
+  if (!sourceDigest.ok) return setupFailure(`Staged source for ${spec.plugin}/${spec.sourceSkill} is unreadable.`);
   const marker = await readText(join(target, ".upf-source"));
-  const sourceDigest = readContentTree(source);
-  const activeDigest = readContentTree(target);
-  return !marker.ok ? marker : marker.value === expected ? sourceDigest.ok && activeDigest.ok && sourceDigest.value === activeDigest.value ? ok(target)
-    : setupFailure(`Active bare skill ${skill} differs from its pinned source. Preserve the edited copy and reconcile it explicitly.`)
-    : marker.value !== null ? setupFailure(`Existing ${skill} has different ownership.`)
-    : readText(join(target, "SKILL.md")).then((existing) => !existing.ok ? existing : existing.value !== null ? setupFailure(`Existing ${skill} is unmanaged; preserve it.`)
-      : directory(project, target).then((created) => created.ok ? readdir(target).then((entries) => entries.length === 0
-        ? cp(source, target, { recursive: true, errorOnExist: false, force: false })
-        : Promise.reject(new Error("unmanaged-content")))
-        .then(() => writeText(project, join(target, ".upf-source"), expected, null, python)).catch(() => setupFailure(`Bare skill ${skill} could not be installed; inspect its partial directory before resuming.`)) : created));
+  if (!marker.ok) return marker;
+  if (marker.value === expected) {
+    const activeDigest = readContentTree(target);
+    return activeDigest.ok && activeDigest.value === sourceDigest.value
+      ? ok(target)
+      : fail("modified-file", `Active skill ${spec.targetName} differs from its pinned source.`, "Preserve the edited copy and reconcile it explicitly.");
+  }
+  if (marker.value !== null && !marker.value.startsWith(ownerPrefix)) {
+    return fail("modified-file", `Existing skill ${spec.targetName} has different ownership.`, "Preserve the existing skill and reconcile ownership explicitly.");
+  }
+  if (marker.value !== null && marker.value.startsWith(ownerPrefix)) {
+    // Previously owned by UPF at an earlier pinned version: replace cleanly.
+    await rm(target, { recursive: true, force: true });
+  }
+  const existing = await readText(join(target, "SKILL.md"));
+  if (!existing.ok) return existing;
+  if (existing.value !== null) {
+    return fail("unmanaged-file", `Existing skill ${spec.targetName} is unmanaged; preserve it.`, "Move or reconcile the unmanaged skill before rerunning setup.");
+  }
+  const created = await directory(project, target);
+  if (!created.ok) return created;
+  try {
+    const entries = await readdir(target);
+    if (entries.length > 0) return fail("unmanaged-file", `Existing skill directory ${spec.targetName} is not empty.`, "Preserve existing files and reconcile ownership before rerunning.");
+    await cp(source, target, { recursive: true, errorOnExist: false, force: false });
+    if (overrides?.has("SKILL.md")) {
+      await writeFile(join(target, "SKILL.md"), overrides.get("SKILL.md") ?? "", "utf8");
+    }
+    await writeFile(join(target, ".upf-source"), expected, "utf8");
+    return ok(target);
+  } catch {
+    return fail("partial-step", `Skill ${spec.targetName} could not be materialized; inspect its partial directory before resuming.`, "Clean or reconcile the partial skill directory, then rerun setup.");
+  }
 };
 
 export const discoverHost = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<readonly DiscoveredSkill[]>> =>

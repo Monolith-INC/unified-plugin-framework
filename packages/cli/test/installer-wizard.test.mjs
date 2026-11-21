@@ -41,22 +41,22 @@ const questions = ({ answers = [], choices = {}, options = {} } = {}) => {
   return { asked, shown, output, run: project => collectInstallation(io, { project, version: '0.2.2', preview, detectedHosts: ['codex'], ...options }) };
 };
 
-test('fresh wizard asks for explicit consent and previews both hosts before accepting', async () => {
+test('fresh wizard defaults headless discovery on without prompting for host CLIs and previews both hosts before accepting', async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-wizard-fresh-'));
   const planCalls = [];
   const q = questions({
     choices: {
       'Choose hosts': ['codex', 'claude'],
-      'Install missing host CLIs?': ['yes'],
-      'Run headless knowledge discovery?': ['yes'],
       'Apply this setup?': ['install'],
     },
     options: { preview: async (target, plan) => { planCalls.push({target, plan}); return preview(); } },
   });
   const result = await q.run(project);
   assert.equal(result.ok, true, JSON.stringify(result));
+  assert.ok(!q.shown.some(prompt => prompt.title === 'Run headless knowledge discovery?'));
+  assert.ok(!q.shown.some(prompt => prompt.title === 'Install missing host CLIs?'));
   assert.deepEqual(result.value.plan.hosts, ['codex', 'claude']);
-  assert.deepEqual(result.value.plan.consent, {privatePython: false, installHostClis: true, headlessDiscovery: true});
+  assert.deepEqual(result.value.plan.consent, {privatePython: false, installHostClis: false, headlessDiscovery: true});
   assert.equal(result.value.plan.answers.tracker.adapter, 'local');
   assert.equal(result.value.plan.workflows.length, 6);
   assert.deepEqual(planCalls, [{target: project, plan: result.value.plan}]);

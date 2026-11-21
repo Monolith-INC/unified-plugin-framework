@@ -1,13 +1,9 @@
-import { join, posix, relative, sep } from "node:path";
-import { CLAUDE_TOOLING, claudeDeclaration, claudeInstalledPlugins, claudeMarketplaceName, claudeLocalServer, claudeServerAction, mergeClaudeMarketplace, sameServer, type ClaudeServerEntry, type JsonEdit } from "@agent-plugins/adapter-claude/tooling";
-import { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace } from "@agent-plugins/adapter-codex";
-import type { Result as PlanResult } from "@agent-plugins/compiler";
-import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
-import { fail, object, ok, parseJson, type Result } from "@agent-plugins/project";
+import { dirname, join } from "node:path";
+import { fail, nodeProjectFiles, ok, type Result } from "@agent-plugins/project";
 import type { HostName } from "./host-names.js";
-import { NODE_PLUGIN_FACTS_IO, skillNames } from "./plugin-reader.js";
-import { codexAppServerRequest, command, scaled } from "./tooling-process.js";
-import { readText, readToml, writeText } from "./tooling-files.js";
+import { hasValidSkillFrontmatter, HOST_SPECS, HOST_SPECS_FILE, hostSpecMatches, mergeHostSpecReceipt, type HostSpecContract } from "./host-specs.js";
+import { skillNames } from "./plugin-reader.js";
+import { directory, readText, safePath } from "./tooling-files.js";
 import type { HostCli } from "./tooling-host-cli.js";
 
 export interface DiscoveredSkill {
@@ -16,11 +12,13 @@ export interface DiscoveredSkill {
   readonly scope?: string;
   readonly pluginId?: string | null;
 }
-/** A plugin directory the host should load, under the name its skills are namespaced by. */
+
+/** A plugin directory the host should load, under the name its skills are owned by. */
 export interface HostPlugin { readonly name: string; readonly root: string; readonly kind: "framework" | "dependency" }
+
 /**
- * Where one project's setup lives. `canonical` is the project's real path, which hosts record installs under;
- * `claudeState` is Claude Code's user state file, where it keeps local-scope servers per project.
+ * Where one project's setup lives. `canonical` is the project's real path; `claudeState` is retained for optional
+ * external tooling compatibility and is never mutated during zero-CLI installation.
  */
 export interface HostContext {
   readonly program?: string;
@@ -30,24 +28,26 @@ export interface HostContext {
   readonly tools: string;
   readonly python: string;
   readonly knowledgeCommand?: string;
-  /** Time-limit multiple for host commands; set only when retrying a timeout. */
+  /** Time-limit multiple for optional commands; set only when retrying a timeout. */
   readonly patience?: number;
 }
 
 /** What setup needs from the user's environment, read once at the program edge. */
 export interface HostEnvironment { readonly claudeState: string; readonly hostCli?: HostCli; readonly patience?: number }
 
-/** One host's names, paths and commands; setup steps stay host-neutral and ask this record. */
+/** One host's spec-driven project layout and deterministic zero-CLI operations. */
 export interface HostTooling {
   readonly label: string;
   /** What setup changes for this host, as the installer shows it before asking to apply. */
   readonly changes: string;
-  /** Where the framework's own payloads for this host live, relative to the tools root. */
+  /** Legacy host payload folder relative to tools root (retained for path helpers). */
   readonly frameworkDir: string;
-  /** The host manifest written beside a staged dependency source. */
+  /** The host manifest path defined by this host's spec. */
   readonly manifest: string;
-  /** Project folder the host reads unnamespaced skills from. */
+  /** Project folder the host reads project-local skills from. */
   readonly bareSkills: string;
+  /** Pinned host specification contract recorded in `.agent-plugins/host-specs.json`. */
+  readonly spec: HostSpecContract;
   readonly catalog: (context: HostContext, plugins: readonly HostPlugin[]) => Promise<Result<string>>;
   readonly register: (context: HostContext) => Promise<Result<string>>;
   readonly registered: (context: HostContext) => Promise<Result<boolean>>;
@@ -55,138 +55,85 @@ export interface HostTooling {
   readonly discover: (context: HostContext) => Promise<Result<readonly DiscoveredSkill[]>>;
 }
 
-const record = (value: unknown): Readonly<Record<string, unknown>> => object(value) ? value : {};
-const conflict = (label: string, path: string, detail: string): Result<never> => fail("host-configuration-conflict",
-  `Existing ${label} configuration in ${path} differs from this setup: ${detail}`, "Preserve it; reconcile that entry, then rerun setup.");
-const planDetail = (planned: PlanResult<unknown>): string => planned.ok ? "" : planned.diagnostics.map(({ message }) => message).join(" ");
-/** One read of a JSON file: its text guards the later write, its value is `null` when the file is absent. */
-interface JsonDocument { readonly text: string | null; readonly value: unknown }
-const readDocument = (path: string): Promise<Result<JsonDocument>> => readText(path).then((read) => !read.ok ? read
-  : read.value === null ? ok({ text: null, value: null }) : withText(read.value, parseJson(read.value)));
-const withText = (text: string, parsed: Result<unknown>): Result<JsonDocument> => parsed.ok ? ok({ text, value: parsed.value }) : parsed;
-const written = (context: HostContext, path: string, previous: string | null, edit: JsonEdit): Promise<Result<string>> => {
-  switch (edit.kind) {
-    case "unchanged": return Promise.resolve(ok(path));
-    case "write": return writeText(context.project, path, `${JSON.stringify(edit.document, null, 2)}\n`, previous, context.python);
+const registerSpec = async (context: HostContext, host: HostName): Promise<Result<string>> => {
+  const path = join(context.project, HOST_SPECS_FILE);
+  if (!await safePath(context.project, path)) {
+    return fail("symlink-escape", "The host specification receipt path escapes the project or follows a symbolic link.",
+      "Preserve the linked path and choose an unlinked location inside the project.");
   }
+  const dir = await directory(context.project, dirname(path));
+  if (!dir.ok) return dir;
+  const raw = await nodeProjectFiles.read(path)();
+  if (!raw.ok) return raw;
+  const next = mergeHostSpecReceipt(raw.value, host);
+  return nodeProjectFiles.write(path, next, raw.value)().then((saved) => saved.ok ? ok(path) : saved);
 };
-/** Read once, plan the edit purely, then write only a changed document. */
-const editJson = (context: HostContext, path: string, label: string, plan: (value: unknown) => PlanResult<JsonEdit>): Promise<Result<string>> =>
-  readDocument(path).then((document) => {
-    const planned = document.ok ? plan(document.value.value) : undefined;
-    return !document.ok ? document : planned?.ok !== true ? conflict(label, path, planned === undefined ? "" : planDetail(planned))
-      : written(context, path, document.value.text, planned.value);
-  });
-const knowledge = <A>(context: HostContext, absent: A, present: (command: string) => Promise<Result<A>>): Promise<Result<A>> =>
-  context.knowledgeCommand === undefined ? Promise.resolve(ok(absent)) : present(context.knowledgeCommand);
 
-/** Skills a plugin directory exposes through its host manifest's `skills` path. */
-const pluginSkills = (root: string, name: string, manifest: string): readonly DiscoveredSkill[] => {
-  const raw = NODE_PLUGIN_FACTS_IO.readJson(join(root, manifest));
-  const declared = raw.kind === "value" ? record(raw.value).skills : undefined;
-  const dir = join(root, typeof declared === "string" ? declared : "skills");
-  return skillNames(dir).map((skill) => ({ name: `${name}:${skill}`, path: join(dir, skill, "SKILL.md") }));
+const specRegistered = async (context: HostContext, host: HostName): Promise<Result<boolean>> => {
+  const path = join(context.project, HOST_SPECS_FILE);
+  const raw = await nodeProjectFiles.read(path)();
+  return raw.ok ? ok(hostSpecMatches(raw.value, host)) : raw;
 };
-const bareSkills = (context: HostContext, folder: string): readonly DiscoveredSkill[] =>
-  skillNames(join(context.project, folder)).map((skill) => ({ name: skill, path: join(context.project, folder, skill, "SKILL.md") }));
 
-// Codex: project TOML registers a local marketplace; `codex plugin add` activates; the app server reports discovery.
-const CODEX_CONFIG = ".codex/config.toml";
-const codexRegistration = async (context: HostContext): Promise<Result<{ readonly old: string | null; readonly addition: string }>> => {
-  const path = join(context.project, CODEX_CONFIG);
-  const [old, parsed] = await Promise.all([readText(path), readToml(context.python, path, context.project)]);
-  const addition = parsed.ok ? codexToolingRegistration(parsed.value, { project: context.project, marketplace: context.tools,
-    ...(context.knowledgeCommand === undefined ? {} : { knowledgeCommand: context.knowledgeCommand }) }) : undefined;
-  return !old.ok ? old : !parsed.ok ? parsed : addition?.ok !== true ? conflict("Codex", path, addition === undefined ? "" : planDetail(addition))
-    : ok({ old: old.value, addition: addition.value });
+/**
+ * Deterministic, zero-CLI skill discovery directly from the host's project-local skills directory (`.agents/skills` or
+ * `.claude/skills`). Verifies symlink containment and Agent Skills YAML frontmatter without launching any host CLI.
+ */
+const discoverLocalSkills = async (context: HostContext, skillsDir: string): Promise<Result<readonly DiscoveredSkill[]>> => {
+  const root = join(context.project, skillsDir);
+  if (!await safePath(context.project, root)) {
+    return fail("symlink-escape", `The host skills directory (${skillsDir}) escapes the project or follows a symbolic link.`,
+      "Preserve the linked path and choose an unlinked location inside the project.");
+  }
+  const names = skillNames(root);
+  const checked = await Promise.all(names.map(async (name) => {
+    const skillDir = join(root, name);
+    const skillFile = join(skillDir, "SKILL.md");
+    const contained = await safePath(context.project, skillDir) && await safePath(context.project, skillFile);
+    if (!contained) return { kind: "escape" as const, name, path: skillFile };
+    const read = await readText(skillFile);
+    if (!read.ok || read.value === null) return { kind: "invalid" as const, name, path: skillFile };
+    return hasValidSkillFrontmatter(read.value, name)
+      ? { kind: "valid" as const, skill: { name, path: skillFile, scope: "repo" } satisfies DiscoveredSkill }
+      : { kind: "invalid" as const, name, path: skillFile };
+  }));
+  const escaped = checked.find((entry) => entry.kind === "escape");
+  if (escaped !== undefined) {
+    return fail("symlink-escape", `Skill ${escaped.name} escapes the project or follows a symbolic link.`,
+      "Preserve the linked path and reconcile the active skill directory.");
+  }
+  return ok(checked.flatMap((entry) => entry.kind === "valid" ? [entry.skill] : []));
 };
-const codexCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Promise<Result<string>> => {
-  const path = join(context.tools, ".agents/plugins/marketplace.json");
-  return readDocument(path).then((document) => {
-    const merged = document.ok ? mergeCodexMarketplace(document.value.value, plugins.map(({ name }) => name)) : undefined;
-    return !document.ok ? document : merged?.ok !== true ? conflict("Codex marketplace", path, merged === undefined ? "" : planDetail(merged))
-      : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text, context.python);
-  });
-};
-const toCodexSkill = (skill: unknown): readonly DiscoveredSkill[] =>
-  object(skill) && typeof skill.name === "string" && typeof skill.path === "string"
-    ? [{
-        name: skill.name,
-        path: skill.path,
-        ...(typeof skill.scope === "string" ? { scope: skill.scope } : {}),
-        ...(typeof skill.pluginId === "string" || skill.pluginId === null ? { pluginId: skill.pluginId } : {}),
-      }]
-    : [];
-const codexSkills = (reply: unknown): Result<readonly DiscoveredSkill[]> => {
-  const result = object(reply) && object(reply.result) ? reply.result : {};
-  const entries = Array.isArray(result.data) ? result.data : [];
-  const errors = entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.errors) ? entry.errors : []);
-  return errors.length > 0 ? fail("host-skill-errors", "The host reported skill discovery errors.", "Correct the reported skill installation through its supported installer; then repeat discovery.")
-    : ok(entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.skills) ? entry.skills : []).flatMap(toCodexSkill));
-};
+
 const CODEX = Object.freeze<HostTooling>({
-  label: "Codex", changes: "Codex configuration (.codex/config.toml) and plugin registrations",
-  frameworkDir: "plugins", manifest: ".codex-plugin/plugin.json", bareSkills: ".agents/skills",
-  catalog: codexCatalog,
-  register: (context) => codexRegistration(context).then((found) => !found.ok ? found : found.value.addition === "" ? ok(CODEX_CONFIG)
-    : writeText(context.project, join(context.project, CODEX_CONFIG), `${found.value.old ?? ""}\n${found.value.addition}\n`, found.value.old, context.python)),
-  registered: (context) => codexRegistration(context).then((found) => found.ok ? ok(found.value.addition === "") : found),
-  activate: (context, plugin) => command(context.program ?? "codex", CODEX_TOOLING.install(plugin.name), context.project, scaled(120_000, context.patience)),
-  discover: (context) => codexAppServerRequest(context.project, CODEX_TOOLING.discovery(context.project), scaled(25_000, context.patience), context.program).then((reply) => reply.ok ? codexSkills(reply.value) : reply),
+  label: "Codex",
+  changes: "Codex project skills (.agents/skills), hooks (.codex/hooks.json), and host spec receipt (.agent-plugins/host-specs.json)",
+  frameworkDir: "plugins",
+  manifest: ".codex-plugin/plugin.json",
+  bareSkills: HOST_SPECS.codex.skillsDir,
+  spec: HOST_SPECS.codex,
+  catalog: (_context, _plugins) => Promise.resolve(ok(HOST_SPECS_FILE)),
+  register: (context) => registerSpec(context, "codex"),
+  registered: (context) => specRegistered(context, "codex"),
+  activate: (_context, plugin) => Promise.resolve(ok(plugin.name)),
+  discover: (context) => discoverLocalSkills(context, HOST_SPECS.codex.skillsDir),
 });
 
-// Claude Code: a directory marketplace named for this project, declared and installed at local scope; plugins load in place.
-const claudeMarketplace = (context: HostContext): string => claudeMarketplaceName(context.canonical);
-const serverEntry = (context: HostContext, knowledgeCommand: string): ClaudeServerEntry => ({ command: knowledgeCommand, args: ["--project", context.project] });
-const claudeCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Promise<Result<string>> =>
-  editJson(context, join(context.tools, CLAUDE_TOOLING.catalog), "Claude Code marketplace", (value) => mergeClaudeMarketplace(value, claudeMarketplace(context),
-    plugins.map(({ name, root }) => ({ name, source: catalogSource(context.tools, root) }))));
-/** Claude Code reads catalog sources as `./`-relative paths with forward slashes on every platform. */
-const catalogSource = (tools: string, root: string): string => `./${relative(tools, root).split(sep).join(posix.sep)}`;
-const declared = (context: HostContext, settings: unknown): Result<boolean> => {
-  switch (claudeDeclaration(settings, claudeMarketplace(context), context.tools)) {
-    case "absent": return ok(false);
-    case "declared": return ok(true);
-    case "conflict": return conflict("Claude Code", CLAUDE_TOOLING.settings, `marketplace ${claudeMarketplace(context)} is declared for another folder.`);
-  }
-};
-const claudeDeclared = (context: HostContext): Promise<Result<boolean>> =>
-  readDocument(join(context.project, CLAUDE_TOOLING.settings)).then((document) => document.ok ? declared(context, document.value.value) : document);
-const claude = (context: HostContext, args: readonly string[]): Promise<Result<string>> => command(context.program ?? "claude", args, context.canonical, scaled(120_000, context.patience));
-const claudeLocal = (context: HostContext): Promise<Result<unknown>> =>
-  readDocument(context.claudeState).then((document) => document.ok ? ok(claudeLocalServer(document.value.value, context.canonical)) : document);
-const applyServer = (context: HostContext, entry: ClaudeServerEntry, old: unknown): Promise<Result<string>> => {
-  switch (claudeServerAction(old, entry)) {
-    case "keep": return Promise.resolve(ok(KNOWLEDGE_SERVER));
-    case "add": return claude(context, CLAUDE_TOOLING.addServer(entry));
-    case "replace": return claude(context, CLAUDE_TOOLING.removeServer).then((removed) => removed.ok ? claude(context, CLAUDE_TOOLING.addServer(entry)) : removed);
-    case "conflict": return Promise.resolve(conflict("Claude Code MCP", context.claudeState, `server ${KNOWLEDGE_SERVER} for this project runs another command.`));
-  }
-};
-const claudeServer = (context: HostContext): Promise<Result<string>> => knowledge(context, KNOWLEDGE_SERVER, (knowledgeCommand) =>
-  claudeLocal(context).then((old) => old.ok ? applyServer(context, serverEntry(context, knowledgeCommand), old.value) : old));
-const claudeServerRegistered = (context: HostContext): Promise<Result<boolean>> => knowledge(context, true, (knowledgeCommand) =>
-  claudeLocal(context).then((old) => old.ok ? ok(sameServer(old.value, serverEntry(context, knowledgeCommand))) : old));
-const claudeRegister = (context: HostContext): Promise<Result<string>> => claudeDeclared(context).then((known) => !known.ok ? known
-  : known.value ? claudeServer(context)
-    : claude(context, CLAUDE_TOOLING.addMarketplace(context.tools)).then((added) => added.ok ? claudeServer(context) : added));
-const claudeSkills = (context: HostContext, listed: string): Result<readonly DiscoveredSkill[]> => {
-  const parsed = parseJson(listed);
-  return parsed.ok ? ok([...claudeInstalledPlugins(parsed.value, context.canonical, claudeMarketplace(context))
-    .flatMap(({ name, root }) => pluginSkills(root, name, CLAUDE_TOOLING.manifest)), ...bareSkills(context, CLAUDE_TOOLING.skills)]) : parsed;
-};
 const CLAUDE = Object.freeze<HostTooling>({
-  label: "Claude Code", changes: `Claude Code local settings (${CLAUDE_TOOLING.settings}), ${CLAUDE_TOOLING.skills}, and local-scope plugin installs`,
-  frameworkDir: "hosts/claude", manifest: CLAUDE_TOOLING.manifest, bareSkills: CLAUDE_TOOLING.skills,
-  catalog: claudeCatalog,
-  register: claudeRegister,
-  registered: (context) => Promise.all([claudeDeclared(context), claudeServerRegistered(context)])
-    .then(([market, server]) => !market.ok ? market : !server.ok ? server : ok(market.value && server.value)),
-  activate: (context, plugin) => claude(context, CLAUDE_TOOLING.install(plugin.name, claudeMarketplace(context))),
-  discover: (context) => claude(context, CLAUDE_TOOLING.list).then((listed) => listed.ok ? claudeSkills(context, listed.value) : listed),
+  label: "Claude Code",
+  changes: "Claude Code project skills (.claude/skills), hooks (.claude/settings.local.json), and host spec receipt (.agent-plugins/host-specs.json)",
+  frameworkDir: "hosts/claude",
+  manifest: ".claude-plugin/plugin.json",
+  bareSkills: HOST_SPECS.claude.skillsDir,
+  spec: HOST_SPECS.claude,
+  catalog: (_context, _plugins) => Promise.resolve(ok(HOST_SPECS_FILE)),
+  register: (context) => registerSpec(context, "claude"),
+  registered: (context) => specRegistered(context, "claude"),
+  activate: (_context, plugin) => Promise.resolve(ok(plugin.name)),
+  discover: (context) => discoverLocalSkills(context, HOST_SPECS.claude.skillsDir),
 });
 
 /** Claude Code keeps its user state in `.claude.json` inside `CLAUDE_CONFIG_DIR` when set, otherwise in the home folder. */
-export const claudeStateFile = (home: string, configDir: string | undefined): string => join(configDir ?? home, CLAUDE_TOOLING.state);
+export const claudeStateFile = (home: string, configDir: string | undefined): string => join(configDir ?? home, ".claude.json");
 
 export const HOSTS: Readonly<Record<HostName, HostTooling>> = Object.freeze({ codex: CODEX, claude: CLAUDE });

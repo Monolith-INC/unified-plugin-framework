@@ -38,12 +38,19 @@ test("malformed JSON and hostile layouts yield diagnostics without throwing", ()
   writeFileSync(join(root, "mcp.json"), "{");
 
   assert.doesNotThrow(() => loadPluginRoot(root));
-  const inspection = loadPluginRoot(root);
-  assert.ok(inspection.diagnostics.some((d) => d.code === diagnosticCodes.manifestUnreadable));
-  assert.ok(inspection.diagnostics.some((d) => d.code === diagnosticCodes.mcpServersInvalidType));
-  assert.ok(
-    inspection.skills?.some((skill) => skill.path === "skills/weird name/SKILL.md") ?? false,
+  const rejected = loadPluginRoot(root);
+  assert.ok(rejected.diagnostics.some((d) => d.code === diagnosticCodes.manifestUnreadable));
+  assert.equal(rejected.skills, undefined);
+  assert.equal(rejected.mcpServers, undefined);
+
+  // With a valid v1.0.0 manifest, bad mcp.json is isolated and sibling skills still inspect cleanly without throwing.
+  writeFileSync(
+    join(root, "plugin.json"),
+    JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "hostile-valid", version: "1.0.0" }),
   );
+  const isolated = loadPluginRoot(root);
+  assert.ok(isolated.diagnostics.some((d) => d.code === diagnosticCodes.mcpServersInvalidType));
+  assert.ok(isolated.skills?.some((skill) => skill.path === "skills/weird name/SKILL.md") ?? false);
 });
 
 test("nested executable-looking files are never treated as portable skills", () => {

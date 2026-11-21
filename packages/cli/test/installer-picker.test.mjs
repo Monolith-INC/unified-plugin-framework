@@ -14,11 +14,14 @@ const confirmation = {
 };
 const press = (state, ...keys) => keys.reduce(reducePicker, state);
 
-test('checklist requires one choice and supports the All row and a toggle', () => {
+test('checklist requires one choice and supports toggling the All row with space or a', () => {
   const start = createPicker(checklist);
   assert.deepEqual(press(start, 'return'), start);
   assert.deepEqual(press(start, 'space', 'return'), { kind: 'picked', values: ['codex', 'claude'] });
+  assert.deepEqual(press(start, 'space', 'space', 'return'), start);
   assert.deepEqual(press(start, 'a', 'a', 'return'), start);
+  const allSelected = createPicker({ ...checklist, initial: ['codex', 'claude'] });
+  assert.deepEqual(press(allSelected, 'space', 'down', 'space', 'return'), { kind: 'picked', values: ['codex'] });
   const preselected = createPicker({ ...checklist, initial: ['claude'] });
   assert.deepEqual(press(preselected, 'down', 'space', 'return'), { kind: 'picked', values: ['codex', 'claude'] });
   assert.deepEqual(press(preselected, 'return'), { kind: 'picked', values: ['claude'] });

@@ -15,6 +15,8 @@
     "release:assets": "node packages/cli/scripts/release-assets.mjs",
     "typecheck": "pnpm -r --filter \"./packages/*\" typecheck",
     "test": "pnpm -r --no-bail --filter \"./packages/*\" test",
+    "specs:verify": "node scripts/check-host-specs.mjs",
+    "specs:check-upstream": "node scripts/check-host-specs.mjs --upstream",
     "release:distribution": "node packages/cli/scripts/release-distribution.mjs"
   },
   "devDependencies": {

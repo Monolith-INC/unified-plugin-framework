@@ -420,61 +420,55 @@ test("loadPluginRoot discovers skills and v1.0.0 mcp.json with zero diagnostics"
   assert.deepEqual(inspection.diagnostics, []);
 });
 
-test("loadPluginRoot keeps discovered skills when manifest JSON is a non-object", () => {
+test("loadPluginRoot rejects the plugin without loading components when manifest JSON is a non-object", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-null-manifest-"));
   writeFileSync(join(root, "plugin.json"), "null");
   mkdirSync(join(root, "skills", "hello"), { recursive: true });
   writeFileSync(
     join(root, "skills", "hello", "SKILL.md"),
-    "---\nname: hello\ndescription: kept\n---\n\n# Hello\n",
+    "---\nname: hello\ndescription: must not load\n---\n\n# Hello\n",
   );
 
   const inspection = loadPluginRoot(root);
   assert.equal(inspection.manifest, undefined);
-  assert.deepEqual(inspection.skills, [
-    {
-      name: "hello",
-      path: "skills/hello/SKILL.md",
-      description: "kept",
-    },
-  ]);
+  assert.equal(inspection.skills, undefined);
+  assert.equal(inspection.mcpServers, undefined);
   assert.deepEqual(
     inspection.diagnostics.map((diagnostic) => diagnostic.code),
     [diagnosticCodes.manifestInvalidType],
   );
 });
 
-test("loadPluginRoot reports unreadable for malformed plugin.json", () => {
+test("loadPluginRoot rejects the plugin without loading components for malformed plugin.json", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-bad-json-"));
   writeFileSync(join(root, "plugin.json"), "{");
   mkdirSync(join(root, "skills", "hello"), { recursive: true });
   writeFileSync(join(root, "skills", "hello", "SKILL.md"), "---\nname: hello\n---\n");
 
   const inspection = loadPluginRoot(root);
-  assert.deepEqual(inspection.skills, [
-    {
-      name: "hello",
-      path: "skills/hello/SKILL.md",
-    },
-  ]);
+  assert.equal(inspection.skills, undefined);
+  assert.equal(inspection.mcpServers, undefined);
   assert.equal(inspection.diagnostics[0]?.code, diagnosticCodes.manifestUnreadable);
   assert.equal(inspection.diagnostics[0]?.message, "Plugin manifest could not be parsed as JSON.");
 });
 
-test("loadPluginRoot keeps discovered skills when plugin.json is missing", () => {
+test("loadPluginRoot rejects the plugin without loading components when plugin.json is missing or fatally invalid", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-missing-manifest-"));
   mkdirSync(join(root, "skills", "hello"), { recursive: true });
   writeFileSync(join(root, "skills", "hello", "SKILL.md"), "---\nname: hello\n---\n");
 
-  const inspection = loadPluginRoot(root);
-  assert.deepEqual(inspection.skills, [
-    {
-      name: "hello",
-      path: "skills/hello/SKILL.md",
-    },
-  ]);
-  assert.equal(inspection.diagnostics[0]?.code, diagnosticCodes.manifestUnreadable);
-  assert.equal(inspection.diagnostics[0]?.message, "Plugin manifest could not be read.");
+  const missing = loadPluginRoot(root);
+  assert.equal(missing.skills, undefined);
+  assert.equal(missing.mcpServers, undefined);
+  assert.equal(missing.diagnostics[0]?.code, diagnosticCodes.manifestUnreadable);
+  assert.equal(missing.diagnostics[0]?.message, "Plugin manifest could not be read.");
+
+  writeFileSync(join(root, "plugin.json"), JSON.stringify({ $schema: "https://agent-plugins.org/schemas/9.9.9/plugin.schema.json", name: "future" }));
+  const fatal = loadPluginRoot(root);
+  assert.equal(fatal.manifest, undefined);
+  assert.equal(fatal.skills, undefined);
+  assert.equal(fatal.mcpServers, undefined);
+  assert.ok(fatal.diagnostics.some((d) => d.code === diagnosticCodes.manifestSchemaUnsupported));
 });
 
 test("loadPluginRoot discovers only immediate skills deterministically and ignores nested skills", () => {

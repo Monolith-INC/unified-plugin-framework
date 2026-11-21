@@ -66,6 +66,7 @@ jobs:
       - name: Validate root Agent Plugins v1.0.0 compliance and repo hygiene
         run: |
           pnpm agent-plugin validate .
+          pnpm specs:verify
           test -z "$(git ls-files .claude .codex .cursor .agents .agent-plugins .harness)"
 
       # The Claude adapter's payload:verify also runs Claude Code's own validator on every built payload.
