@@ -151,7 +151,7 @@ const buildProposedActions = (context: RepairContext): readonly RepairAction[] =
           kind: "propose-with-consent" as const,
           id: "reinstall-pinned-plugins",
           description: `Reinstall the pinned plugins for ${context.workflow} so the installed files match the framework lock.`,
-          command: `agent-plugin project bootstrap --project <project-directory> --apply`,
+          command: `agent-plugin project bootstrap --input <project-directory>/.upf-tools/setup-plan.json --project <project-directory> --apply`,
           confirmation: confirmFix(`Reinstall the pinned plugins for ${context.workflow} to clear the version or lock mismatch?`),
         }),
       ]);
@@ -161,7 +161,7 @@ const buildProposedActions = (context: RepairContext): readonly RepairAction[] =
           kind: "propose-with-consent" as const,
           id: "install-missing-plugins",
           description: `Install and enable the missing or incompatible plugin dependency for ${context.workflow}.`,
-          command: `agent-plugin project bootstrap --project <project-directory> --apply`,
+          command: `agent-plugin project bootstrap --input <project-directory>/.upf-tools/setup-plan.json --project <project-directory> --apply`,
           confirmation: confirmFix(`Install and enable the required plugin for ${context.workflow} now?`),
         }),
       ]);
@@ -181,7 +181,7 @@ const buildProposedActions = (context: RepairContext): readonly RepairAction[] =
           kind: "propose-with-consent" as const,
           id: "rebuild-project-state",
           description: `Repair the project settings or shared knowledge store configuration while preserving existing user files.`,
-          command: `agent-plugin project bootstrap --project <project-directory> --apply`,
+          command: `agent-plugin project bootstrap --input <project-directory>/.upf-tools/setup-plan.json --project <project-directory> --apply`,
           confirmation: confirmFix("Repair the project configuration while keeping existing files intact?"),
         }),
       ]);

@@ -7,13 +7,13 @@ import test from "node:test";
 import { finishKnowledge } from "../dist/tooling-acquisition.js";
 import { boundedOutput } from "../dist/tooling-process.js";
 
-test("acquisition skips a signed-out host and publishes its marker only after verification", { skip: process.platform === "win32" }, async () => {
+test("acquisition skips a signed-out host and publishes its marker only after zero-MCP catalog verification", { skip: process.platform === "win32" }, async () => {
   const fixture = await mkdtemp(join(tmpdir(), "upf-acquisition-"));
   const project = join(fixture, "project");
   const bin = join(fixture, "bin");
-  const runtime = join(project, ".project-knowledge/runtime/bin");
-  const root = join(project, "knowledge");
-  await Promise.all([bin, runtime, root].map((path) => mkdir(path, { recursive: true })));
+  const scriptsDir = join(project, ".upf-tools/plugins/monolithic-agent-knowledge-store/source/scripts");
+  const root = join(project, "Project_Knowledge");
+  await Promise.all([bin, scriptsDir, root].map((path) => mkdir(path, { recursive: true })));
   const invocation = join(fixture, "invocation.json");
   const verification = join(fixture, "verified");
   const marker = join(root, ".upf-discovery-complete");
@@ -31,10 +31,11 @@ else {
   console.log("UPF_DISCOVERY_COMPLETE");
 }
 `, { mode: 0o700 });
-  await writeFile(join(runtime, "upf-project-knowledge"), `#!${process.execPath}
-const fs = require("node:fs");
-if (!process.argv.includes("--verify") || fs.existsSync(${JSON.stringify(marker)})) process.exit(1);
-fs.writeFileSync(${JSON.stringify(verification)}, "verified");
+  await writeFile(join(scriptsDir, "query.py"), `import sys, pathlib
+if "catalog" not in sys.argv or pathlib.Path(${JSON.stringify(marker)}).exists():
+    raise SystemExit(1)
+pathlib.Path(${JSON.stringify(verification)}).write_text("verified")
+print("id\\ttier\\ttitle\\noverview\\t1\\tProject overview")
 `, { mode: 0o700 });
   const report = { status: "action-required", steps: [
     ...["knowledge-runtime", "knowledge-settings", "host-discovery"].map((step) => ({ step, status: "ready", evidence: "fixture" })),
@@ -44,13 +45,14 @@ fs.writeFileSync(${JSON.stringify(verification)}, "verified");
   const python = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
   process.env.PATH = bin;
   try {
-    const plan = { hosts: ["codex", "claude"], python, knowledge: { knowledgeRoot: "knowledge" }, consent: { headlessDiscovery: true } };
+    const plan = { hosts: ["codex", "claude"], python, knowledge: { knowledgeRoot: "Project_Knowledge" }, consent: { headlessDiscovery: true } };
     const result = await finishKnowledge(report, project, plan, {});
     assert.equal(result.status, "ready");
     const recorded = JSON.parse(await readFile(invocation, "utf8"));
     assert.notEqual(recorded.cwd, project);
     assert.match(recorded.cwd, /upf-discovery-/);
-    assert.ok(recorded.args.includes("--strict-mcp-config"));
+    assert.ok(!recorded.args.includes("--strict-mcp-config"));
+    assert.match(recorded.args.at(-1), /query\.py.*curate/);
     assert.equal(await readFile(verification, "utf8"), "verified");
     assert.equal(await readFile(marker, "utf8"), "verified\n");
   } finally {
@@ -67,7 +69,7 @@ test("when every pinned host is signed out, discovery reports sign-in as the per
   const fixture = await mkdtemp(join(tmpdir(), "upf-acquisition-signin-"));
   const project = join(fixture, "project");
   const bin = join(fixture, "bin");
-  await Promise.all([bin, join(project, ".project-knowledge/runtime/bin"), join(project, "knowledge")].map((path) => mkdir(path, { recursive: true })));
+  await Promise.all([bin, join(project, ".upf-tools/plugins/monolithic-agent-knowledge-store/source/scripts"), join(project, "Project_Knowledge")].map((path) => mkdir(path, { recursive: true })));
   await writeFile(join(bin, "codex"), `#!${process.execPath}
 if (process.argv[2] === "--version") console.log("codex-cli 0.166.0");
 else process.exit(1);
@@ -77,7 +79,7 @@ else process.exit(1);
     { step: "knowledge-content", status: "action-required", failure: { code: "knowledge-discovery-needed" } },
   ] };
   const python = execFileSync("python3", ["-c", "import sys; print(sys.executable)"], { encoding: "utf8" }).trim();
-  const plan = { hosts: ["codex"], python, knowledge: { knowledgeRoot: "knowledge" }, consent: { headlessDiscovery: true } };
+  const plan = { hosts: ["codex"], python, knowledge: { knowledgeRoot: "Project_Knowledge" }, consent: { headlessDiscovery: true } };
   const result = await finishKnowledge(report, project, plan, {}, ["codex"], new Map(), { PATH: bin });
   const content = result.steps.find(({ step }) => step === "knowledge-content");
   assert.equal(content.failure.code, "host-sign-in-needed");

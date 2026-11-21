@@ -1,6 +1,6 @@
 # Project Knowledge Qualification
 
-Project Knowledge is qualified via the standalone repository **[Monolith-INC/monolithic-agent-knowledge-store](https://github.com/Monolith-INC/monolithic-agent-knowledge-store)** (`v0.3.0`), pinned in `io.github.monolith-inc.upf/onboarded.lock.json`.
+Project Knowledge is qualified via the standalone repository **[Monolith-INC/monolithic-agent-knowledge-store](https://github.com/Monolith-INC/monolithic-agent-knowledge-store)** (`v0.4.1`), pinned in `io.github.monolith-inc.upf/onboarded.lock.json`.
 
 ## Verified Releases & CI Evidence
 
@@ -9,6 +9,7 @@ Project Knowledge is qualified via the standalone repository **[Monolith-INC/mon
   - `v0.1.0` — store, setup, migration, curation, lineage validation, projected retrieval (`52` upstream + `11` owned tests green on Ubuntu, macOS, Windows Python 3.12).
   - `v0.2.0` — agent wiring hooks (`orient`, `inject`, `gate`, `session-end`), default-branch & non-Git refresh, host qualification matrix (`docs/host-qualification.md`), installer (`scripts/install.sh`), and GitHub Release packaging ([Run `44877821971`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/actions/runs/44877821971), `52` upstream + `16` owned tests green on Ubuntu, macOS, Windows Python 3.12).
   - `v0.3.0` — `ingest-docs`, `publish-docs`, `apply-doc-patch`, and append-only `flow-log.jsonl` recovery ([Release `v0.3.0`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/releases/tag/v0.3.0), [Run `44878821240`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/actions/runs/44878821240), `52` upstream + `19` owned tests green on Ubuntu, macOS, Windows Python 3.12).
+  - `v0.4.0` / `v0.4.1` — host hook wiring (`install.sh` for Claude/Codex/Cursor), `bin/maks` pinned launcher, `stdin` JSON hook parsing, `Bash` allowlist, active-session tracking, repeatable `--source`/`--link`, `curate-glossary`, clean `catalog.tsv`, dynamic `manifest.md`, absolute hook paths, subdirectory `cwd` walk-up, and legacy `.project-knowledge.json` reconciliation ([Release `v0.4.1`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/releases/tag/v0.4.1)).
 
 ## Host Coverage & Unsupported Surfaces
 

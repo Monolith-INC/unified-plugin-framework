@@ -1,18 +1,19 @@
-import { cp, lstat, mkdir, readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "@agent-plugins/compiler";
 import { installVendorBundle } from "@agent-plugins/installer";
 import { nodeProjectFiles, object, ok, fail, type Result } from "@agent-plugins/project";
 import type { BootstrapInput } from "./tooling-input.js";
 import { command, scaled, sequence } from "./tooling-process.js";
-import { backupOwnedText, directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
-import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, frameworkPluginRoot, frameworkTarget, toolsRoot } from "./tooling-host.js";
+import { backupOwnedText, directory, readText, safePath, setupFailure, writeText } from "./tooling-files.js";
+import { FRAMEWORK_PLUGINS, frameworkPluginRoot, frameworkTarget, pluginTarget, toolsRoot } from "./tooling-host.js";
 import type { HostName } from "./host-names.js";
 import { resolveSourceBundle } from "./bundle-source.js";
 import { readOwnership, recordOwnership, type OwnershipLedger } from "./tooling-ownership.js";
 
-export const pythonRuntime = (project: string): string => join(project, ".project-knowledge/runtime", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-export const knowledgeExecutable = (project: string): string => join(project, ".project-knowledge/runtime/bin/upf-project-knowledge");
+/** Path to the staged standalone knowledge store's zero-MCP stdlib Python query/curate CLI. */
+export const knowledgeQueryScript = (project: string): string =>
+  join(pluginTarget(project, "monolithic-agent-knowledge-store"), "source", "scripts", "query.py");
 
 export const installSkills = (project: string, host: HostName): Promise<Result<string>> =>
   sequence(FRAMEWORK_PLUGINS, (name) => installPlugin(project, host, name), "Framework payloads installed.");
@@ -42,59 +43,31 @@ export const installKnowledge = async (project: string, input: BootstrapInput, p
     .then((checked) => checked.ok ? ok(input.python) : fail("python-missing", "Python 3.12+ is required for the standalone knowledge store.",
       "Install Python 3.12 or newer, or pass --python <executable>, then rerun setup."));
 
-const RUNTIME_ENTRY = ".project-knowledge/runtime";
-const directoryIdentity = (path: string): Promise<Result<string | null>> =>
-  lstat(path, { bigint: true }).then((stat) => stat.isDirectory() ? ok(`${stat.dev}:${stat.ino}`) : unmanagedRuntime())
-    .catch((error: unknown) => object(error) && error.code === "ENOENT" ? ok(null) : setupFailure("Could not inspect the knowledge runtime directory."));
-const unmanagedRuntime = (): Result<never> => fail("unmanaged-file", "The knowledge runtime directory is not installer-owned.",
-  "Preserve the current directory and reconcile its ownership before setup.");
-
-/** Reuse an interrupted runtime only while its directory still matches the recorded owner. */
-export const prepareKnowledgeRuntime = async (project: string, python: string): Promise<Result<string>> => {
-  const runtime = join(project, RUNTIME_ENTRY);
-  const [found, ledger, safe] = await Promise.all([directoryIdentity(runtime), readOwnership(project), safePath(project, runtime)]);
-  return !safe ? unmanagedRuntime() : !found.ok ? found : !ledger.ok ? ledger
-    : found.value === null ? createOwnedRuntime(project, runtime, ledger.value, python)
-      : ledger.value.entries[RUNTIME_ENTRY] === found.value ? ok(runtime) : reuseLegacyRuntime(project, runtime, found.value, ledger.value, python);
-};
-
-const saveRuntimeOwner = (project: string, runtime: string, identity: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> =>
-  recordOwnership(project, ledger, RUNTIME_ENTRY, identity, python).then((saved) => saved.ok ? ok(runtime) : saved);
-
-const createOwnedRuntime = (project: string, runtime: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> =>
-  directory(project, join(project, ".project-knowledge")).then((parent) => !parent.ok ? parent
-    : mkdir(runtime, { mode: 0o700 }).then(() => directoryIdentity(runtime))
-      .then((created) => !created.ok ? created : created.value === null ? unmanagedRuntime()
-        : saveRuntimeOwner(project, runtime, created.value, ledger, python)).catch(unmanagedRuntime));
-
-const reuseLegacyRuntime = async (project: string, runtime: string, identity: string, ledger: OwnershipLedger, python: string): Promise<Result<string>> => {
-  const legacy = ledger.entries[RUNTIME_ENTRY] === undefined && await legacyRuntimeInstalled(project, runtime);
-  return legacy ? saveRuntimeOwner(project, runtime, identity, ledger, python) : unmanagedRuntime();
-};
-
-const legacyRuntimeInstalled = async (project: string, runtime: string): Promise<boolean> => {
-  const lib = join(runtime, "lib");
-  const safe = await safePath(project, lib);
-  const versions = safe ? await readdir(lib).catch(() => []) : [];
-  const candidates = versions.filter((name) => /^python3\.\d+$/.test(name)).flatMap((name) =>
-    ["0.1.1", "0.1.2"].map((version) => join(lib, name, "site-packages", `upf_project_knowledge-${version}.dist-info`, "METADATA")));
-  return (await Promise.all(candidates.map((path) => safePath(project, path).then((inside) =>
-    inside ? readText(path).then((read) => read.ok && /^Name: upf-project-knowledge\s*$/m.test(read.value ?? "")) : false)))).some(Boolean);
-};
-const copyRuntime = (source: string): Promise<Result<string>> =>
-  cp(join(FRAMEWORK_ROOT, "runtimes/project-knowledge"), source, { recursive: true, dereference: false,
-    filter: (path) => !["build", "dist", "__pycache__"].some((part) => path.split(/[\\/]/).includes(part)) })
-    .then(() => ok(source)).catch(() => fail("partial-step", "Knowledge runtime source could not be staged.",
-      "Rerun setup to use a fresh installer staging directory."));
-
+/** Writes canonical `project-knowledge.json` for new installs; updates legacy `.project-knowledge.json` if it is the sole locator; fails on conflicts. */
 export const configureKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
-  const path = join(project, ".project-knowledge.json");
-  const existing = await nodeProjectFiles.read(path)();
-  const selected = object(existing.ok ? existing.value : null) ? existing.ok ? existing.value as Readonly<Record<string, unknown>> : {} : {};
+  const visiblePath = join(project, "project-knowledge.json");
+  const legacyPath = join(project, ".project-knowledge.json");
+  const [visible, legacy] = await Promise.all([nodeProjectFiles.read(visiblePath)(), nodeProjectFiles.read(legacyPath)()]);
+  if (!visible.ok) return visible;
+  if (!legacy.ok) return legacy;
+  const visibleObj = object(visible.value) ? (visible.value as Readonly<Record<string, unknown>>) : null;
+  const legacyObj = object(legacy.value) ? (legacy.value as Readonly<Record<string, unknown>>) : null;
+  if (visibleObj !== null && legacyObj !== null && visibleObj.knowledgeRoot !== legacyObj.knowledgeRoot) {
+    return setupFailure("Conflicting knowledge locators found in project-knowledge.json and .project-knowledge.json; reconcile them explicitly.");
+  }
+  const targetPath = visibleObj === null && legacyObj !== null ? legacyPath : visiblePath;
+  const existingValue = visibleObj === null && legacyObj !== null ? legacy.value : visible.value;
+  const selected = visibleObj ?? legacyObj ?? {};
   const conflicts = Object.entries(input.knowledge).some(([key, value]) => selected[key] !== undefined && selected[key] !== value);
-  return !existing.ok ? existing : conflicts ? setupFailure("Saved project knowledge choices differ from the accepted plan; reconcile them explicitly.")
-    : directory(project, join(project, input.knowledge.knowledgeRoot)).then((created) => created.ok
-      ? nodeProjectFiles.write(path, { ...selected, schemaVersion: 1, ...input.knowledge }, existing.value)().then((saved) => saved.ok ? ok(path) : saved) : created);
+  return conflicts
+    ? setupFailure("Saved project knowledge choices differ from the accepted plan; reconcile them explicitly.")
+    : directory(project, join(project, input.knowledge.knowledgeRoot)).then((created) =>
+        created.ok
+          ? nodeProjectFiles.write(targetPath, { ...selected, schemaVersion: 1, ...input.knowledge }, existingValue)().then((saved) =>
+              saved.ok ? ok(targetPath) : saved,
+            )
+          : created,
+      );
 };
 
 export const configureReview = async (project: string, input: BootstrapInput): Promise<Result<string>> => {

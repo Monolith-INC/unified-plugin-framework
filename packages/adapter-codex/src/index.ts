@@ -82,26 +82,29 @@ export function compileCodexPayload(plugin: CanonicalPlugin): Result<VendorBundl
 export function validateCodexBundle(bundle: VendorBundle): readonly Diagnostic[] {
   const common = validateVendorBundle(bundle);
   if (common.length > 0) return common;
-  const diagnostics: Diagnostic[] = [];
-  if (bundle.manifest.vendor !== "codex" || bundle.manifest.adapter.version !== CODEX_ADAPTER_VERSION ||
-      bundle.manifest.adapter.vendorSchemaVersion !== CODEX_SCHEMA_VERSION) {
-    diagnostics.push(diagnostic("codex.bundle.identity", "Bundle is not owned by this Codex adapter."));
-  }
   const paths = new Set<string>(bundle.files.map((file) => file.path));
   const allowed = /^(?:\.codex-plugin\/plugin\.json|skills\/[^/]+\/SKILL\.md|hooks\/hooks\.json|\.mcp\.json)$/;
-  for (const file of bundle.files) {
-    if (!allowed.test(file.path)) diagnostics.push(diagnostic("codex.payload.path", "Unexpected Codex payload path.", file.path));
-  }
   const manifest = parseJson(bundle, MANIFEST_PATH);
-  if (!manifest.ok) diagnostics.push(...manifest.diagnostics);
-  else diagnostics.push(...validateManifest(manifest.value, paths));
-  for (const file of bundle.files.filter((entry) => entry.path.startsWith("skills/"))) {
-    const text = decodeText(file);
-    if (!text.ok || !/^---\n[\s\S]*\n---\n/u.test(text.value)) diagnostics.push(diagnostic("codex.skill.invalid", "Codex Skills require YAML frontmatter.", file.path));
-  }
-  if (paths.has(HOOKS_PATH)) diagnostics.push(...validateHooks(parseJson(bundle, HOOKS_PATH)));
-  if (paths.has(MCP_PATH)) diagnostics.push(...validateMcp(parseJson(bundle, MCP_PATH)));
-  return diagnostics;
+  return [
+    ...(bundle.manifest.vendor !== "codex" || bundle.manifest.adapter.version !== CODEX_ADAPTER_VERSION ||
+        bundle.manifest.adapter.vendorSchemaVersion !== CODEX_SCHEMA_VERSION
+      ? [diagnostic("codex.bundle.identity", "Bundle is not owned by this Codex adapter.")]
+      : []),
+    ...bundle.files
+      .filter((file) => !allowed.test(file.path))
+      .map((file) => diagnostic("codex.payload.path", "Unexpected Codex payload path.", file.path)),
+    ...(manifest.ok ? validateManifest(manifest.value, paths) : manifest.diagnostics),
+    ...bundle.files
+      .filter((entry) => entry.path.startsWith("skills/"))
+      .flatMap((file) => {
+        const text = decodeText(file);
+        return !text.ok || !/^---\n[\s\S]*\n---\n/u.test(text.value)
+          ? [diagnostic("codex.skill.invalid", "Codex Skills require YAML frontmatter.", file.path)]
+          : [];
+      }),
+    ...(paths.has(HOOKS_PATH) ? validateHooks(parseJson(bundle, HOOKS_PATH)) : []),
+    ...(paths.has(MCP_PATH) ? validateMcp(parseJson(bundle, MCP_PATH)) : []),
+  ];
 }
 
 export function planCodexInstallation(bundle: VendorBundle, _target: InstallTarget): Result<InstallPlan> {
@@ -123,24 +126,32 @@ type HookGroup = { readonly matcher?: string; readonly hooks: readonly Hook[] };
 
 function renderHooks(intents: readonly CanonicalHookIntent[]): Result<JsonValue | undefined> {
   if (intents.length === 0) return success(undefined);
-  const hooks: Record<string, HookGroup[]> = {};
-  for (const intent of intents) {
-    const mappings = hookMappings(intent);
-    if (!mappings.ok) return mappings;
-    for (const mapping of mappings.value) {
-      hooks[mapping.event] = [
-        ...(hooks[mapping.event] ?? []),
-        {
-          ...(mapping.matcher === undefined ? {} : { matcher: mapping.matcher }),
-          hooks: [{
-            type: "command",
-            command: [intent.executable, ...intent.arguments].map((part) => JSON.stringify(part)).join(" "),
-            ...(intent.timeoutSeconds === undefined ? {} : { timeout: intent.timeoutSeconds }),
-          }],
-        },
-      ];
-    }
-  }
+  const mapped = intents.map((intent) => ({ intent, mappings: hookMappings(intent) }));
+  const failed = mapped.find(({ mappings }) => !mappings.ok);
+  if (failed !== undefined && !failed.mappings.ok) return failed.mappings;
+  const hooks = mapped.reduce<Readonly<Record<string, readonly HookGroup[]>>>(
+    (acc, { intent, mappings }) =>
+      !mappings.ok
+        ? acc
+        : mappings.value.reduce<Readonly<Record<string, readonly HookGroup[]>>>(
+            (inner, mapping) => ({
+              ...inner,
+              [mapping.event]: [
+                ...(inner[mapping.event] ?? []),
+                {
+                  ...(mapping.matcher === undefined ? {} : { matcher: mapping.matcher }),
+                  hooks: [{
+                    type: "command",
+                    command: [intent.executable, ...intent.arguments].map((part) => JSON.stringify(part)).join(" "),
+                    ...(intent.timeoutSeconds === undefined ? {} : { timeout: intent.timeoutSeconds }),
+                  }],
+                },
+              ],
+            }),
+            acc,
+          ),
+    {},
+  );
   return success({ hooks });
 }
 
@@ -171,37 +182,57 @@ function toolMatcher(kind: CanonicalHookIntent["toolKinds"][number]): Result<str
   }
 }
 
+const renderMcpServer = (server: PluginMcpServer, name: string): Result<readonly [string, JsonValue]> => {
+  switch (server.transport) {
+    case "stdio":
+      return success([
+        name,
+        {
+          command: server.command,
+          ...(server.args === undefined ? {} : { args: server.args }),
+          ...(server.env === undefined ? {} : { env: server.env }),
+          ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
+        },
+      ] as const);
+    case "streamable-http":
+    case "sse":
+      return fail("codex.mcp.unsupported", "Pinned Codex plugin MCP payloads do not define a portable remote transport shape.", name);
+    case "config-path":
+      return fail("codex.mcp.unsupported", "Codex payloads cannot inline an opaque MCP config-path declaration.", name);
+  }
+};
+
 function renderMcp(servers: readonly PluginMcpServer[]): Result<JsonValue | undefined> {
   if (servers.length === 0) return success(undefined);
-  const entries: Record<string, JsonValue> = {};
-  for (const [index, server] of servers.entries()) {
-    const name = server.name ?? `server-${index + 1}`;
-    if (entries[name] !== undefined) return fail("codex.mcp.duplicate", "Codex MCP server names must be unique.", name);
-    switch (server.transport) {
-      case "stdio": entries[name] = { command: server.command, ...(server.args === undefined ? {} : { args: server.args }), ...(server.env === undefined ? {} : { env: server.env }), ...(server.cwd === undefined ? {} : { cwd: server.cwd }) }; break;
-      case "streamable-http":
-      case "sse": return fail("codex.mcp.unsupported", "Pinned Codex plugin MCP payloads do not define a portable remote transport shape.", name);
-      case "config-path": return fail("codex.mcp.unsupported", "Codex payloads cannot inline an opaque MCP config-path declaration.", name);
-    }
-  }
-  return success({ mcp_servers: entries });
+  const built = servers.reduce<Result<Readonly<Record<string, JsonValue>>>>(
+    (acc, server, index) => {
+      if (!acc.ok) return acc;
+      const name = server.name ?? `server-${index + 1}`;
+      if (acc.value[name] !== undefined) return fail("codex.mcp.duplicate", "Codex MCP server names must be unique.", name);
+      const entry = renderMcpServer(server, name);
+      return entry.ok ? success({ ...acc.value, [entry.value[0]]: entry.value[1] }) : entry;
+    },
+    success({}),
+  );
+  return built.ok ? success({ mcp_servers: built.value }) : built;
 }
 
 function validateManifest(value: unknown, paths: ReadonlySet<string>): readonly Diagnostic[] {
   if (!isRecord(value)) return [diagnostic("codex.manifest.invalid", "Codex manifest must be an object.", MANIFEST_PATH)];
   const allowed = ["name", "version", "description", "skills", "hooks", "mcpServers"];
-  const diagnostics = Object.keys(value).filter((key) => !allowed.includes(key)).map((key) => diagnostic("codex.manifest.unknown_field", "Unknown Codex manifest field.", key));
-  if (typeof value["name"] !== "string" || !NAME.test(value["name"])) diagnostics.push(diagnostic("codex.manifest.name", "Codex manifest name is invalid.", "name"));
-  if (typeof value["version"] !== "string" || !SEMVER.test(value["version"])) diagnostics.push(diagnostic("codex.manifest.version", "Codex manifest version must be semantic.", "version"));
   const components: readonly (readonly [string, string, boolean])[] = [
     ["skills", "./skills/", [...paths].some((path) => path.startsWith("skills/"))],
     ["hooks", `./${HOOKS_PATH}`, paths.has(HOOKS_PATH)],
     ["mcpServers", `./${MCP_PATH}`, paths.has(MCP_PATH)],
   ];
-  for (const [field, expected, present] of components) {
-    if (present ? value[field] !== expected : value[field] !== undefined) diagnostics.push(diagnostic("codex.manifest.component", "Codex component declaration does not match payload contents.", field));
-  }
-  return diagnostics;
+  return [
+    ...Object.keys(value).filter((key) => !allowed.includes(key)).map((key) => diagnostic("codex.manifest.unknown_field", "Unknown Codex manifest field.", key)),
+    ...(typeof value["name"] !== "string" || !NAME.test(value["name"]) ? [diagnostic("codex.manifest.name", "Codex manifest name is invalid.", "name")] : []),
+    ...(typeof value["version"] !== "string" || !SEMVER.test(value["version"]) ? [diagnostic("codex.manifest.version", "Codex manifest version must be semantic.", "version")] : []),
+    ...components
+      .filter(([field, expected, present]) => (present ? value[field] !== expected : value[field] !== undefined))
+      .map(([field]) => diagnostic("codex.manifest.component", "Codex component declaration does not match payload contents.", field)),
+  ];
 }
 
 function validateHooks(result: Result<unknown>): readonly Diagnostic[] {

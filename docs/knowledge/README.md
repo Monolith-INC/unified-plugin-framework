@@ -1,7 +1,7 @@
 # Project Knowledge Store
 
 Project Knowledge is delivered as a standalone, zero-MCP, Agent Plugins Specification v1.0.0 plugin:
-**[Monolith-INC/monolithic-agent-knowledge-store](https://github.com/Monolith-INC/monolithic-agent-knowledge-store)** (`v0.3.0`), onboarded into Unified Plugin Framework under the `knowledge` workflow adapter (`io.github.monolith-inc.upf/onboarded.lock.json`).
+**[Monolith-INC/monolithic-agent-knowledge-store](https://github.com/Monolith-INC/monolithic-agent-knowledge-store)** (`v0.4.1`), onboarded into Unified Plugin Framework under the `knowledge` workflow adapter (`io.github.monolith-inc.upf/onboarded.lock.json`).
 
 ## Architecture
 

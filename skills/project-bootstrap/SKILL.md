@@ -43,9 +43,9 @@ Run `agent-plugin project handoffs --project <project-directory>` to enumerate p
 
 For each listed kind, run `agent-plugin project handoffs --project <project-directory> --claim <kind>`. On `ready`, skip it. On `busy`, leave it for the session holding the claim. Act only on `claimed` and keep the returned token for completion.
 
-- `knowledge-discovery` — Run the installed `monolithic-agent-knowledge-store:discover-project-knowledge` skill on this project and record source-backed units through its version-checked `query.py curate` write path (never direct file writes). Do not finish this task while the store's `catalog.tsv` is empty.
+- `knowledge-discovery` — Run `knowledge-discover` on this project to record source-backed units through the knowledge store's version-checked write path (never direct file writes). Do not finish this task while the store's `catalog.tsv` is empty.
 - `review-setup` — Run the installed review setup through the workflow adapter using the saved project choices and shared knowledge root.
-- `continuity-setup` — Ensure `continuity.journalRoot` is saved in `.unified-plugin-framework.json`, create its directory if absent, and run `agent-continuity:session-continue` so session checkpointing and resume work from the first session.
+- `continuity-setup` — Ensure `continuity.journalRoot` is saved in `.unified-plugin-framework.json`, create its directory if absent, and run `continuity-continue` so session checkpointing and resume work from the first session.
 - `host-sign-in` — For the selected hosts that still need sign-in, direct the user to `codex login` or `claude auth login`. Verify readiness in the configured host after the user completes sign-in.
 
 After performing the task, run `agent-plugin project handoffs --project <project-directory> --task <kind> --finish <token>`. The CLI records completion when the capability verifies. If setup still needs changes, use the tooling bootstrap flow above with the previously accepted choices, and verify again. An interrupted claim expires so a later session can retry. Report progress and any authentication or host reload still required.

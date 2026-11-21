@@ -36,10 +36,10 @@ From a built checkout, inspect or adopt the reviewed published toolkit:
 
 ```sh
 pnpm agent-plugin upgrade-check project-tracking \
-  --framework plugins/unified-plugin-framework \
+  --framework . \
   --plugin-root <published-toolkit-root>
 pnpm agent-plugin adapter-check project-tracking \
-  --framework plugins/unified-plugin-framework \
+  --framework . \
   --plugin-root <published-toolkit-root> --project <project-directory>
 ```
 

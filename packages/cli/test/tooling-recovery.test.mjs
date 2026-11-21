@@ -11,19 +11,18 @@ const expected = {
   preserve: ["host-configuration-conflict", "settings-changed", "unsupported-settings", "symlink-escape", "modified-file", "unmanaged-file", "active-skill-drift", "dependency-fetch-mismatch", "dependency-source", "dependency-pin", "dependency-binding", "artifact-conflict", "invalid-local-store"],
 };
 
-test("discovery starts outside the project and configures the two MCP servers explicitly", () => {
-  const input = { project: "/repo with spaces", runtime: "/isolated/runtime", isolatedDirectory: "/isolated/session", knowledgeRoot: "/repo with spaces/knowledge" };
+test("discovery runs zero-MCP stdlib query.py curate without legacy MCP servers", () => {
+  const input = { project: "/repo with spaces", python: "python3.12", queryScript: "/repo with spaces/.upf-tools/plugins/monolithic-agent-knowledge-store/source/scripts/query.py", isolatedDirectory: "/isolated/session", knowledgeRoot: "/repo with spaces/Project_Knowledge" };
   const codex = headlessDiscovery("codex", input);
-  assert.equal(codex[codex.indexOf("-C") + 1], input.isolatedDirectory);
+  assert.equal(codex[codex.indexOf("-C") + 1], input.project);
   assert.ok(codex.includes("--ignore-user-config"));
-  assert.ok(codex.includes('mcp_servers.project-repository.args=["--project","/repo with spaces","--read-repository"]'));
-  assert.ok(codex.includes('mcp_servers.project-repository.enabled_tools=["repository_list","repository_read"]'));
-  assert.ok(codex.includes('mcp_servers.project-knowledge.tools.knowledge_put.approval_mode="approve"'));
+  assert.ok(!codex.some((arg) => arg.includes("mcp_servers.")));
+  assert.match(codex.at(-1), /query\.py.*curate/);
   const claude = headlessDiscovery("claude", input);
-  assert.equal(claude[claude.indexOf("--tools") + 1], "");
-  const config = JSON.parse(claude[claude.indexOf("--mcp-config") + 1]);
-  assert.deepEqual(Object.keys(config.mcpServers).sort(), ["project-knowledge", "project-repository"]);
-  assert.deepEqual(config.mcpServers["project-knowledge"].args, ["--project", input.project, "--root", input.knowledgeRoot]);
+  assert.ok(!claude.includes("--strict-mcp-config"));
+  assert.equal(claude[claude.indexOf("--add-dir") + 1], input.project);
+  assert.equal(claude[claude.indexOf("--allowedTools") + 1], "Read,Glob,Grep,Bash");
+  assert.match(claude.at(-1), /query\.py.*curate/);
 });
 
 test("uncompleted knowledge discovery has the first-session hand-off and exit code 2", () => {

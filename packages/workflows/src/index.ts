@@ -27,6 +27,7 @@ export {
   checkPluginBinding,
   mappingDigest,
   firstFailure,
+  PROJECT_KNOWLEDGE_DISCOVER,
   PROJECT_KNOWLEDGE_SETUP,
   pinMatches,
   sourceMatches,

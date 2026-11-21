@@ -17,9 +17,9 @@ Start with the workflow that matches your task. You can bring an idea, a proposa
 | Implementation | Execute or resume an authorized plan, then check the result against its acceptance criteria. | `implement-work`, `implement-verify` |
 | Code review | Review a task, story or feature against its requirements and the project's recorded decisions. | `review-task`, `review-story`, `review-feature` |
 | Continuity | Restore project context, save observed progress and recover usable context from readable records. | `continuity-continue`, `continuity-checkpoint`, `continuity-recover` |
-| Project knowledge | Build and maintain a shared, source-backed record of the project for all workflows to consult. | `setup-project-knowledge`, `discover-project-knowledge`, `query-project-knowledge`, `refresh-project-knowledge`, `ingest-docs`, `publish-docs` |
+| Project knowledge | Build and maintain a shared, source-backed record of the project for all workflows to consult. | `knowledge-setup`, `knowledge-discover`, `knowledge-query`, `knowledge-refresh`, `knowledge-ingest`, `knowledge-publish` |
 
-Discovery, tracking, implementation, review and continuity skills belong to `unified-plugin-framework`. The project knowledge skills belong to the onboarded standalone `monolithic-agent-knowledge-store` plugin (zero MCP, stdlib Python 3.12+).
+All six workflows (including `knowledge-*` entry skills) belong to `unified-plugin-framework`. The `knowledge` workflow adapter delegates to the onboarded standalone `monolithic-agent-knowledge-store` plugin (zero MCP, stdlib Python 3.12+).
 
 ## Install in your project
 
@@ -43,7 +43,7 @@ The interactive installer will:
 
 Use **↑/↓** to move, **Space** to check a row, and **Enter** to confirm at least one selection. The **All** row selects every item, and **a** toggles all. Terminals without raw keyboard input show numbered choices. **Ctrl+C** or **Ctrl+D** cancels.
 
-The installer creates its setup plan internally. The release bundles all five dependency plugins.
+The installer creates its setup plan internally. The release bundles all six dependency plugins.
 
 **Release availability:** interactive installation starts with v0.2.2, whose release assets include `install.sh`. v0.2.1 provides the earlier `install.mjs` plan-file entry point. See [releases](https://github.com/Monolith-INC/unified-plugin-framework/releases) for available files.
 
@@ -51,9 +51,9 @@ The installer creates its setup plan internally. The release bundles all five de
 
 - **Linux**, with **Codex**, **Claude Code**, or both.
   - Codex: plugins register through `.codex/config.toml` and `codex plugin add`.
-  - Claude Code: plugins come from a marketplace named for this project and install at local scope (`.claude/settings.local.json`), and the knowledge server is registered at local scope too (`claude mcp add-json --scope local`), so this machine's paths stay out of shared files and Claude Code needs no approval prompt for it.
+  - Claude Code: plugins come from a marketplace named for this project and install at local scope (`.claude/settings.local.json`), so this machine's paths stay out of shared files.
 - **Bash**, **curl**, **Node.js 22+** and **Python 3.12+**. If Python is unavailable, the launcher can download a pinned private Python after you consent.
-- Network access to GitHub Releases, the Python package index for isolated knowledge setup, and the npm registry if you authorize installation of a missing host CLI.
+- Network access to GitHub Releases, and the npm registry if you authorize installation of a missing host CLI. Project knowledge uses stdlib Python 3.12+ with zero MCP and zero third-party Python packages.
 - Credentials for your chosen tracker connection. The installer reads supported environment credentials; it does not ask you to put secrets in a plan or chat.
 
 The supported project trackers are repository-local files and Linear. For a new Linear setup, enter the team and project names or URLs; the connector resolves their identifiers. Your existing choices are reused on subsequent runs.

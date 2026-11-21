@@ -163,7 +163,7 @@ const claudeSkills = (context: HostContext, listed: string): Result<readonly Dis
     .flatMap(({ name, root }) => pluginSkills(root, name, CLAUDE_TOOLING.manifest)), ...bareSkills(context, CLAUDE_TOOLING.skills)]) : parsed;
 };
 const CLAUDE = Object.freeze<HostTooling>({
-  label: "Claude Code", changes: `Claude Code local settings (${CLAUDE_TOOLING.settings}), ${CLAUDE_TOOLING.skills}, plugin installs and a local-scope knowledge server for this project`,
+  label: "Claude Code", changes: `Claude Code local settings (${CLAUDE_TOOLING.settings}), ${CLAUDE_TOOLING.skills}, and local-scope plugin installs`,
   frameworkDir: "hosts/claude", manifest: CLAUDE_TOOLING.manifest, bareSkills: CLAUDE_TOOLING.skills,
   catalog: claudeCatalog,
   register: claudeRegister,

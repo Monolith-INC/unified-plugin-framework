@@ -87,4 +87,4 @@ assert.equal((await host.pendingSources(project,plan)).ok,false);
 assert.equal((await host.stageDependencies(project,plan,denied)).ok,false);
 await rename(join(root,'distribution.json'),join(root,'distribution.hidden'));
 assert.equal((await host.pendingSources(project,plan)).ok,false);
-process.stdout.write(`Artifact install, CLI, both payloads for every setup host, all five dependencies, re-entry and drift refusal passed: ${project}\n`);
+process.stdout.write(`Artifact install, CLI, both payloads for every setup host, all six dependencies, re-entry and drift refusal passed: ${project}\n`);

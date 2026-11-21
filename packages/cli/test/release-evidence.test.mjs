@@ -201,12 +201,16 @@ test("release documentation describes release-asset installs and exercises the s
 
   const releaseCommand = /agent-plugin install (?<plugin>[a-z0-9-]+) --version <version> --vendor (?<vendor>claude|cursor|codex) --target <target-directory>/gu;
   const released = [...documentation.matchAll(releaseCommand)].map((match) => match.groups);
+  assert.deepEqual(new Set(released.map((command) => command.plugin)), new Set(SHIPPED_PLUGINS), "docs list install commands only for shipped plugins");
   SHIPPED_PLUGINS.map((plugin) =>
     assert.deepEqual(
       new Set(released.filter((command) => command.plugin === plugin).map((command) => command.vendor)),
       new Set(["claude", "codex", "cursor"]),
       `every host's release install command is documented for ${plugin}`,
     ),
+  );
+  ["docs/workflows/code-review.md", "docs/workflows/discovery.md", "docs/workflows/project-tracking.md"].map((docPath) =>
+    assert.doesNotMatch(readFileSync(join(repositoryRoot, docPath), "utf8"), /--framework plugins\/unified-plugin-framework/, `${docPath} uses root --framework .`),
   );
   assert.doesNotMatch(documentation, /packages\/adapter-[a-z]+\/payloads\/[a-z0-9-]+\/bundle\.json/u, "no document points at committed payloads");
   assert.match(readFileSync(join(repositoryRoot, ".gitignore"), "utf8"), /^packages\/adapter-\*\/payloads\/$/mu);

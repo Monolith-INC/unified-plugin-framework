@@ -1,7 +1,6 @@
 import { chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { configure, fail, nodeProjectFiles, nodeProjectIO, object, ok, operate, parseSettings, probeProjectRead, setup, type Result, type ToolingIO, type ToolingObservation, type ToolingStep } from "@agent-plugins/project";
-import { KNOWLEDGE_SERVER } from "@agent-plugins/core";
 import type { HostEnvironment } from "./host-table.js";
 import { requireHost, type BootstrapInput } from "./tooling-input.js";
 import { command, scaled } from "./tooling-process.js";
@@ -9,7 +8,7 @@ import { readText, setupFailure } from "./tooling-files.js";
 import { DISCOVERY_MARKER } from "./tooling-recovery.js";
 import { HOST_STEPS } from "./tooling-bootstrap.js";
 import { activeSkillsMatch, discoverHost, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
-import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, knowledgeExecutable, pythonRuntime, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
+import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
 const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "missing", recovery });
@@ -90,10 +89,19 @@ const knowledgeSettings = async (project: string, input: BootstrapInput): Promis
     nodeProjectFiles.read(join(project, "project-knowledge.json"))(),
     nodeProjectFiles.read(join(project, ".project-knowledge.json"))(),
   ]);
-  const visibleMatch = visible.ok && object(visible.value) && visible.value.knowledgeRoot === input.knowledge.knowledgeRoot;
-  const legacyMatch = legacy.ok && object(legacy.value) && legacy.value.schemaVersion === 1
-    && Object.entries(input.knowledge).every(([key, value]) => object(legacy.value) && legacy.value[key] === value);
-  return !visible.ok && !legacy.ok ? legacy : visibleMatch || legacyMatch
+  if (!visible.ok) return visible;
+  if (!legacy.ok) return legacy;
+  const visibleObj = object(visible.value) ? visible.value : null;
+  const legacyObj = object(legacy.value) ? legacy.value : null;
+  if (visibleObj !== null && legacyObj !== null && visibleObj.knowledgeRoot !== legacyObj.knowledgeRoot) {
+    return setupFailure("Conflicting knowledge locators found in project-knowledge.json and .project-knowledge.json; reconcile them explicitly.");
+  }
+  const visibleMatch = visibleObj !== null
+    && visibleObj.knowledgeRoot === input.knowledge.knowledgeRoot
+    && Object.entries(input.knowledge).every(([key, value]) => visibleObj[key] === undefined || visibleObj[key] === value);
+  const legacyMatch = legacyObj !== null && legacyObj.schemaVersion === 1
+    && Object.entries(input.knowledge).every(([key, value]) => legacyObj[key] === value);
+  return visibleMatch || legacyMatch
     ? ready("Accepted knowledge/document settings match the saved project configuration.")
     : missing("Create or reconcile the accepted shared knowledge/document settings.");
 };

@@ -4,12 +4,12 @@ One accepted setup plan coordinates the existing project service, transactional 
 
 Bootstrap sets up Codex, Claude Code, or both, chosen by the plan's `hosts` list. Existing plans with a single `host` still work. Bootstrap runs shared setup once and checks each selected host separately. Each host installs its own build of the framework plugins and uses the same pinned dependency sources. The host table and adapter packages define the configuration and discovery details.
 
-| Host | Plugins | Knowledge server | Unnamespaced skills | Discovery check |
+| Host | Plugins | Project knowledge | Unnamespaced skills | Discovery check |
 | --- | --- | --- | --- | --- |
-| Codex | `.codex/config.toml` marketplace, `codex plugin add` | `.codex/config.toml` | `.agents/skills` | Codex app server `skills/list` |
-| Claude Code | a marketplace named for this project (`upf-<hash>`), declared and installed at local scope in `.claude/settings.local.json` | local scope, via `claude mcp add-json --scope local` | `.claude/skills` | `claude plugin list --json` |
+| Codex | `.codex/config.toml` marketplace, `codex plugin add` | Standalone `monolithic-agent-knowledge-store` stdlib Python 3.12+ (zero MCP) | `.agents/skills` | Codex app server `skills/list` |
+| Claude Code | a marketplace named for this project (`upf-<hash>`), declared and installed at local scope in `.claude/settings.local.json` | Standalone `monolithic-agent-knowledge-store` stdlib Python 3.12+ (zero MCP) | `.claude/skills` | `claude plugin list --json` |
 
-Claude Code keeps known marketplaces per user, so each project's catalog has its own name and one project never repoints another's plugins. The knowledge server is private to this user and project, so it needs no approval prompt and no shared file holds its paths. A local-scope server left by another checkout of this framework is replaced; any other server of that name is preserved and reported.
+Claude Code keeps known marketplaces per user, so each project's catalog has its own name and one project never repoints another's plugins. Project knowledge uses user-provided Python 3.12+ and stdlib scripts (`scripts/query.py`) with no MCP server or virtual environment.
 
 Artifact tests exercise the distribution, both framework payloads for every setup host, and dependency staging on Linux; a real-project host trial remains a separate release gate. macOS qualification is deferred for this release. Use the complete release distribution for installation; a development source checkout remains supported. A bare host payload alone does not supply the CLI or dependency plugins.
 
@@ -23,7 +23,7 @@ Run `project describe` to reuse project choices. Collect missing tracker, langua
 
 ## Dependency plugins come with the release
 
-The complete distribution contains all five upstream repositories under `dependencies/<plugin>@<version>`, unchanged, including licenses, runtime adapters and references outside nested plugin folders. `distribution.json` records file and link digests; the framework manifest declares each source and `onboarded.lock.json` pins the workflow bindings. Bootstrap verifies included content and stages selected plugins locally. Missing or modified distribution content fails with `distribution-incomplete`; there is no plugin download fallback.
+The complete distribution contains all six upstream repositories under `dependencies/<plugin>@<version>`, unchanged, including licenses, runtime adapters and references outside nested plugin folders. `distribution.json` records file and link digests; the framework manifest declares each source and `onboarded.lock.json` pins the workflow bindings. Bootstrap verifies included content and stages selected plugins locally. Missing or modified distribution content fails with `distribution-incomplete`; there is no plugin download fallback.
 
 Only a development workspace may fetch dependencies: the release builder and development bootstrap use the source declarations and existing lock checks. The following fetch/cache details apply to that development path.
 
@@ -47,7 +47,7 @@ Example structure (replace the illustrative choices with accepted project choice
     "headlessDiscovery": false
   },
   "knowledge": {
-    "knowledgeRoot": ".project-knowledge/knowledge",
+    "knowledgeRoot": "Project_Knowledge",
     "documentMode": "shared",
     "docsRoot": "docs",
     "vaultRoot": "docs"
@@ -74,11 +74,11 @@ When the installer reports a hand-off, say **Use the project-bootstrap skill to 
 
 ## What setup owns
 
-Project settings remain in `.unified-plugin-framework.json`; knowledge/document settings remain in `.project-knowledge.json`. The isolated Python environment is `.project-knowledge/runtime`; CLI and staged host distributions live in `.upf-tools/`. Keep these machine-local paths out of commits according to the consuming project's policy.
+Project settings remain in `.unified-plugin-framework.json`; knowledge/document settings remain in `project-knowledge.json` (with legacy `.project-knowledge.json` read compatibility). CLI and staged host distributions live in `.upf-tools/`. Keep these machine-local paths out of commits according to the consuming project's policy.
 
-The CLI wrapper uses the existing built framework entry point. Shipped framework and knowledge payloads use the existing transactional installer. Bundled, fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
+The CLI wrapper uses the existing built framework entry point. Shipped framework payloads use the existing transactional installer. Bundled, fetched and explicit dependency source trees are copied unchanged to host wrappers, checked against exact pins and staged content; originals are never patched. Codex adapter metadata owns namespace/configuration details. Bare-skill dependencies are copied into the project's skill directory only when no unmanaged content conflicts. Existing host entries, project choices and review provider bindings are preserved; conflicts require reconciliation rather than replacement.
 
-The knowledge runtime is installed from a private source copy into an isolated environment. A fresh protocol client verifies catalog, search and fetch. If knowledge discovery remains pending, the bootstrap skill uses the installed discovery skill to derive source-backed units. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
+Project knowledge uses the staged `monolithic-agent-knowledge-store` stdlib Python 3.12+ scripts (`scripts/query.py`) with zero MCP and no virtual environment. If knowledge discovery remains pending, the bootstrap skill uses `knowledge-discover` to derive source-backed units. Configure missing review provider bindings through review-setup using saved project choices, then connect it to the same root.
 
 Dependency wrappers are published only after a private staging copy is complete, so interruption does not leave a half-installed final wrapper. Existing unmanaged directories remain conflicts to resolve explicitly. Marketplace additions preserve earlier workflow entries and unrelated metadata. Active discovered skill directories are compared with the pinned staged source, including references; a matching name or version marker alone never establishes readiness.
 

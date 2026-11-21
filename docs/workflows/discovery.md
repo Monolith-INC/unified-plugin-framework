@@ -38,7 +38,7 @@ Superpowers is read as a Claude Code plugin: its name and version come from `.cl
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin upgrade-check discovery \
-  --framework plugins/unified-plugin-framework \
+  --framework . \
   --plugin-root <superpowers-plugin> \
   --plugin-root bmad-method@<version>=<bmad-method-checkout>
 ```

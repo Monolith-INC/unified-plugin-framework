@@ -72,8 +72,9 @@ test("assemblePluginSource copies the plugin and renders its templates into stag
     skill.startsWith("project-") || skill === "repair-workflow"
       ? assert.equal(text, readFileSync(new URL(`skills/${skill}/SKILL.md`, pluginSource), "utf8"))
       : assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
-        : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
-        : skill.startsWith("continuity-") ? /agent-continuity:session-/ : /monolithic-code-review-toolkit:/);
+        : skill.startsWith("knowledge-") ? /monolithic-agent-knowledge-store:/
+          : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
+            : skill.startsWith("continuity-") ? /agent-continuity:session-/ : /monolithic-code-review-toolkit:/);
     return skill;
   });
   assert.match(readFileSync(new URL("skills/review-task/SKILL.md", pluginSource), "utf8"), /\{\{delegate\}\}/);

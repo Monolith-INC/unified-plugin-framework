@@ -191,9 +191,12 @@ const wrapped = (project: string, input: BootstrapInput, plugin: HostPlugin): Pr
     case "dependency": return ensureWrapper(project, join(plugin.root, HOSTS[input.host].manifest), plugin.name, input.python);
   }
 };
-const ensureWrapper = (project: string, path: string, name: string, python: string): Promise<Result<string>> => readText(path).then((existing) => !existing.ok ? existing
-  : existing.value === null ? writeText(project, path, wrapperManifest(name), null, python)
-    : existing.value === wrapperManifest(name) ? ok(path) : fail("modified-file", `An existing ${name} host manifest differs from its pinned wrapper.`, "Preserve it and reconcile the wrapper before rerunning."));
+const ensureWrapper = (project: string, path: string, name: string, python: string): Promise<Result<string>> => {
+  const expected = wrapperManifest(name);
+  return readText(path).then((existing) => !existing.ok ? existing
+    : existing.value === null ? writeText(project, path, expected, null, python)
+      : existing.value === expected ? ok(path) : fail("modified-file", `An existing ${name} host manifest differs from its pinned wrapper.`, "Preserve it and reconcile the wrapper before rerunning."));
+};
 
 export const registerHost = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): Promise<Result<string>> =>
   HOSTS[input.host].register(hostContext(project, input, environment, knowledgeCommand));

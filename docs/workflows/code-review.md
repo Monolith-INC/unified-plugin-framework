@@ -35,7 +35,7 @@ Each step is checked in order. A failing step never just stops the review: it ca
 | Installed: range | The installed version is outside the declared range | Ask the user to install a version inside it; adopting a newer one means widening the range first, then `upgrade-check` |
 | Installed: pinned | The installed version or content checksum differs from the lock, the plugin is not pinned, or the contract or mapping changed since it was pinned (`adapter-check` only) | Same version, different content: reinstall the pinned release. Another version: install the pinned one, or check it with `upgrade-check` and commit the lock |
 | Bound: skills | The installed version lacks a mapped skill, or the `review-setup` skill the store recovery relies on | Ask the user to install a version that provides it |
-| Bound: project store | `.project-knowledge.json` has no `knowledgeRoot` | Run `setup-project-knowledge` with its defaults, then continue |
+| Bound: project store | `project-knowledge.json` (or legacy `.project-knowledge.json`) has no `knowledgeRoot` | Run `setup-project-knowledge` with its defaults, then continue |
 | Bound: shared store | `.monolithic-code-review/sources.json` does not set `knowledge.root` to the project store (the toolkit reads only its own setting) | Run `monolithic-code-review-toolkit:review-setup`, point it at the project store, then continue |
 
 Problems no recovery action can fix hand over to the `repair-workflow` repair agent ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
@@ -44,12 +44,12 @@ From a checkout, check readiness with:
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin adapter-check code-review \
-  --framework plugins/unified-plugin-framework \
+  --framework . \
   --plugin-root <installed-toolkit>/plugins/monolithic-code-review-toolkit \
   --project <project>
 ```
 
-It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the failing step, the reason and the recovery action, and exits `1`. Invalid arguments, an unknown workflow, or configuration it cannot read (a missing or broken manifest, a folder that is not a plugin, invalid JSON) print the problem and exit `2`. `--framework` is required; `--help` prints the usage.
+It prints `{"ok":true,...}` and exits `0` when ready. Otherwise it prints the failing step, the reason and the recovery action, and exits `1`. Invalid arguments, an unknown workflow, or configuration it cannot read (a missing or broken manifest, a folder that is not a plugin, invalid JSON) print the problem and exit `2`. When `--framework` is omitted, the installed framework root is used; `--help` prints the usage.
 
 ## Pinning and upgrading the review plugin
 
@@ -57,7 +57,7 @@ The lock pins each onboarded plugin's exact version and content checksum, togeth
 
 ```sh
 pnpm --filter @agent-plugins/cli exec agent-plugin upgrade-check code-review \
-  --framework plugins/unified-plugin-framework \
+  --framework . \
   --plugin-root <candidate-toolkit>/plugins/monolithic-code-review-toolkit
 ```
 
