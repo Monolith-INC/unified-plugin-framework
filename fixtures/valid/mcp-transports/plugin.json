@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-transports",
   "version": "1.0.0",
   "description": "stdio, streamable-http, and SSE MCP transports with placeholders."

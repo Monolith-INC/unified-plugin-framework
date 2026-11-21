@@ -22,7 +22,11 @@ export const writeJson = (path, value) => {
 
 export const fakeToolkit = (skills, version = "0.6.0") => {
   const root = mkdtempSync(join(tmpdir(), "upf-toolkit-"));
-  writeJson(join(root, "plugin.json"), { name: "monolithic-code-review-toolkit", version });
+  writeJson(join(root, "plugin.json"), {
+    $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    name: "monolithic-code-review-toolkit",
+    version,
+  });
   skills.map((skill) => writeJson(join(root, "skills", skill, "SKILL.md"), `---\nname: ${skill}\ndescription: Test skill.\n---\n`));
   return root;
 };

@@ -31,6 +31,7 @@ function writeCanonicalPlugin(root, version = "1.0.0") {
   writeFileSync(
     join(root, "plugin.json"),
     JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
       version,
       name: "hello-world",
       description: "Compiler fixture.",
@@ -61,7 +62,10 @@ function writeCanonicalPlugin(root, version = "1.0.0") {
   );
   writeFileSync(
     join(root, "mcp.json"),
-    JSON.stringify({ mcpServers: { local: { command: "node", args: ["server.mjs"] } } }),
+    JSON.stringify({
+      $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+      mcpServers: { local: { type: "stdio", command: "node", args: ["server.mjs"] } },
+    }),
   );
 }
 

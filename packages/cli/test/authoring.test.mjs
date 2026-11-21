@@ -98,18 +98,18 @@ test("create --help and add skill --help print usage", () => {
   assert.match(addHelp.stdout, /add skill/);
 });
 
-test("create defaults destination under cwd using unscoped name", () => {
+test("create defaults destination under cwd using plugin name", () => {
   // process.cwd() reports the resolved path, and macOS temp directories sit behind /var -> /private/var.
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), "agent-plugins-cli-cwd-")));
   const previous = process.cwd();
   process.chdir(cwd);
   try {
-    const created = withCapturedIo(() => run(["create", "@acme/sample-plugin"]));
+    const created = withCapturedIo(() => run(["create", "acme.sample-plugin"]));
     assert.equal(created.exitCode, 0);
     const payload = JSON.parse(created.stdout);
-    assert.equal(payload.name, "@acme/sample-plugin");
-    assert.equal(payload.path, join(cwd, "sample-plugin"));
-    assert.equal(existsSync(join(cwd, "sample-plugin/plugin.json")), true);
+    assert.equal(payload.name, "acme.sample-plugin");
+    assert.equal(payload.path, join(cwd, "acme.sample-plugin"));
+    assert.equal(existsSync(join(cwd, "acme.sample-plugin/plugin.json")), true);
   } finally {
     process.chdir(previous);
   }

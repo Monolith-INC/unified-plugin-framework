@@ -178,7 +178,7 @@ function renderMcp(servers: readonly PluginMcpServer[]): Result<JsonValue | unde
     const name = server.name ?? `server-${index + 1}`;
     if (entries[name] !== undefined) return fail("codex.mcp.duplicate", "Codex MCP server names must be unique.", name);
     switch (server.transport) {
-      case "stdio": entries[name] = { command: server.command, ...(server.args === undefined ? {} : { args: server.args }), ...(server.cwd === undefined ? {} : { cwd: server.cwd }) }; break;
+      case "stdio": entries[name] = { command: server.command, ...(server.args === undefined ? {} : { args: server.args }), ...(server.env === undefined ? {} : { env: server.env }), ...(server.cwd === undefined ? {} : { cwd: server.cwd }) }; break;
       case "streamable-http":
       case "sse": return fail("codex.mcp.unsupported", "Pinned Codex plugin MCP payloads do not define a portable remote transport shape.", name);
       case "config-path": return fail("codex.mcp.unsupported", "Codex payloads cannot inline an opaque MCP config-path declaration.", name);

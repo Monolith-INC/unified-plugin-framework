@@ -32,32 +32,50 @@ export type DiagnosticSeverity = "error" | "warning" | "info";
 
 export const diagnosticCodes = {
   manifestInvalidType: "manifest.invalid_type",
+  manifestSchemaRequired: "manifest.schema.required",
+  manifestSchemaUnsupported: "manifest.schema.unsupported",
+  manifestSchemaLegacy: "manifest.schema.legacy",
   manifestNameRequired: "manifest.name.required",
   manifestNameInvalid: "manifest.name.invalid",
-  manifestVersionRequired: "manifest.version.required",
+  manifestNameLegacyScope: "manifest.name.legacy_scope",
+  manifestVersionInvalidType: "manifest.version.invalid_type",
   manifestDescriptionInvalidType: "manifest.description.invalid_type",
   manifestAuthorInvalid: "manifest.author.invalid",
+  manifestHomepageInvalidType: "manifest.homepage.invalid_type",
+  manifestRepositoryInvalidType: "manifest.repository.invalid_type",
   manifestLicenseInvalidType: "manifest.license.invalid_type",
+  manifestKeywordsInvalidType: "manifest.keywords.invalid_type",
   manifestExtensionsInvalidType: "manifest.extensions.invalid_type",
+  manifestExtensionLegacyNamespace: "manifest.extensions.legacy_namespace",
   manifestSchemaVersionInvalidType: "manifest.schemaVersion.invalid_type",
   manifestSchemaVersionUnsupported: "manifest.schemaVersion.unsupported",
   manifestUnknownField: "manifest.unknown_field",
+  manifestInlineComponentsLegacy: "manifest.inline_components.legacy",
   skillsInvalidType: "skills.invalid_type",
   skillInvalidType: "skill.invalid_type",
   skillNameRequired: "skill.name.required",
   skillPathRequired: "skill.path.required",
   skillDescriptionInvalidType: "skill.description.invalid_type",
+  mcpSchemaInvalid: "mcp.schema.invalid",
+  mcpLegacyFormat: "mcp.format.legacy",
   mcpServersInvalidType: "mcpServers.invalid_type",
   mcpServerInvalidType: "mcpServer.invalid_type",
   mcpServerNameRequired: "mcpServer.name.required",
   mcpServerCommandRequired: "mcpServer.command.required",
+  mcpServerCommandInvalid: "mcpServer.command.invalid",
   mcpServerUrlRequired: "mcpServer.url.required",
+  mcpServerUrlInvalid: "mcpServer.url.invalid",
   mcpServerPathRequired: "mcpServer.path.required",
   mcpServerTransportUnsupported: "mcpServer.transport.unsupported",
   mcpServerTransportRequired: "mcpServer.transport.required",
   mcpServerArgsInvalidType: "mcpServer.args.invalid_type",
   mcpServerArgInvalidType: "mcpServer.args.item.invalid_type",
+  mcpServerEnvInvalidType: "mcpServer.env.invalid_type",
+  mcpServerEnvReservedKey: "mcpServer.env.reserved_key",
+  mcpServerHeadersInvalidType: "mcpServer.headers.invalid_type",
+  mcpServerHeaderDuplicate: "mcpServer.headers.duplicate",
   mcpServerCwdInvalidType: "mcpServer.cwd.invalid_type",
+  mcpServerCwdInvalid: "mcpServer.cwd.invalid",
   manifestUnreadable: "manifest.unreadable",
   skillMissingSkillMd: "skill.missing_skill_md",
   pathEscape: "path.escape",
@@ -80,34 +98,49 @@ export interface Diagnostic {
 }
 
 export interface PluginManifest {
+  readonly $schema?: string;
   readonly name: string;
-  readonly version: string;
+  readonly version?: string;
   readonly description?: string;
   readonly author?: PluginAuthor;
+  readonly homepage?: string;
+  readonly repository?: string;
   /** An SPDX license identifier, such as `Apache-2.0`. */
   readonly license?: string;
+  readonly keywords?: readonly string[];
   readonly schemaVersion?: string;
   readonly extensions?: Record<string, unknown>;
 }
 
 export const SUPPORTED_SCHEMA_VERSION = "1.0.0";
+export const PLUGIN_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json" as const;
+export const MCP_SCHEMA_URL = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json" as const;
+export const LEGACY_DISTRIBUTION_EXTENSION = "org.agent-plugins.distribution" as const;
+export const UPF_DISTRIBUTION_EXTENSION = "io.github.monolith-inc.upf.distribution" as const;
 /** Every host registers the project knowledge server under this one name, so workflows and review settings can refer to it. */
 export const KNOWLEDGE_SERVER = "project-knowledge" as const;
 
 const PORTABLE_MANIFEST_FIELDS = new Set([
+  "$schema",
   "name",
   "version",
   "description",
   "author",
+  "homepage",
+  "repository",
   "license",
+  "keywords",
   "schemaVersion",
   "extensions",
 ]);
 
 const DECLARATION_MANIFEST_FIELDS = new Set([...PORTABLE_MANIFEST_FIELDS, "skills", "mcpServers"]);
 
-const PLUGIN_NAME_PATTERN = /^(?:@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\/)?[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const SPEC_PLUGIN_NAME_PATTERN = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+const LEGACY_SCOPED_NAME_PATTERN = /^@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SKILL_DIRECTORY_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const CWD_PATTERN = /^(?:\.\/|\$\{PLUGIN_ROOT\}(?:\/|$)|\$\{PLUGIN_DATA\}(?:\/|$))/;
+const RESERVED_ENV_KEYS: ReadonlySet<string> = new Set(["PLUGIN_ROOT", "PLUGIN_DATA"]);
 
 export interface AuthoringResult {
   readonly diagnostics: readonly Diagnostic[];
@@ -116,8 +149,12 @@ export interface AuthoringResult {
   readonly nextSteps?: readonly string[];
 }
 
+export function isSpecPluginName(name: string): boolean {
+  return name.length >= 1 && name.length <= 64 && SPEC_PLUGIN_NAME_PATTERN.test(name);
+}
+
 export function isValidPluginName(name: string): boolean {
-  return PLUGIN_NAME_PATTERN.test(name);
+  return isSpecPluginName(name);
 }
 
 export function isValidSkillDirectoryName(name: string): boolean {
@@ -132,10 +169,10 @@ export function pluginDirectoryName(name: string): string {
 export function buildPluginManifestJson(name: string): string {
   return `${JSON.stringify(
     {
+      $schema: PLUGIN_SCHEMA_URL,
       name,
       version: "0.1.0",
       description: "Scaffolded by agent-plugin create.",
-      schemaVersion: SUPPORTED_SCHEMA_VERSION,
     },
     null,
     2,
@@ -231,6 +268,7 @@ export type PluginMcpServer =
       readonly name?: string;
       readonly command: string;
       readonly args?: readonly string[];
+      readonly env?: Readonly<Record<string, string>>;
       readonly cwd?: string;
       readonly placeholders?: readonly PluginPlaceholder[];
     }
@@ -238,12 +276,14 @@ export type PluginMcpServer =
       readonly transport: "streamable-http";
       readonly name?: string;
       readonly url: string;
+      readonly headers?: Readonly<Record<string, string>>;
       readonly placeholders?: readonly PluginPlaceholder[];
     }
   | {
       readonly transport: "sse";
       readonly name?: string;
       readonly url: string;
+      readonly headers?: Readonly<Record<string, string>>;
       readonly placeholders?: readonly PluginPlaceholder[];
     }
   | {
@@ -298,6 +338,18 @@ export function inspectPlugin(value: unknown): PluginInspection {
   }
 
   const manifest = readManifest(value, "declaration");
+  const inlineWarnings: readonly Diagnostic[] =
+    value["mcpServers"] === undefined
+      ? []
+      : [
+          createDiagnostic({
+            severity: "warning",
+            code: diagnosticCodes.manifestInlineComponentsLegacy,
+            message:
+              'Inline "mcpServers" in plugin.json is legacy. Move MCP server declarations to root "mcp.json".',
+            path: "mcpServers",
+          }),
+        ];
   const skills = readSkills(value["skills"]);
   const mcpServers = readMcpServers(value["mcpServers"]);
   const onboarded = readOnboardedPlugins(manifest.value?.extensions);
@@ -309,6 +361,7 @@ export function inspectPlugin(value: unknown): PluginInspection {
     ...optionalOnboardedPlugins(onboarded.plugins),
     diagnostics: [
       ...manifest.diagnostics,
+      ...inlineWarnings,
       ...skills.diagnostics,
       ...mcpServers.diagnostics,
       ...onboarded.diagnostics,
@@ -332,44 +385,53 @@ function readManifest(
     .reduce<readonly string[]>(insertSorted, [])
     .map((key) =>
       createDiagnostic({
-        severity: "error",
+        severity: "warning",
         code: diagnosticCodes.manifestUnknownField,
-        message:
-          mode === "portable"
-            ? `Unknown portable manifest field "${key}" is not allowed by Agent Plugins v1.0.0.`
-            : `Unknown declaration field "${key}" is not allowed by Agent Plugins v1.0.0.`,
+        message: `Unknown top-level manifest field "${key}" was ignored. Move client-specific data under "extensions".`,
         path: key,
       }),
     );
 
+  const schema = readManifestSchema(value);
   const name = readPluginName(value);
-  const version = readRequiredString(value, "version", diagnosticCodes.manifestVersionRequired);
+  const version = readOptionalString(value, "version", diagnosticCodes.manifestVersionInvalidType);
   const description = readOptionalString(value, "description", diagnosticCodes.manifestDescriptionInvalidType);
   const author = readAuthor(value);
+  const homepage = readOptionalString(value, "homepage", diagnosticCodes.manifestHomepageInvalidType);
+  const repository = readOptionalString(value, "repository", diagnosticCodes.manifestRepositoryInvalidType);
   const license = readOptionalString(value, "license", diagnosticCodes.manifestLicenseInvalidType);
-  const schemaVersion = readSchemaVersion(value);
-  const extensions = readOptionalRecord(value, "extensions", diagnosticCodes.manifestExtensionsInvalidType);
+  const keywords = readOptionalManifestStringArray(value, "keywords", diagnosticCodes.manifestKeywordsInvalidType);
+  const schemaVersion = readSchemaVersion(value, schema.value !== undefined);
+  const extensions = readExtensions(value);
   const diagnostics = [
     ...unknownFields,
+    ...schema.diagnostics,
     ...name.diagnostics,
     ...version.diagnostics,
     ...description.diagnostics,
     ...author.diagnostics,
+    ...homepage.diagnostics,
+    ...repository.diagnostics,
     ...license.diagnostics,
+    ...keywords.diagnostics,
     ...schemaVersion.diagnostics,
     ...extensions.diagnostics,
   ];
   const blocked = diagnostics.some((diagnostic) => isManifestRejection(diagnostic.code));
 
-  return name.value === undefined || version.value === undefined || blocked
+  return name.value === undefined || blocked
     ? { diagnostics }
     : {
         value: {
+          ...(schema.value === undefined ? {} : { $schema: schema.value }),
           name: name.value,
-          version: version.value,
+          ...(version.value === undefined ? {} : { version: version.value }),
           ...(description.value === undefined ? {} : { description: description.value }),
           ...(author.value === undefined ? {} : { author: author.value }),
+          ...(homepage.value === undefined ? {} : { homepage: homepage.value }),
+          ...(repository.value === undefined ? {} : { repository: repository.value }),
           ...(license.value === undefined ? {} : { license: license.value }),
+          ...(keywords.value === undefined ? {} : { keywords: keywords.value }),
           ...(schemaVersion.value === undefined ? {} : { schemaVersion: schemaVersion.value }),
           ...(extensions.value === undefined ? {} : { extensions: extensions.value }),
         },
@@ -379,36 +441,100 @@ function readManifest(
 
 function isManifestRejection(code: DiagnosticCode): boolean {
   switch (code) {
-    case diagnosticCodes.manifestUnknownField:
+    case diagnosticCodes.manifestSchemaRequired:
+    case diagnosticCodes.manifestSchemaUnsupported:
     case diagnosticCodes.manifestSchemaVersionUnsupported:
     case diagnosticCodes.manifestSchemaVersionInvalidType:
     case diagnosticCodes.manifestNameInvalid:
+    case diagnosticCodes.manifestVersionInvalidType:
+    case diagnosticCodes.manifestDescriptionInvalidType:
+    case diagnosticCodes.manifestAuthorInvalid:
+    case diagnosticCodes.manifestHomepageInvalidType:
+    case diagnosticCodes.manifestRepositoryInvalidType:
+    case diagnosticCodes.manifestLicenseInvalidType:
+    case diagnosticCodes.manifestKeywordsInvalidType:
       return true;
     default:
       return false;
   }
 }
 
+function readManifestSchema(value: Record<string, unknown>): ReadResult<string> {
+  const entry = value["$schema"];
+  if (entry === PLUGIN_SCHEMA_URL) return { value: entry, diagnostics: [] };
+  if (entry !== undefined) {
+    return {
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.manifestSchemaUnsupported,
+          message: `Unsupported manifest "$schema" ${JSON.stringify(entry)}. Supported: "${PLUGIN_SCHEMA_URL}".`,
+          path: "$schema",
+        }),
+      ],
+    };
+  }
+  if (value["schemaVersion"] === SUPPORTED_SCHEMA_VERSION) {
+    return {
+      diagnostics: [
+        createDiagnostic({
+          severity: "warning",
+          code: diagnosticCodes.manifestSchemaLegacy,
+          message: `Manifest uses legacy "schemaVersion": "${SUPPORTED_SCHEMA_VERSION}" without "$schema". Set "$schema": "${PLUGIN_SCHEMA_URL}" and remove "schemaVersion".`,
+          path: "schemaVersion",
+        }),
+      ],
+    };
+  }
+  if (value["schemaVersion"] !== undefined) {
+    return { diagnostics: [] };
+  }
+  return {
+    diagnostics: [
+      createDiagnostic({
+        severity: "error",
+        code: diagnosticCodes.manifestSchemaRequired,
+        message: `Manifest requires "$schema": "${PLUGIN_SCHEMA_URL}".`,
+        path: "$schema",
+      }),
+    ],
+  };
+}
+
 function readPluginName(value: Record<string, unknown>): ReadResult<string> {
   const required = readRequiredString(value, "name", diagnosticCodes.manifestNameRequired);
   if (required.value === undefined) return required;
-  return PLUGIN_NAME_PATTERN.test(required.value)
-    ? required
-    : {
-        diagnostics: [
-          ...required.diagnostics,
-          createDiagnostic({
-            severity: "error",
-            code: diagnosticCodes.manifestNameInvalid,
-            message:
-              'Manifest field "name" must be a lowercase npm-style package name (optional @scope/).',
-            path: "name",
-          }),
-        ],
-      };
+  if (isSpecPluginName(required.value)) return required;
+  if (LEGACY_SCOPED_NAME_PATTERN.test(required.value)) {
+    return {
+      value: required.value,
+      diagnostics: [
+        ...required.diagnostics,
+        createDiagnostic({
+          severity: "warning",
+          code: diagnosticCodes.manifestNameLegacyScope,
+          message:
+            'Scoped plugin name "@scope/name" is legacy. Agent Plugins v1.0.0 names are 1-64 lowercase characters (a-z, 0-9, "-", ".") starting and ending with a letter or digit, with no "--" or "..".',
+          path: "name",
+        }),
+      ],
+    };
+  }
+  return {
+    diagnostics: [
+      ...required.diagnostics,
+      createDiagnostic({
+        severity: "error",
+        code: diagnosticCodes.manifestNameInvalid,
+        message:
+          'Manifest field "name" must be 1-64 lowercase characters (a-z, 0-9, "-", "."), starting and ending with a letter or digit, with no "--" or "..".',
+        path: "name",
+      }),
+    ],
+  };
 }
 
-function readSchemaVersion(value: Record<string, unknown>): ReadResult<string> {
+function readSchemaVersion(value: Record<string, unknown>, hasSchema: boolean): ReadResult<string> {
   const entry = value["schemaVersion"];
   if (entry === undefined) return { diagnostics: [] };
   if (typeof entry !== "string" || entry.length === 0) {
@@ -423,16 +549,79 @@ function readSchemaVersion(value: Record<string, unknown>): ReadResult<string> {
       ],
     };
   }
-  return entry === SUPPORTED_SCHEMA_VERSION
+  if (entry !== SUPPORTED_SCHEMA_VERSION) {
+    return {
+      value: entry,
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.manifestSchemaVersionUnsupported,
+          message: `Unsupported schemaVersion "${entry}". Supported: ${SUPPORTED_SCHEMA_VERSION} (prefer "$schema": "${PLUGIN_SCHEMA_URL}").`,
+          path: "schemaVersion",
+        }),
+      ],
+    };
+  }
+  return {
+    value: entry,
+    diagnostics: hasSchema
+      ? [
+          createDiagnostic({
+            severity: "warning",
+            code: diagnosticCodes.manifestSchemaLegacy,
+            message: `Manifest field "schemaVersion" is legacy and redundant when "$schema" is set. Remove "schemaVersion".`,
+            path: "schemaVersion",
+          }),
+        ]
+      : [],
+  };
+}
+
+function readExtensions(value: Record<string, unknown>): ReadResult<Record<string, unknown>> {
+  const entry = value["extensions"];
+  if (entry === undefined) return { diagnostics: [] };
+  if (!isRecord(entry)) {
+    return {
+      diagnostics: [
+        createDiagnostic({
+          severity: "warning",
+          code: diagnosticCodes.manifestExtensionsInvalidType,
+          message: 'Field "extensions" must be an object when present; ignoring non-object extensions.',
+          path: "extensions",
+        }),
+      ],
+    };
+  }
+  const legacyWarning: readonly Diagnostic[] =
+    entry[LEGACY_DISTRIBUTION_EXTENSION] !== undefined
+      ? [
+          createDiagnostic({
+            severity: "warning",
+            code: diagnosticCodes.manifestExtensionLegacyNamespace,
+            message: `Extension namespace "${LEGACY_DISTRIBUTION_EXTENSION}" is legacy. Move distribution settings to "${UPF_DISTRIBUTION_EXTENSION}".`,
+            path: `extensions.${LEGACY_DISTRIBUTION_EXTENSION}`,
+          }),
+        ]
+      : [];
+  return { value: entry, diagnostics: legacyWarning };
+}
+
+function readOptionalManifestStringArray(
+  value: Record<string, unknown>,
+  key: string,
+  code: DiagnosticCode,
+): ReadResult<readonly string[]> {
+  const entry = value[key];
+  if (entry === undefined) return { diagnostics: [] };
+  return Array.isArray(entry) && entry.every((item) => typeof item === "string")
     ? { value: entry, diagnostics: [] }
     : {
-        value: entry,
         diagnostics: [
           createDiagnostic({
             severity: "error",
-            code: diagnosticCodes.manifestSchemaVersionUnsupported,
-            message: `Unsupported schemaVersion "${entry}". Supported: ${SUPPORTED_SCHEMA_VERSION}.`,
-            path: "schemaVersion",
+            code,
+            message: `Field "${key}" must be an array of strings when present.`,
+            path: key,
           }),
         ],
       };
@@ -505,7 +694,10 @@ function readSkills(value: unknown): ReadResult<readonly PluginSkill[]> {
 function readMcpServers(value: unknown): ReadResult<readonly PluginMcpServer[]> {
   if (value === undefined) return { diagnostics: [] };
   if (typeof value === "string" && value.length > 0) {
-    return { value: [configPathServer(undefined, value)], diagnostics: [] };
+    return {
+      value: [configPathServer(undefined, value)],
+      diagnostics: [legacyMcpFormatDiagnostic("mcpServers", 'MCP "config-path" string is legacy; declare servers in root "mcp.json".')],
+    };
   }
   if (isRecord(value)) {
     return readMcpServerMap(value);
@@ -562,7 +754,10 @@ function readMcpServerMap(value: Record<string, unknown>): ReadResult<readonly P
       if (typeof entry === "string" && entry.length > 0) {
         return {
           value: [...(acc.value ?? []), configPathServer(name, entry)],
-          diagnostics: acc.diagnostics,
+          diagnostics: [
+            ...acc.diagnostics,
+            legacyMcpFormatDiagnostic(path, 'MCP "config-path" string entry is legacy; declare explicit "type": "stdio" | "streamable-http" | "sse" in root "mcp.json".'),
+          ],
         };
       }
 
@@ -597,7 +792,7 @@ function readMcpServerRecord(
   name: string | undefined,
 ): ReadResult<PluginMcpServer> {
   const transport = readDeclaredTransport(entry, path);
-  if (transport.diagnostics.length > 0 && transport.value === undefined) {
+  if (transport.diagnostics.some((d) => d.severity === "error") && transport.value === undefined) {
     return { diagnostics: transport.diagnostics };
   }
 
@@ -609,11 +804,15 @@ function readMcpServerRecord(
       return readHttpServer(entry, path, name, transport.value, transport.diagnostics);
     case "config-path": {
       const configPath = readRequiredString(entry, "path", diagnosticCodes.mcpServerPathRequired, path);
+      const legacy = legacyMcpFormatDiagnostic(
+        path,
+        'MCP transport "config-path" is legacy and not part of Agent Plugins v1.0.0. Declare servers directly in root "mcp.json".',
+      );
       return configPath.value === undefined
         ? { diagnostics: [...transport.diagnostics, ...configPath.diagnostics] }
         : {
             value: configPathServer(name, configPath.value),
-            diagnostics: [...transport.diagnostics, ...configPath.diagnostics],
+            diagnostics: [...transport.diagnostics, legacy, ...configPath.diagnostics],
           };
     }
     case undefined:
@@ -640,13 +839,19 @@ function inferMcpServer(
             severity: "error",
             code: diagnosticCodes.mcpServerTransportRequired,
             message:
-              'MCP server with both "command" and "url" must declare transport via "type" or "transport".',
-            path: formatPath(path, "transport"),
+              'MCP server with both "command" and "url" must declare transport via "type".',
+            path: formatPath(path, "type"),
           }),
         ],
       };
     case hasCommand:
-      return readStdioServer(entry, path, name, prior);
+      return readStdioServer(entry, path, name, [
+        ...prior,
+        legacyMcpFormatDiagnostic(
+          formatPath(path, "type"),
+          'MCP server omits "type". Add "type": "stdio" for Agent Plugins v1.0.0 compliance.',
+        ),
+      ]);
     case hasUrl:
       return {
         diagnostics: [
@@ -655,8 +860,8 @@ function inferMcpServer(
             severity: "error",
             code: diagnosticCodes.mcpServerTransportRequired,
             message:
-              'MCP server with "url" must declare transport "streamable-http" or "sse" via "type" or "transport".',
-            path: formatPath(path, "transport"),
+              'MCP server with "url" must declare transport "streamable-http" or "sse" via "type".',
+            path: formatPath(path, "type"),
           }),
         ],
       };
@@ -683,8 +888,22 @@ function readDeclaredTransport(
           }),
         ],
       };
-    default:
-      return readTransportValue(typed ?? transported, path, typed !== undefined ? "type" : "transport");
+    default: {
+      const field = typed !== undefined ? "type" : "transport";
+      const result = readTransportValue(typed ?? transported, path, field);
+      return field === "transport" && result.value !== undefined
+        ? {
+            value: result.value,
+            diagnostics: [
+              ...result.diagnostics,
+              legacyMcpFormatDiagnostic(
+                formatPath(path, "transport"),
+                'MCP server uses legacy field "transport". Use "type" for Agent Plugins v1.0.0 compliance.',
+              ),
+            ],
+          }
+        : result;
+    }
   }
 }
 
@@ -710,7 +929,7 @@ function readTransportValue(
             severity: "error",
             code: diagnosticCodes.mcpServerTransportUnsupported,
             message:
-              'MCP server transport must be one of "stdio", "streamable-http", "sse", or "config-path".',
+              'MCP server transport must be one of "stdio", "streamable-http", or "sse".',
             path: formatPath(path, field),
           }),
         ],
@@ -725,10 +944,31 @@ function readStdioServer(
   prior: readonly Diagnostic[],
 ): ReadResult<PluginMcpServer> {
   const command = readRequiredString(entry, "command", diagnosticCodes.mcpServerCommandRequired, path);
+  const commandPlaceholderDiag: readonly Diagnostic[] =
+    command.value !== undefined && PLACEHOLDER_PATTERN.test(command.value)
+      ? [
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerCommandInvalid,
+            message: 'MCP stdio "command" must not contain plugin variable placeholders.',
+            path: formatPath(path, "command"),
+          }),
+        ]
+      : [];
+  PLACEHOLDER_PATTERN.lastIndex = 0;
   const args = readOptionalStringArray(entry, "args", path);
-  const cwd = readOptionalString(entry, "cwd", diagnosticCodes.mcpServerCwdInvalidType, path);
-  const diagnostics = [...prior, ...command.diagnostics, ...args.diagnostics, ...cwd.diagnostics];
-  return command.value === undefined || !args.isValid || cwd.diagnostics.length > 0
+  const env = readStdioEnv(entry, path);
+  const cwd = readStdioCwd(entry, path);
+  const diagnostics = [
+    ...prior,
+    ...command.diagnostics,
+    ...commandPlaceholderDiag,
+    ...args.diagnostics,
+    ...env.diagnostics,
+    ...cwd.diagnostics,
+  ];
+  const hasError = diagnostics.some((d) => d.severity === "error");
+  return command.value === undefined || hasError
     ? { diagnostics }
     : {
         value: withPlaceholders({
@@ -736,9 +976,72 @@ function readStdioServer(
           ...(name === undefined ? {} : { name }),
           command: command.value,
           ...(args.value === undefined ? {} : { args: args.value }),
+          ...(env.value === undefined ? {} : { env: env.value }),
           ...(cwd.value === undefined ? {} : { cwd: cwd.value }),
         }),
         diagnostics,
+      };
+}
+
+function readStdioEnv(
+  entry: Record<string, unknown>,
+  parentPath: string,
+): ReadResult<Readonly<Record<string, string>>> {
+  const raw = entry["env"];
+  if (raw === undefined) return { diagnostics: [] };
+  const path = formatPath(parentPath, "env");
+  if (!isRecord(raw)) {
+    return {
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.mcpServerEnvInvalidType,
+          message: 'Field "env" must be an object of string values when present.',
+          path,
+        }),
+      ],
+    };
+  }
+  const diagnostics = Object.entries(raw).flatMap(([k, v]): readonly Diagnostic[] => [
+    ...(RESERVED_ENV_KEYS.has(k)
+      ? [
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerEnvReservedKey,
+            message: `MCP stdio "env" must not declare reserved variable "${k}".`,
+            path: formatPath(path, k),
+          }),
+        ]
+      : []),
+    ...(typeof v !== "string"
+      ? [
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerEnvInvalidType,
+            message: `MCP stdio "env.${k}" must be a string.`,
+            path: formatPath(path, k),
+          }),
+        ]
+      : []),
+  ]);
+  return diagnostics.length > 0 ? { diagnostics } : { value: raw as Readonly<Record<string, string>>, diagnostics: [] };
+}
+
+function readStdioCwd(entry: Record<string, unknown>, parentPath: string): ReadResult<string> {
+  const cwd = readOptionalString(entry, "cwd", diagnosticCodes.mcpServerCwdInvalidType, parentPath);
+  if (cwd.value === undefined) return cwd;
+  return CWD_PATTERN.test(cwd.value)
+    ? cwd
+    : {
+        diagnostics: [
+          ...cwd.diagnostics,
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerCwdInvalid,
+            message: 'MCP stdio "cwd" must start with "./", "${PLUGIN_ROOT}", or "${PLUGIN_DATA}".',
+            path: formatPath(parentPath, "cwd"),
+          }),
+        ],
       };
 }
 
@@ -750,17 +1053,118 @@ function readHttpServer(
   prior: readonly Diagnostic[],
 ): ReadResult<PluginMcpServer> {
   const url = readRequiredString(entry, "url", diagnosticCodes.mcpServerUrlRequired, path);
-  const diagnostics = [...prior, ...url.diagnostics];
-  return url.value === undefined
+  const urlValidation = url.value === undefined ? [] : validateRemoteUrl(url.value, formatPath(path, "url"));
+  const headers = readRemoteHeaders(entry, path);
+  const diagnostics = [...prior, ...url.diagnostics, ...urlValidation, ...headers.diagnostics];
+  const hasError = diagnostics.some((d) => d.severity === "error");
+  return url.value === undefined || hasError
     ? { diagnostics }
     : {
-        value: withPlaceholders({
+        value: {
           transport,
           ...(name === undefined ? {} : { name }),
           url: url.value,
-        }),
+          ...(headers.value === undefined ? {} : { headers: headers.value }),
+        },
         diagnostics,
       };
+}
+
+function validateRemoteUrl(rawUrl: string, path: string): readonly Diagnostic[] {
+  try {
+    const parsed = new URL(rawUrl);
+    const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:";
+    const hasUserinfo = parsed.username.length > 0 || parsed.password.length > 0;
+    const hasFragment = parsed.hash.length > 0;
+    const nonLoopbackHttp = parsed.protocol === "http:" && !isLoopbackHostname(parsed.hostname);
+    return !isHttp || hasUserinfo || hasFragment || nonLoopbackHttp
+      ? [
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerUrlInvalid,
+            message:
+              'MCP remote "url" must be an absolute HTTPS URL (or HTTP for localhost/loopback) without userinfo or fragment.',
+            path,
+          }),
+        ]
+      : [];
+  } catch {
+    return [
+      createDiagnostic({
+        severity: "error",
+        code: diagnosticCodes.mcpServerUrlInvalid,
+        message: 'MCP remote "url" must be a valid absolute HTTP or HTTPS URL.',
+        path,
+      }),
+    ];
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized)
+  );
+}
+
+function readRemoteHeaders(
+  entry: Record<string, unknown>,
+  parentPath: string,
+): ReadResult<Readonly<Record<string, string>>> {
+  const raw = entry["headers"];
+  if (raw === undefined) return { diagnostics: [] };
+  const path = formatPath(parentPath, "headers");
+  if (!isRecord(raw)) {
+    return {
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.mcpServerHeadersInvalidType,
+          message: 'Field "headers" must be an object of string values when present.',
+          path,
+        }),
+      ],
+    };
+  }
+  const seen = new Set<string>();
+  const diagnostics = Object.entries(raw).flatMap(([k, v]): readonly Diagnostic[] => {
+    const lower = k.toLowerCase();
+    const dup = seen.has(lower)
+      ? [
+          createDiagnostic({
+            severity: "error",
+            code: diagnosticCodes.mcpServerHeaderDuplicate,
+            message: `Duplicate case-insensitive HTTP header "${k}".`,
+            path: formatPath(path, k),
+          }),
+        ]
+      : [];
+    seen.add(lower);
+    const badVal =
+      typeof v !== "string"
+        ? [
+            createDiagnostic({
+              severity: "error",
+              code: diagnosticCodes.mcpServerHeadersInvalidType,
+              message: `Header "${k}" value must be a string.`,
+              path: formatPath(path, k),
+            }),
+          ]
+        : [];
+    return [...dup, ...badVal];
+  });
+  return diagnostics.length > 0 ? { diagnostics } : { value: raw as Readonly<Record<string, string>>, diagnostics: [] };
+}
+
+function legacyMcpFormatDiagnostic(path: string, message: string): Diagnostic {
+  return createDiagnostic({
+    severity: "warning",
+    code: diagnosticCodes.mcpLegacyFormat,
+    message,
+    path,
+  });
 }
 
 function configPathServer(name: string | undefined, configPath: string): PluginMcpServer {
@@ -780,10 +1184,10 @@ function withPlaceholders<T extends PluginMcpServer>(server: T): T {
 function collectPlaceholderValues(server: PluginMcpServer): readonly (string | undefined)[] {
   switch (server.transport) {
     case "stdio":
-      return [server.command, server.cwd, ...(server.args ?? [])];
+      return [server.cwd, ...(server.args ?? []), ...Object.values(server.env ?? {})];
     case "streamable-http":
     case "sse":
-      return [server.url];
+      return [];
     case "config-path":
       return [server.path];
   }
@@ -1163,25 +1567,24 @@ function inspectLoadedPlugin(
     };
   }
 
-  const inspection = inspectPlugin(
-    buildDeclaration(manifestValue, skillDiscovery.skills, mcpDiscovery.mcpServers),
-  );
+  const manifest = readManifest(manifestValue, "portable");
+  const skills = readSkills(skillDiscovery.skills.length === 0 ? undefined : skillDiscovery.skills);
+  const mcpServers = readMcpServers(mcpDiscovery.mcpServers);
+  const onboarded = readOnboardedPlugins(manifest.value?.extensions);
 
   return {
-    ...inspection,
-    diagnostics: [...skillDiscovery.diagnostics, ...mcpDiscovery.diagnostics, ...inspection.diagnostics],
-  };
-}
-
-function buildDeclaration(
-  manifestValue: Record<string, unknown>,
-  skills: readonly Record<string, unknown>[],
-  mcpServers: unknown,
-): Record<string, unknown> {
-  return {
-    ...manifestValue,
-    ...(skills.length === 0 ? {} : { skills }),
-    ...(mcpServers === undefined ? {} : { mcpServers }),
+    ...(manifest.value === undefined ? {} : { manifest: manifest.value }),
+    ...optionalSkills(skills.value),
+    ...optionalMcpServers(mcpServers.value),
+    ...optionalOnboardedPlugins(onboarded.plugins),
+    diagnostics: [
+      ...skillDiscovery.diagnostics,
+      ...mcpDiscovery.diagnostics,
+      ...manifest.diagnostics,
+      ...skills.diagnostics,
+      ...mcpServers.diagnostics,
+      ...onboarded.diagnostics,
+    ],
   };
 }
 
@@ -1279,13 +1682,78 @@ function discoverMcpServers(pluginRoot: string): {
         ],
       };
     case "ok":
-      return { mcpServers: normalizeMcpConfiguration(mcpRead.value), diagnostics: [] };
+      return normalizeMcpConfiguration(mcpRead.value);
   }
 }
 
-function normalizeMcpConfiguration(value: unknown): unknown {
-  if (!isRecord(value)) return value;
-  return value["mcpServers"] === undefined ? value : value["mcpServers"];
+function normalizeMcpConfiguration(value: unknown): {
+  readonly mcpServers: unknown;
+  readonly diagnostics: readonly Diagnostic[];
+} {
+  if (!isRecord(value)) {
+    return {
+      mcpServers: undefined,
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.mcpServersInvalidType,
+          message: "MCP configuration top-level value must be a JSON object.",
+          path: "mcp.json",
+        }),
+      ],
+    };
+  }
+  if (value["mcpServers"] === undefined) {
+    return {
+      mcpServers: value,
+      diagnostics: [
+        legacyMcpFormatDiagnostic(
+          "mcp.json",
+          `Bare mcp.json server map is legacy. Wrap servers under "mcpServers" with "$schema": "${MCP_SCHEMA_URL}".`,
+        ),
+      ],
+    };
+  }
+  const extraKeys = Object.keys(value).filter((key) => key !== "$schema" && key !== "mcpServers");
+  if (extraKeys.length > 0) {
+    return {
+      mcpServers: undefined,
+      diagnostics: extraKeys.map((key) =>
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.mcpServersInvalidType,
+          message: `Unknown top-level mcp.json field "${key}". Only "$schema" and "mcpServers" are allowed.`,
+          path: `mcp.json.${key}`,
+        }),
+      ),
+    };
+  }
+  const schema = value["$schema"];
+  if (schema === undefined) {
+    return {
+      mcpServers: value["mcpServers"],
+      diagnostics: [
+        legacyMcpFormatDiagnostic(
+          "mcp.json.$schema",
+          `mcp.json omits "$schema". Add "$schema": "${MCP_SCHEMA_URL}" for Agent Plugins v1.0.0 compliance.`,
+        ),
+      ],
+    };
+  }
+  if (schema !== MCP_SCHEMA_URL) {
+    return {
+      mcpServers: undefined,
+      diagnostics: [
+        createDiagnostic({
+          severity: "error",
+          code: diagnosticCodes.mcpSchemaInvalid,
+          message: `Unsupported mcp.json "$schema" ${JSON.stringify(schema)}. Supported: "${MCP_SCHEMA_URL}".`,
+          path: "mcp.json.$schema",
+        }),
+      ],
+    };
+  }
+  return { mcpServers: value["mcpServers"], diagnostics: [] };
 }
 
 function readJson(absolutePath: string): JsonRead {
@@ -1345,7 +1813,7 @@ function validateAuthoringPluginName(name: string): Diagnostic | undefined {
         severity: "error",
         code: diagnosticCodes.authoringNameInvalid,
         message:
-          'Plugin name must be a lowercase npm-style package name (optional @scope/).',
+          'Plugin name must be 1-64 lowercase characters (a-z, 0-9, "-", "."), starting and ending with a letter or digit, with no "--" or "..".',
         path: "name",
       });
 }

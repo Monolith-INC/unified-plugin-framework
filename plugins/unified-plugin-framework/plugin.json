@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "unified-plugin-framework",
   "version": "0.1.0",
   "description": "Project companion workflows backed by onboarded plugins through workflow adapters.",
@@ -7,7 +8,6 @@
     "url": "https://github.com/Monolith-INC"
   },
   "license": "Apache-2.0",
-  "schemaVersion": "1.0.0",
   "extensions": {
     "io.github.monolith-inc.upf": {
       "onboardedPlugins": [

@@ -1,4 +1,5 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "invalid-mcp-server",
   "version": "1.0.0",
   "description": "Invalid fixture with an MCP server missing command."

@@ -85,6 +85,7 @@ test("adapter-check rejects bad input with exit 2 instead of a readiness result"
 test("adapter-check reports a broken framework manifest as a configuration error", () => {
   const broken = mkdtempSync(join(tmpdir(), "upf-framework-"));
   writeJson(join(broken, "plugin.json"), {
+    $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     name: "unified-plugin-framework",
     version: "0.1.0",
     extensions: { "io.github.monolith-inc.upf": { onboardedPlugins: [{ name: "monolithic-code-review-toolkit" }] } },

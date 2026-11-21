@@ -224,11 +224,12 @@ function renderCursorMcp(servers: readonly PluginMcpServer[]): Result<JsonValue 
         entries[name] = {
           command: server.command,
           ...(server.args === undefined ? {} : { args: server.args }),
+          ...(server.env === undefined ? {} : { env: server.env }),
           ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
         };
         break;
-      case "streamable-http": entries[name] = { url: server.url }; break;
-      case "sse": entries[name] = { type: "sse", url: server.url }; break;
+      case "streamable-http": entries[name] = { url: server.url, ...(server.headers === undefined ? {} : { headers: server.headers }) }; break;
+      case "sse": entries[name] = { type: "sse", url: server.url, ...(server.headers === undefined ? {} : { headers: server.headers }) }; break;
       case "config-path": return cursorFailure("cursor.mcp.unsupported", "Cursor payloads cannot inline an opaque MCP config-path declaration.", name);
     }
   }

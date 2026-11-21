@@ -14,9 +14,13 @@ import {
   pluginDirectoryName,
 } from "../dist/index.js";
 
-test("isValidPluginName accepts scoped and unscoped npm-style names", () => {
+test("isValidPluginName accepts Agent Plugins v1.0.0 names and rejects invalid ones", () => {
   assert.equal(isValidPluginName("hello-world"), true);
-  assert.equal(isValidPluginName("@acme/hello-world"), true);
+  assert.equal(isValidPluginName("acme.tools"), true);
+  assert.equal(isValidPluginName("a"), true);
+  assert.equal(isValidPluginName("@acme/hello-world"), false);
+  assert.equal(isValidPluginName("has--double"), false);
+  assert.equal(isValidPluginName("too..many"), false);
   assert.equal(isValidPluginName("Hello"), false);
   assert.equal(isValidPluginName(""), false);
   assert.equal(isValidPluginName("../escape"), false);
@@ -45,10 +49,10 @@ test("createPluginScaffold writes a validateable plugin root", () => {
 
   const manifest = JSON.parse(readFileSync(join(destination, "plugin.json"), "utf8"));
   assert.deepEqual(manifest, {
+    $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     name: "sample-plugin",
     version: "0.1.0",
     description: "Scaffolded by agent-plugin create.",
-    schemaVersion: "1.0.0",
   });
   assert.deepEqual(readdirSync(join(destination, "skills")), []);
 

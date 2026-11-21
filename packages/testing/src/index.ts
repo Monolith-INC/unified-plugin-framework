@@ -111,6 +111,7 @@ export function assertFixtureExpectation(
   inspection: PluginInspection,
   expectation: FixtureExpectation,
 ): void {
+  const allCodes = inspection.diagnostics.map((diagnostic) => diagnostic.code);
   const errorCodes = inspection.diagnostics
     .filter((diagnostic) => diagnostic.severity === "error")
     .map((diagnostic) => diagnostic.code);
@@ -123,8 +124,8 @@ export function assertFixtureExpectation(
 
   expectation.diagnosticCodes.map((code) =>
     assert.ok(
-      errorCodes.includes(code),
-      `${expectation.id}: missing diagnostic code ${code} (got ${errorCodes.join(", ") || "none"})`,
+      allCodes.includes(code),
+      `${expectation.id}: missing diagnostic code ${code} (got ${allCodes.join(", ") || "none"})`,
     ),
   );
 

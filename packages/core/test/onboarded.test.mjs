@@ -12,6 +12,7 @@ const reviewToolkit = {
 };
 
 const manifestWith = (section) => ({
+  $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   name: "unified-plugin-framework",
   version: "0.1.0",
   extensions: { [UPF_EXTENSION]: section },
@@ -32,6 +33,7 @@ test("declared onboarded plugins are listed with their version range, source and
 
 test("a manifest without the extension is unchanged and lists no onboarded plugins", () => {
   const inspection = inspectPlugin({
+    $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
     name: "plain-plugin",
     version: "1.0.0",
     extensions: { "com.example": { flag: true } },
