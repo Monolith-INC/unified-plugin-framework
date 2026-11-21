@@ -51,6 +51,18 @@
     {
       "bindings": [
         {
+          "adapter": "knowledge",
+          "contractVersion": "1.0.0",
+          "mappingDigest": "7427702a045bb5bc07829d185ba6307b7cdffbc7df04af1c3511736dd3df1951"
+        }
+      ],
+      "checksum": "2e9f0e570afdaaa593b3d7211e1b5f8b7b2c26c636b1fff387b95c7ff26232a6",
+      "plugin": "monolithic-agent-knowledge-store",
+      "version": "0.3.0"
+    },
+    {
+      "bindings": [
+        {
           "adapter": "code-review",
           "contractVersion": "1.0.0",
           "mappingDigest": "98c193cec36c01c4500f109af874b8db11a3083ce4cf114101178e1be17e0822"

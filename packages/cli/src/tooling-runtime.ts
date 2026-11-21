@@ -36,14 +36,11 @@ const installPlugin = (project: string, host: HostName, name: string): Promise<R
     : installed?.kind === "installed" || installed?.kind === "unchanged" ? ok(name) : setupFailure(`Could not install ${name}; preserve the installer diagnostics and resolve its target conflict.`);
 });
 
-/** Install from a private source copy so package builders cannot modify dependency source. */
-export const installKnowledge = async (project: string, input: BootstrapInput, patience = 1): Promise<Result<string>> => {
-  const runtime = await prepareKnowledgeRuntime(project, input.python);
-  return !runtime.ok ? runtime : command(input.python, ["-m", "venv", runtime.value], project, scaled(120_000, patience)).then((venv) => venv.ok
-    ? withSetupStage(project, input.python, (stage) => copyRuntime(join(stage, "source"))
-      .then((source) => source.ok ? command(pythonRuntime(project), ["-m", "pip", "install", "--disable-pip-version-check", source.value], project, scaled(180_000, patience)) : source))
-    : venv);
-};
+/** Verify user-provided Python 3.12+ for the standalone knowledge store (zero venv, zero pip, zero MCP). */
+export const installKnowledge = async (project: string, input: BootstrapInput, patience = 1): Promise<Result<string>> =>
+  command(input.python, ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"], project, scaled(30_000, patience))
+    .then((checked) => checked.ok ? ok(input.python) : fail("python-missing", "Python 3.12+ is required for the standalone knowledge store.",
+      "Install Python 3.12 or newer, or pass --python <executable>, then rerun setup."));
 
 const RUNTIME_ENTRY = ".project-knowledge/runtime";
 const directoryIdentity = (path: string): Promise<Result<string | null>> =>
@@ -133,7 +130,7 @@ const configureReviewFile = async (project: string, input: BootstrapInput, path:
     "Run the installed review-setup skill with the project's selected tracker, SCM and shared knowledge root; then resume bootstrap.")
     : typeof knowledge.root === "string" && knowledge.root !== input.knowledge.knowledgeRoot ? setupFailure("Review and project knowledge settings disagree; choose one shared store before resuming.")
       : nodeProjectFiles.write(path, { ...settings, knowledge: { ...knowledge, root: input.knowledge.knowledgeRoot,
-        mcp_server: "project-knowledge", committed: knowledge.committed ?? false } }, raw.value)().then((written) => written.ok ? ok(path) : written);
+        committed: knowledge.committed ?? false } }, raw.value)().then((written) => written.ok ? ok(path) : written);
 };
 
 const cliContent = (entry: URL): string => `#!/usr/bin/env node\nimport(${JSON.stringify(entry.href)}).then(m => Promise.resolve(m.run(process.argv.slice(2))).then(code => { process.exitCode = code; }));\n`; // fp-allow: no-field-write, no-ambient-effect -- generated external CLI boundary sets its process exit status

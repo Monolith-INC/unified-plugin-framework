@@ -11,8 +11,8 @@ const framework = fileURLToPath(new URL("../../../", import.meta.url));
 
 const unusedAdapter = Object.freeze({ vendor: "claude" });
 
-test("the framework and knowledge plugins are shipped", () => {
-  assert.deepEqual([...SHIPPED_PLUGINS], ["unified-plugin-framework", "project-knowledge"]);
+test("the framework plugin is shipped", () => {
+  assert.deepEqual([...SHIPPED_PLUGINS], ["unified-plugin-framework"]);
 });
 
 test("verify writes payloads to a scratch folder it removes; build keeps them in the package", () => {

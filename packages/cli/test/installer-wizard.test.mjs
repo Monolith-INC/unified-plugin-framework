@@ -58,7 +58,7 @@ test('fresh wizard asks for explicit consent and previews both hosts before acce
   assert.deepEqual(result.value.plan.hosts, ['codex', 'claude']);
   assert.deepEqual(result.value.plan.consent, {privatePython: false, installHostClis: true, headlessDiscovery: true});
   assert.equal(result.value.plan.answers.tracker.adapter, 'local');
-  assert.equal(result.value.plan.workflows.length, 5);
+  assert.equal(result.value.plan.workflows.length, 6);
   assert.deepEqual(planCalls, [{target: project, plan: result.value.plan}]);
   assert.equal(q.output.filter(line => line.includes('Install UPF')).length, 1);
   assert.match(q.output.join('\n'), /knowledge runtime|knowledge-runtime/i);

@@ -36,7 +36,7 @@ const localizeSelfLink=async(root)=>{
  await symlink(relative(dirname(link),cli),link,'dir');
 };
 const copyContents=async(root,scratch,sources)=>{
- await Promise.all(['plugin.json','skills','io.github.monolith-inc.upf','plugins/project-knowledge','runtimes/project-knowledge','packages/cli/scripts/setup-write.py','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
+ await Promise.all(['plugin.json','skills','io.github.monolith-inc.upf','packages/cli/scripts/setup-write.py','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
   cp(join(repository,path),join(root,path),{recursive:true,filter:path=>!['node_modules','.venv','__pycache__','build','dist'].some(part=>path.split(/[\\/]/).includes(part))})));
  const copied=await sequence(sources,source=>cp(join(scratch,'fetched',`${source.plugin}@${source.version}`),join(root,'dependencies',`${source.plugin}@${source.version}`),{recursive:true,verbatimSymlinks:true})
   .then(()=>ok(source.plugin)),'Dependencies included.');
@@ -53,19 +53,19 @@ const publishArchive=async(root,plugins)=>{
  await mkdir(output,{recursive:true});
  const name=`unified-plugin-framework-${version}.tar.gz`;
  const audited=distributionFiles(root);
- return audited.some(file=>file.sha256==='unsupported-link') ? fail('distribution-link','A deployed link escapes the distribution.','Correct production deployment before publication.') : archive(root,name);
+ return audited.some(file=>file.sha256==='unsupported-link') ? fail('distribution-link','A deployed link escapes the distribution.','Correct production deployment before publication.') : archive(root,name,plugins.length);
 };
-const archive=async(root,name)=>{
+const archive=async(root,name,pluginCount)=>{
  const archived=await command('tar',['-czf',join(output,name),'-C',resolve(root,'..'),root.split(/[\\/]/).at(-1)],repository,300_000);
- return archived.ok ? finish(name) : archived;
+ return archived.ok ? finish(name,pluginCount) : archived;
 };
-const finish=async(name)=>{
+const finish=async(name,pluginCount)=>{
  await Promise.all([['scripts/install-release.mjs','install.mjs'],['scripts/install.sh','install.sh']].map(([source,name])=>cp(join(repository,source),join(output,name))));
  const entries=await Promise.all([name,'install.mjs','install.sh'].map(async name=>`${sha256(await readFile(join(output,name)))}  ${name}`));
  const checksums=await readFile(join(output,'SHA256SUMS'),'utf8').catch(()=> '');
  const retained=checksums.split(/\r?\n/).filter(line=>line.length>0 && ![name,'install.mjs','install.sh'].some(asset=>line.endsWith(`  ${asset}`)));
  await writeFile(join(output,'SHA256SUMS'),`${[...retained,...entries].join('\n')}\n`);
- return ok({archive:join(output,name),plugins:5});
+ return ok({archive:join(output,name),plugins:pluginCount});
 };
 const result=/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(version)
  ? await build().catch(error=>fail('distribution-build',String(error),'Correct the build failure before publishing.'))

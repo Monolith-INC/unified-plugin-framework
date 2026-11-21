@@ -170,7 +170,7 @@ test("each failure carries a recovery action", () => {
   const recoveryFor = (overrides) => checkAdapterReadiness({ ...facts, ...overrides }).recovery;
   assert.deepEqual(recoveryFor({ projectStore: undefined }), {
     action: "run-skill",
-    skill: { plugin: "project-knowledge", skill: "setup-project-knowledge" },
+    skill: { plugin: "monolithic-agent-knowledge-store", skill: "setup-project-knowledge" },
     goal: "Create the project knowledge store with the recommended defaults.",
   });
   assert.deepEqual(recoveryFor({ pluginStores: new Map([["review-kit", undefined]]) }), {

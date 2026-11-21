@@ -41,8 +41,8 @@ const inspect = async (project: string, input: BootstrapInput, resolved: Bootstr
       .then((result) => checked(result, "Project CLI runs the shared command entry point.", "Expose the existing framework CLI from the supported installation."));
     case "skills": return inspectSkills(project, input);
     case "dependencies": return inspectDependencies(project, input, resolved);
-    case "knowledge-runtime": return command(pythonRuntime(project), ["-c", "import importlib.metadata as m; assert m.version('upf-project-knowledge') == '0.1.2'"], project, scaled(120_000, environment.patience))
-      .then((result) => checked(result, "Isolated knowledge runtime 0.1.2 is installed.", "Install the owned knowledge runtime into the isolated project environment."));
+    case "knowledge-runtime": return command(input.python, ["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"], project, scaled(30_000, environment.patience))
+      .then((result) => checked(result, "User-provided Python 3.12+ is available for the standalone knowledge store.", "Install Python 3.12 or newer, or pass --python <executable>, then rerun setup."));
     case "knowledge-settings": return knowledgeSettings(project, input);
     case "knowledge-content": return inspectKnowledgeContent(project, input);
     case "knowledge-server": return inspectServer(project, input, environment);
@@ -69,10 +69,10 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
     case "cli": return wireCli(project, undefined, input.python).then((written) => written.ok ? chmod(written.value, 0o755).then(() => written) : written);
     case "skills": return installSkills(project, input.host).then((installed) => installed.ok ? installHostPlugins(project, input, environment, FRAMEWORK_PLUGINS) : installed);
     case "dependencies": return stageDependencies(project, input).then((staged) => staged.ok ? installHostPlugins(project, resolved, environment, pluginNames(input)) : staged);
-    case "knowledge-runtime": return process.platform === "win32" ? inputNeeded("unsupported-runtime", "The knowledge runtime currently supports Linux and macOS.", "Use a supported runtime host; preserve this host's existing configuration.") : installKnowledge(project, input, environment.patience);
+    case "knowledge-runtime": return installKnowledge(project, input, environment.patience);
     case "knowledge-settings": return configureKnowledge(project, input);
     case "knowledge-content": return inputNeeded("knowledge-discovery-needed", "Project knowledge has not been populated.", "Run the installed discover-project-knowledge skill on the accepted root, preserving authored decisions and citing source evidence; then rerun bootstrap.");
-    case "knowledge-server": return registerHost(project, input, environment, knowledgeExecutable(project));
+    case "knowledge-server": return registerHost(project, input, environment);
     case "review": return configureReview(project, input);
     case "host-discovery": return stagedBindings(project, input).ok
       ? installHostPlugins(project, resolved, environment, [...FRAMEWORK_PLUGINS, ...pluginNames(input)])
@@ -83,7 +83,7 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
 
 const inspectSkills = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   return await installedSkills(project, input.host)
-    ? ready("Both verified host payloads are installed with ownership records.") : missing("Install the shipped framework and knowledge payloads, then activate them through the host plugin mechanism.");
+    ? ready("Verified framework host payload is installed with ownership records.") : missing("Install the shipped framework payload, then activate it through the host plugin mechanism.");
 };
 const knowledgeSettings = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const raw = await nodeProjectFiles.read(join(project, ".project-knowledge.json"))();
@@ -99,16 +99,15 @@ const inspectKnowledgeContent = async (project: string, input: BootstrapInput): 
     ? ready("Knowledge manifest and a nonempty catalog are present; server verification checks retrieval.")
     : missing("Run discover-project-knowledge to derive source-backed indexed units, then rerun bootstrap.");
 };
-const inspectServer = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => hostRegistered(project, input, environment, knowledgeExecutable(project))
-  .then((registered) => !registered.ok ? missing("Reconcile the project-scoped server with the accepted isolated runtime; preserve unrelated entries.")
-    : !registered.value ? missing("Register the knowledge server and local marketplace in the selected host.")
-      : command(knowledgeExecutable(project), ["--project", project, "--verify"], project, scaled(60_000, environment.patience))
-        .then((result) => checked(result, "Registered runtime passed real catalog, search and fetch protocol calls.", "Populate the accepted store, restore the runtime, then repeat protocol verification.")));
+const inspectServer = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => hostRegistered(project, input, environment)
+  .then((registered) => !registered.ok ? missing("Reconcile the host marketplace registration; preserve unrelated entries.")
+    : !registered.value ? missing("Register the local marketplace in the selected host.")
+      : ready("Standalone project knowledge uses stdlib Python scripts (no MCP server required) and host marketplace is registered."));
 const inspectReview = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const raw = await nodeProjectFiles.read(join(project, ".monolithic-code-review/sources.json"))();
   return raw.ok && reviewBindingsValid(raw.value) && object(raw.value.knowledge)
-    && raw.value.knowledge.root === input.knowledge.knowledgeRoot && raw.value.knowledge.mcp_server === KNOWLEDGE_SERVER
-    ? ready("Review settings point to the project's single knowledge root and server.") : missing("Run review-setup for provider bindings if absent, then point review knowledge to the accepted project root.");
+    && raw.value.knowledge.root === input.knowledge.knowledgeRoot
+    ? ready("Review settings point to the project's single knowledge root.") : missing("Run review-setup for provider bindings if absent, then point review knowledge to the accepted project root.");
 };
 const inspectDiscovery = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => discoverHost(project, input, environment).then((result) => {
   const expected = [...new Set([...frameworkSkills(project, input.host).map(({ name }) => name), ...requiredSkills(project, input)])];
