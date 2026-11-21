@@ -66,6 +66,19 @@ export {
 } from "./questions.js";
 
 export {
+  classifyReadinessFailure,
+  formatRepairSummary,
+  planRepair,
+  repairActions,
+  type FailureClassification,
+  type FailureSeverity,
+  type RepairAction,
+  type RepairContext,
+  type RepairPlan,
+  type SevereFailureKind,
+} from "./repair.js";
+
+export {
   EMPTY_LOCK,
   LEGACY_LOCK_FILE,
   LOCK_FILE,

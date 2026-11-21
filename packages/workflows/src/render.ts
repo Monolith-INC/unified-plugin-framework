@@ -144,7 +144,7 @@ const readiness = (
     "",
     "Use the project's saved language for communication, documentation and other prose. Work-item actions go through `project-operations`, which uses the configured project adapter and runs `project-bootstrap` only when setup is missing. Do not choose a tracker or call its native tools from this workflow.",
     "",
-    "Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message.",
+    "Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message. If a recovery step fails or hits a severe problem no listed recovery fixes, hand over to `repair-workflow` with the failing step, error summary and original operation so the work can resume once repaired.",
     "",
     `1. **Available:** ${andList(checked.map(qualify))} ${checked.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${andList(pins.map(({ plugin }) => `\`${plugin}\``))} for this host, then continue once it is.${testedWith(pins)}`,
     `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with \`monolithic-agent-knowledge-store:discover-project-knowledge\` (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,

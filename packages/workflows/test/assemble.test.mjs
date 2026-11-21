@@ -69,7 +69,7 @@ test("assemblePluginSource copies the plugin and renders its templates into stag
   readdirSync(join(staging, "skills")).map((skill) => {
     const text = readFileSync(join(staging, "skills", skill, "SKILL.md"), "utf8");
     assert.doesNotMatch(text, /\{\{/);
-    skill.startsWith("project-")
+    skill.startsWith("project-") || skill === "repair-workflow"
       ? assert.equal(text, readFileSync(new URL(`skills/${skill}/SKILL.md`, pluginSource), "utf8"))
       : assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
         : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
