@@ -15,7 +15,14 @@ export interface CodexToolingInput {
 export const CODEX_TOOLING = Object.freeze({
   marketplace: "upf-project",
   server: KNOWLEDGE_SERVER,
-  install: (name: string): readonly string[] => ["plugin", "add", `${name}@upf-project`, "--json"],
+  install: (name: string, marketplace?: string): readonly string[] => [
+    "plugin", "add",
+    ...(marketplace === undefined ? [] : [
+      "-c", "marketplaces.upf-project.source_type=\"local\"",
+      "-c", `marketplaces.upf-project.source=${JSON.stringify(marketplace)}`,
+    ]),
+    `${name}@upf-project`, "--json",
+  ],
   discovery: (project: string) => ({ method: "skills/list", params: { cwds: [project], forceReload: true } }),
   skillManifest: (name: string, version: string): JsonValue => ({ name, version, skills: "./skills/" }),
   marketplaceManifest: (names: readonly string[]): JsonValue => ({ name: "upf-project", plugins: names.map((name) => ({

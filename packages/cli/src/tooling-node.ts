@@ -6,19 +6,13 @@ import { requireHost, type BootstrapInput } from "./tooling-input.js";
 import { command, scaled } from "./tooling-process.js";
 import { readText, setupFailure } from "./tooling-files.js";
 import { DISCOVERY_MARKER } from "./tooling-recovery.js";
-import { HOST_STEPS } from "./tooling-bootstrap.js";
 import { bmadRuntimeReady, discoverHost, driftedSkills, FRAMEWORK_PLUGINS, frameworkSkills, frameworkSkillsMatch, expectedDependencySkills, hostRegistered, installHostPlugins, pendingSources, pluginBindings, pluginNames, pluginTarget, registerHost, resolvedInput, stageDependencies, stagedBindings, toolsRoot } from "./tooling-host.js";
-import { configureKnowledge, configureReview, installKnowledge, installSkills, installedCli, installedSkills, reviewBindingsValid, wireCli } from "./tooling-runtime.js";
+import { configureKnowledge, configureReview, hasStagedMaks, installKnowledge, installSkills, installedCli, installedMaks, installedMaksHooks, installedSkills, reviewBindingsValid, wireCli, wireMaks, wireMaksHooks } from "./tooling-runtime.js";
 
 const ready = (evidence: string): Result<ToolingObservation> => ok({ status: "ready", evidence });
 const missing = (recovery: string): Result<ToolingObservation> => ok({ status: "missing", recovery });
 const checked = (result: Result<unknown>, evidence: string, recovery: string): Result<ToolingObservation> => result.ok ? ready(evidence) : missing(recovery);
 const inputNeeded = (code: string, message: string, recovery: string): Promise<Result<string>> => Promise.resolve(fail(code, message, recovery));
-const hostCliMissing = (input: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Result<never> | null =>
-  environment.hostCli?.kind === "missing" && HOST_STEPS.includes(step)
-    ? fail("host-cli-missing", environment.hostCli.attempted ? `The pinned ${input.host} CLI could not be installed.` : `The ${input.host} CLI is unavailable.`,
-      "Install the host's official CLI, add it to PATH, and rerun setup.")
-    : null;
 
 /** A per-host step runs only on one host's view of the plan; a whole plan is refused before any effect. */
 const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promise<Result<A>> =>
@@ -30,7 +24,7 @@ const guarded = <A>(input: BootstrapInput, run: () => Promise<Result<A>>): Promi
  */
 export const nodeToolingIO = (project: string, input: BootstrapInput, environment: HostEnvironment): ToolingIO => ({
   inspect: (step) => () => Promise.resolve().then(() => guarded(input, () =>
-    Promise.resolve(hostCliMissing(input, environment, step) ?? inspect(project, input, resolvedInput(project, input), environment, step)))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
+    inspect(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling capability could not be inspected; configuration is preserved.")),
   configure: (step) => () => Promise.resolve().then(() => guarded(input, () => configureStep(project, input, resolvedInput(project, input), environment, step))).catch(() => setupFailure("A tooling setup step failed; successful configuration is preserved.")),
 });
 const inspect = async (project: string, input: BootstrapInput, resolved: BootstrapInput, environment: HostEnvironment, step: ToolingStep): Promise<Result<ToolingObservation>> => {
@@ -71,7 +65,11 @@ const configureStep = (project: string, input: BootstrapInput, resolved: Bootstr
     case "knowledge-runtime": return installKnowledge(project, input, environment.patience);
     case "knowledge-settings": return configureKnowledge(project, input);
     case "knowledge-content": return inputNeeded("knowledge-discovery-needed", "Project knowledge has not been populated.", "Run the installed discover-project-knowledge skill on the accepted root, preserving authored decisions and citing source evidence; then rerun bootstrap.");
-    case "knowledge-server": return registerHost(project, input, environment);
+    case "knowledge-server": return registerHost(project, input, environment).then(async (registered) => {
+      if (!registered.ok || !input.workflows.includes("knowledge") || !await hasStagedMaks(project)) return registered;
+      const maks = await wireMaks(project, input.python);
+      return maks.ok ? wireMaksHooks(project, input.host) : maks;
+    });
     case "review": return configureReview(project, input);
     case "host-discovery": return stagedBindings(project, input).ok
       ? installHostPlugins(project, resolved, environment, [...FRAMEWORK_PLUGINS, ...pluginNames(input)])
@@ -113,10 +111,17 @@ const inspectKnowledgeContent = async (project: string, input: BootstrapInput): 
     ? ready("Knowledge manifest and a nonempty catalog are present; server verification checks retrieval.")
     : missing("Run discover-project-knowledge to derive source-backed indexed units, then rerun bootstrap.");
 };
-const inspectServer = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => hostRegistered(project, input, environment)
-  .then((registered) => !registered.ok ? missing("Reconcile the host marketplace registration; preserve unrelated entries.")
-    : !registered.value ? missing("Register the local marketplace in the selected host.")
-      : ready("Standalone project knowledge uses stdlib Python scripts (no MCP server required) and host marketplace is registered."));
+const inspectServer = async (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => {
+  const registered = await hostRegistered(project, input, environment);
+  if (!registered.ok) return missing("Reconcile the host specification receipt (.agent-plugins/host-specs.json); preserve unrelated entries.");
+  if (!registered.value) return missing("Record the pinned host specification receipt in .agent-plugins/host-specs.json.");
+  const needsMaks = input.workflows.includes("knowledge") && await hasStagedMaks(project);
+  if (needsMaks) {
+    const [launcher, hooks] = await Promise.all([installedMaks(project, input.python), installedMaksHooks(project, input.host)]);
+    if (!launcher || !hooks) return missing("Wire the .upf-tools/bin/maks launcher and project knowledge host hooks.");
+  }
+  return ready("Standalone project knowledge uses stdlib Python scripts (no MCP server required), host hooks are wired, and host spec receipt is recorded.");
+};
 const inspectReview = async (project: string, input: BootstrapInput): Promise<Result<ToolingObservation>> => {
   const raw = await nodeProjectFiles.read(join(project, ".monolithic-code-review/sources.json"))();
   return raw.ok && reviewBindingsValid(raw.value) && object(raw.value.knowledge)
@@ -126,23 +131,33 @@ const inspectReview = async (project: string, input: BootstrapInput): Promise<Re
 const formatDrift = (drifted: readonly { readonly name: string; readonly paths: readonly string[] }[]): string =>
   drifted.map(({ name, paths }) => paths.length > 0 ? `${name} (${paths.join(", ")})` : name).join("; ");
 
-const inspectDiscovery = (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => discoverHost(project, input, environment).then((result) => {
+const inspectDiscovery = async (project: string, input: BootstrapInput, environment: HostEnvironment): Promise<Result<ToolingObservation>> => {
+  const specOk = await hostRegistered(project, input, environment);
+  if (!specOk.ok) return specOk;
+  if (!specOk.value) return missing("Record the pinned host specification receipt (.agent-plugins/host-specs.json) and materialize host skills.");
+  const result = await discoverHost(project, input, environment);
+  if (!result.ok) return result;
   const expected = [...new Set([...frameworkSkills(project, input.host).map(({ name }) => name), ...requiredSkills(project, input)])];
-  const missingNames = result.ok ? expected.filter((name) => !result.value.some((skill) => skill.name === name)) : [];
-  const drifted = result.ok ? driftedSkills(project, input, result.value) : [];
-  return !result.ok ? result : missingNames.length > 0 ? missing(`Activate the pinned skills in this host: ${missingNames.join(", ")}; then repeat fresh discovery.`)
-    : !frameworkSkillsMatch(project, result.value, input.host) ? missing("Reactivate the framework plugins so the host replaces its copy cached from an earlier install; then repeat fresh discovery.")
-    : !stagedBindings(project, input).ok || drifted.length > 0 ? fail("active-skill-drift",
-      drifted.length > 0
-        ? `Discovered dependency skill(s) differ from the pinned staged source: ${formatDrift(drifted)}.`
-        : "A discovered dependency skill differs from the pinned staged source.",
-      "Preserve any edited skill, reconcile the active copy with its pinned source and repeat discovery; names or ownership markers alone are insufficient.")
-      : ready("Fresh host discovery found and verified the selected framework, knowledge and workflow dependency skills.");
-});
+  const missingNames = expected.filter((name) => !result.value.some((skill) => skill.name === name));
+  if (missingNames.length > 0) {
+    return missing(`Materialize the pinned project skills for this host: ${missingNames.join(", ")}; then repeat verification.`);
+  }
+  if (!await frameworkSkillsMatch(project, result.value, input.host)) {
+    return missing("Re-materialize framework skills so active copies match the verified release bundle.");
+  }
+  const drifted = await driftedSkills(project, input, result.value);
+  return !stagedBindings(project, input).ok || drifted.length > 0
+    ? fail("active-skill-drift",
+        drifted.length > 0
+          ? `Materialized dependency skill(s) differ from the pinned staged source: ${formatDrift(drifted)}.`
+          : "A materialized dependency skill differs from the pinned staged source.",
+        "Preserve any edited skill, reconcile the active copy with its pinned source and repeat verification; names or ownership markers alone are insufficient.")
+    : ready("Spec-driven host verification confirmed host spec receipt and all framework, knowledge, and workflow dependency skills.");
+};
 const requiredSkills = (project: string, input: BootstrapInput): readonly string[] => {
   const bindings = pluginBindings(project, input);
   return !bindings.ok ? [] : [...new Set([
-    ...bindings.value.flatMap(({ adapter }) => Object.keys(adapter.fulfil).map((operation) => `unified-plugin-framework:${operation}`)),
+    ...bindings.value.flatMap(({ adapter }) => Object.keys(adapter.fulfil)),
     ...expectedDependencySkills(bindings.value),
   ])];
 };

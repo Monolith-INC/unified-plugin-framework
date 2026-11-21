@@ -48,12 +48,15 @@ const fileDigest = (path: string): string => {
 };
 
 /** Reuse canonical path ordering and text normalization to verify a complete active skill tree. */
-export const readContentTree = (root: string): Result<string> => {
+export const readContentTree = (root: string, overrides?: ReadonlyMap<string, string>): Result<string> => {
   try {
     const stat = lstatSync(root);
     return !stat.isDirectory() || stat.isSymbolicLink() ? failure(readerDiagnostic("plugin.skill.unsafe", "The active skill directory is not a regular directory.", root))
       : success(sha256(stableJson(filesUnder(root, root).filter((path) => path !== ".upf-source")
-        .map((path) => ({ path, sha256: fileDigest(join(root, path)) })))));
+        .map((path) => ({
+          path,
+          sha256: overrides?.has(path) ? sha256(canonicalText(overrides.get(path) ?? "")) : fileDigest(join(root, path)),
+        })))));
   } catch {
     return failure(readerDiagnostic("plugin.skill.unreadable", "The active skill content cannot be verified.", root));
   }

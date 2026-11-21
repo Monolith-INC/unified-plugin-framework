@@ -1,6 +1,7 @@
 import {
   PROJECT_KNOWLEDGE_DISCOVER,
   PROJECT_KNOWLEDGE_SETUP,
+  projectSkillName,
   type NonEmpty,
   type PluginKnowledgeStore,
   type PluginSkillRef,
@@ -16,11 +17,11 @@ const PLACEHOLDER = /\{\{([a-z]+)\}\}/g;
 
 type Qualify = (ref: PluginSkillRef) => string;
 
-/** How the agent invokes a plugin skill: `plugin:skill`, or the bare skill name for plugins installed without a prefix. */
-const qualifiedBy =
-  (adapter: WorkflowAdapter<string>): Qualify =>
-  ({ plugin, skill }) =>
-    adapter.bareSkillPlugins.includes(plugin) ? `\`${skill}\`` : `\`${plugin}:${skill}\``;
+/** How the agent invokes a materialized project-local skill: exact kebab-case name, disambiguated on contract collision. */
+const qualifiedBy = (adapter: WorkflowAdapter<string>): Qualify => {
+  const operations = new Set<string>(Object.keys(adapter.fulfil));
+  return (ref) => `\`${projectSkillName(ref, operations)}\``;
+};
 
 /** "a", "a and b", "a, b and c". */
 const andList = (items: readonly string[]): string =>

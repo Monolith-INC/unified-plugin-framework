@@ -10,6 +10,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  PLUGIN_SCHEMA_URL,
   diagnosticCodes,
   isPathInside,
   loadPluginRoot,
@@ -42,7 +43,7 @@ test("loadPluginRoot rejects skill symlink escapes", () => {
   );
 
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-escape-skill-"));
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ name: "escape-skill", version: "1.0.0" }));
+  writeFileSync(join(root, "plugin.json"), JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "escape-skill", version: "1.0.0" }));
   mkdirSync(join(root, "skills"), { recursive: true });
   symlinkSync(outside, join(root, "skills", "leaked"));
 
@@ -56,7 +57,7 @@ test("loadPluginRoot rejects skill symlink escapes", () => {
 
 test("loadPluginRoot accepts in-root skill symlinks", () => {
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-inroot-skill-"));
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ name: "inroot-skill", version: "1.0.0" }));
+  writeFileSync(join(root, "plugin.json"), JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "inroot-skill", version: "1.0.0" }));
   mkdirSync(join(root, "skills", "real"), { recursive: true });
   writeFileSync(
     join(root, "skills", "real", "SKILL.md"),
@@ -80,7 +81,7 @@ test("loadPluginRoot rejects mcp.json symlink escapes", () => {
   );
 
   const root = mkdtempSync(join(tmpdir(), "agent-plugins-escape-mcp-"));
-  writeFileSync(join(root, "plugin.json"), JSON.stringify({ name: "escape-mcp", version: "1.0.0" }));
+  writeFileSync(join(root, "plugin.json"), JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "escape-mcp", version: "1.0.0" }));
   symlinkSync(join(outside, "mcp.json"), join(root, "mcp.json"));
 
   const inspection = loadPluginRoot(root);

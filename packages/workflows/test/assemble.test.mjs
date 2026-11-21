@@ -18,7 +18,7 @@ test("templates named after a contract operation are rendered from its adapter",
   const result = assembleSkills(new Map([["review-task", template("review-task")]]), lock);
   assert.equal(result.ok, true, result.problems?.join("; "));
   const text = result.skills.get("review-task");
-  assert.match(text, /monolithic-code-review-toolkit:review-task/);
+  assert.match(text, /`monolithic-code-review-toolkit-review-task`/);
   assert.doesNotMatch(text, /\{\{/);
 });
 
@@ -71,10 +71,10 @@ test("assemblePluginSource copies the plugin and renders its templates into stag
     assert.doesNotMatch(text, /\{\{/);
     skill.startsWith("project-") || skill === "repair-workflow"
       ? assert.equal(text, readFileSync(new URL(`skills/${skill}/SKILL.md`, pluginSource), "utf8"))
-      : assert.match(text, skill.startsWith("discover-") ? /`superpowers:brainstorming` throughout/
-        : skill.startsWith("knowledge-") ? /monolithic-agent-knowledge-store:/
+      : assert.match(text, skill.startsWith("discover-") ? /`brainstorming` throughout/
+        : skill.startsWith("knowledge-") ? /`(?:setup-project-knowledge|discover-project-knowledge|query-project-knowledge|refresh-project-knowledge|ingest-docs|publish-docs)`/
           : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
-            : skill.startsWith("continuity-") ? /agent-continuity:session-/ : /monolithic-code-review-toolkit:/);
+            : skill.startsWith("continuity-") ? /`session-/ : /`(?:monolithic-code-review-toolkit-review-|review-story-)/);
     return skill;
   });
   assert.match(readFileSync(new URL("skills/review-task/SKILL.md", pluginSource), "utf8"), /\{\{delegate\}\}/);

@@ -1,0 +1,34 @@
+name: Host & Agent Plugins Spec Check
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  spec-drift:
+    name: Verify official Agent Plugins & host specifications
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.14.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install pinned Codex CLI for live discovery check
+        run: npm install --global @openai/codex@0.171.0
+
+      - name: Check official schemas, host spec URLs, and live Codex discovery
+        run: pnpm specs:check-upstream

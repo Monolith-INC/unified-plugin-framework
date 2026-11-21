@@ -47,16 +47,16 @@ test("the framework manifest declares and the lock pins every plugin the adapter
   });
 });
 
-test("rendered modes run the flow throughout, add their layers, offer the rest of the catalog once, and name BMad skills bare", () => {
+test("rendered modes run the flow throughout, add their layers, offer the rest of the catalog once, and name skills bare", () => {
   const thorough = rendered("discover-thorough");
   assert.equal(thorough.ok, true, thorough.message);
-  assert.match(thorough.text, /Run `superpowers:brainstorming` throughout/);
+  assert.match(thorough.text, /Run `brainstorming` throughout/);
   assert.match(thorough.text, /- `bmad-forge-idea` — Before the written design/);
   assert.match(thorough.text, /## Optional skills/);
   assert.match(thorough.text, /### Pressure-Test/);
   assert.match(thorough.text, /- `bmad-party-mode` — During the conversation/);
   assert.doesNotMatch(thorough.text.split("## Optional skills")[1].split("## Run the session")[0], /bmad-forge-idea/);
-  assert.doesNotMatch(thorough.text, /bmad-method:/);
+  assert.doesNotMatch(thorough.text, /bmad-method:|superpowers:/);
   assert.match(thorough.text, /install and enable `superpowers` and `bmad-method`/);
   assert.match(thorough.text, /tested with `superpowers` 7\.0\.0 and `bmad-method` 6\.12\.0/);
   assert.doesNotMatch(rendered("discover-quick").text, /Add these at the stages shown/);
@@ -87,7 +87,7 @@ test("Discovery readiness is all or nothing: a missing plugin fails it, naming t
 
 test("a mode that runs no BMad skill still checks that BMad is installed, because its catalog offers BMad skills", () => {
   const quick = rendered("discover-quick").text;
-  assert.match(quick, /1\. \*\*Available:\*\* `superpowers:brainstorming` and `bmad-brainstorming` are available/);
+  assert.match(quick, /1\. \*\*Available:\*\* `brainstorming` and `bmad-brainstorming` are available/);
 });
 
 test("the research mode still offers the adversarial lenses, which its verification layer does not cover", () => {
@@ -119,9 +119,18 @@ test("every discovery mode frames the workflow up front, grounds first, asks one
   });
 });
 
-test("discovery declares BMad hub and module support skills without offering them in the user catalog", () => {
+test("discovery declares BMad hub, module and agent persona support skills without offering them in the user catalog", () => {
   const supportNames = (brainstormingDiscoveryAdapter.supportSkills ?? []).map(({ skill }) => skill);
-  assert.deepEqual(supportNames, ["bmad", "bmod-core-tools", "bmod-method"]);
+  assert.deepEqual(supportNames, [
+    "bmad",
+    "bmod-core-tools",
+    "bmod-method",
+    "bmad-agent-analyst",
+    "bmad-agent-architect",
+    "bmad-agent-dev",
+    "bmad-agent-pm",
+    "bmad-agent-ux-designer",
+  ]);
   const optionalSection = rendered("discover-quick").text.split("## Optional skills")[1].split("## Run the session")[0];
-  assert.doesNotMatch(optionalSection, /`bmad`|`bmod-core-tools`|`bmod-method`/);
+  assert.doesNotMatch(optionalSection, /`bmad`|`bmod-core-tools`|`bmod-method`|`bmad-agent-/);
 });

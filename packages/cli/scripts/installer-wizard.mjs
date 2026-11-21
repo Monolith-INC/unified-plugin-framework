@@ -98,19 +98,18 @@ const details = async (io, project, settings, knowledge, options, { hosts, workf
   const artifactsPath = settings?.artifactsPath ?? await text(io, 'artifacts', 'docs/work-items');
   const lookup = options.lookup ?? ((names, current) => resolveLinearScope(names, current)());
   const missingHosts = hosts.filter(name => !detected.includes(name));
-  const collectConsent = next => missingHosts.length === 0 ? next(false) : consent(io, 'Install missing host CLIs?', next);
   return tracker(io, settings?.tracker, lookup, selected =>
-    knowledgeChoices(io, knowledge, roots => collectConsent(installHostClis =>
-      consent(io, 'Run headless knowledge discovery?', headlessDiscovery => complete(io, project, settings, {
+    knowledgeChoices(io, knowledge, roots =>
+      complete(io, project, settings, {
         hosts, python, workflows, knowledge: roots, pluginRoots: [],
-        consent: { privatePython: options.privatePython === true, installHostClis, headlessDiscovery },
+        consent: { privatePython: options.privatePython === true, installHostClis: false, headlessDiscovery: true },
         answers: { ...(settings ?? {}), language, artifactsPath, tracker: selected },
-      }, options, missingHosts)))));
+      }, options, missingHosts)));
 };
 
 const inspectPlan = (project, plan) => {
   const environment = { claudeState: claudeStateFile(homedir(), process.env.CLAUDE_CONFIG_DIR) };
-  // Host discovery launches the host. Defer discovery and tracker access to the accepted setup pass.
+  // Defer tracker access and dependency staging to the accepted setup pass.
   const readOnly = { ...plan, steps: plan.steps.filter(step => step !== 'host-discovery' && step !== 'tracker' && step !== 'dependencies') };
   return bootstrapHosts(host => nodeToolingIO(project, forHost(readOnly, host), environment), false, readOnly)();
 };
@@ -124,7 +123,7 @@ const complete = async (io, project, settings, plan, options, missingHosts) => {
 const labels = hosts => hosts.map(name => HOSTS[name].label).join(', ');
 const pendingSteps = report => report.steps.filter(({ status }) => status !== 'ready').map(({ step }) => step);
 const list = values => values.length > 0 ? values.join(', ') : 'none';
-const summary = (project, plan, version, report, missingHosts) => {
+const summary = (project, plan, version, report, _missingHosts) => {
   const pending = pendingSteps(report.project);
   const hostWork = report.hosts.map(({ host, tooling }) => `${HOSTS[host].label} (${list(pendingSteps(tooling))})`);
   const otherHosts = HOST_NAMES.filter(name => !plan.hosts.includes(name));
@@ -136,10 +135,10 @@ const summary = (project, plan, version, report, missingHosts) => {
     `Language: ${plan.answers.language}`,
     `Documents: ${plan.knowledge.docsRoot}; vault: ${plan.knowledge.vaultRoot}; knowledge: ${plan.knowledge.knowledgeRoot}`,
     `Install and configure: bundled release and pinned dependencies; project (${list(pending)}); host setup: ${list(hostWork)}.`,
+    `Host materialization: deterministic spec-driven project files (no host CLI required; host spec versions recorded in .agent-plugins/host-specs.json).`,
     `Setup may back up an existing installer-owned .upf-tools/bin/agent-plugin launcher if it needs replacing.`,
     `Private Python: ${plan.consent.privatePython ? 'install the approved private runtime' : 'use the selected executable'}.`,
-    `Host CLI installation: ${plan.consent.installHostClis ? `allowed for ${labels(missingHosts)}` : 'disabled'}.`,
-    `Headless knowledge discovery: ${plan.consent.headlessDiscovery ? 'allowed on a signed-in selected host' : 'disabled'}.`,
+    `Headless knowledge discovery: ${plan.consent.headlessDiscovery ? 'allowed when a selected host CLI is signed in (falls back cleanly to project-bootstrap)' : 'disabled'}.`,
     `Not changing: unrelated project settings${otherHosts.length > 0 ? ` and deselected hosts (${labels(otherHosts)})` : ''}.`,
   ].join('\n');
 };

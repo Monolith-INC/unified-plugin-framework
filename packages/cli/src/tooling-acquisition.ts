@@ -20,7 +20,11 @@ const missing = (report: ToolingReport): boolean =>
   report.steps.some((outcome) => outcome.step === CONTENT && outcome.status === "action-required"
     && outcome.failure.code === "knowledge-discovery-needed");
 const recovery = recoveryFor(CONTENT, "knowledge-discovery-needed").onFailure.instruction;
-const pending = (): Result<never> => fail("knowledge-discovery-needed", "Project knowledge still needs discovery.", recovery);
+const pending = (detail?: string): Result<never> => fail(
+  "knowledge-discovery-needed",
+  detail === undefined || detail === "" ? "Project knowledge still needs discovery." : `Project knowledge still needs discovery (${detail}).`,
+  recovery,
+);
 const within = (root: string, path: string): boolean => {
   const child = relative(root, path);
   return child === "" || (!isAbsolute(child) && child !== ".." && !child.startsWith(`..${sep}`));
@@ -83,8 +87,8 @@ const runHost = async (host: HostName, context: DiscoveryRun): Promise<Result<st
   const discovery = await run(headlessDiscovery(host, { project, python, queryScript, knowledgeRoot: root, isolatedDirectory: scratch }), 180_000);
   return discovery.ok && discovery.value.trim() === DISCOVERY_COMPLETE
     ? boundedOutput(python, [queryScript, "catalog", "--project", project, "--root", root], scratch, 60_000, env)
-        .then((checked) => checked.ok && checked.value.trim().split("\n").length > 1 ? checked : pending())
-    : pending();
+        .then((checked) => checked.ok && checked.value.trim().split("\n").length > 1 ? checked : pending("catalog remained empty after headless discovery"))
+    : pending(discovery.ok ? "headless discovery did not finish with completion marker" : discovery.error.message);
 };
 
 const signInNeeded = (hosts: readonly HostName[]): Result<never> => fail("host-sign-in-needed",

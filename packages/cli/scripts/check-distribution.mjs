@@ -48,14 +48,19 @@ const {HOST_NAMES}=await load('host-names');
 const servedSkills=async name=>{
  assert.equal((await runtime.installSkills(project,name)).ok,true,name);
  assert.equal(await runtime.installedSkills(project,name),true,name);
- const served=host.frameworkSkills(project,name).map(({name,source})=>({name,path:join(source,'SKILL.md')}));
- assert.equal(served.some(({name})=>name==='unified-plugin-framework:implement-work'),true,name);
- assert.equal(host.frameworkSkillsMatch(project,served,name),true,name);
- assert.equal(host.frameworkSkillsMatch(project,served.slice(1),name),false,`${name}: a framework skill the host does not serve is not ready`);
+ const served=host.frameworkSkills(project,name).map(({name,source})=>({name,path:join(source,'SKILL.md'),scope:'repo'}));
+ assert.equal(served.some(({name})=>name==='implement-work'),true,name);
+ assert.equal(await host.frameworkSkillsMatch(project,served,name),true,name);
+ assert.equal(await host.frameworkSkillsMatch(project,served.slice(1),name),false,`${name}: a framework skill the host does not serve is not ready`);
  const cached=join(await mkdtemp(join(tmpdir(),'upf-cached-')),'skill');
  await cp(dirname(served[0].path),cached,{recursive:true});await writeFile(join(cached,'SKILL.md'),'earlier release');
- assert.equal(host.frameworkSkillsMatch(project,[{...served[0],path:join(cached,'SKILL.md')},...served.slice(1)],name),false,`${name}: a stale cached framework skill is not ready`);
+ assert.equal(await host.frameworkSkillsMatch(project,[{...served[0],path:join(cached,'SKILL.md')},...served.slice(1)],name),false,`${name}: a stale cached framework skill is not ready`);
 };
+// Distribution itself must be a directly loadable Agent Plugins v1.0.0 package with pre-assembled skills (zero raw placeholders).
+const distSkill=await readFile(join(root,'skills/discover-quick/SKILL.md'),'utf8');
+assert.equal(/\{\{[a-z]+\}\}/.test(distSkill),false,'distribution skills must be pre-assembled without raw template placeholders');
+const distManifest=JSON.parse(await readFile(join(root,'plugin.json'),'utf8'));
+assert.equal(distManifest.version,version,'distribution plugin.json version must match release version');
 await HOST_NAMES.reduce((previous,name)=>previous.then(()=>servedSkills(name)),Promise.resolve());
 const stageHost=async hostPlan=>{
  const staged=await host.stageDependencies(project,hostPlan,denied);

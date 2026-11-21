@@ -25,10 +25,12 @@ test("the toolkit adapter is frozen and implements code review contract v1", () 
 });
 
 test("every contract operation's assembled skill names each plugin skill and store it relies on", () => {
+  const operations = new Set(CODE_REVIEW_OPERATIONS);
   CODE_REVIEW_OPERATIONS.map((operation) => {
-    reviewToolkitAdapter.fulfil[operation].map(({ plugin, skill }) =>
-      assert.ok(skillText(operation).includes(`${plugin}:${skill}`), `${operation} skill must name ${plugin}:${skill}`),
-    );
+    reviewToolkitAdapter.fulfil[operation].map(({ plugin, skill }) => {
+      const expected = operations.has(skill) ? `${plugin}-${skill}` : skill;
+      assert.ok(skillText(operation).includes(`\`${expected}\``), `${operation} skill must name ${expected}`);
+    });
     reviewToolkitAdapter.knowledgeStores.map(({ file, key }) =>
       assert.ok(skillText(operation).includes(file) && skillText(operation).includes(key.join(".")), `${operation} skill must name ${file}`),
     );

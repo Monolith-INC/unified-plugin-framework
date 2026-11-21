@@ -34,7 +34,7 @@ test("continuity templates stay provider-free, reuse setup and bind the pinned o
     assert.doesNotMatch(template, /agent-continuity|Linear|Azure DevOps|Obsidian/);
     const rendered = renderSkill(template, agentContinuityAdapter, op, lock);
     assert.equal(rendered.ok, true);
-    assert.match(rendered.text, new RegExp(`agent-continuity:${agentContinuityAdapter.fulfil[op][0].skill}`));
+    assert.match(rendered.text, new RegExp(`\`${agentContinuityAdapter.fulfil[op][0].skill}\``));
     assert.doesNotMatch(rendered.text, /\{\{\w+\}\}/);
     assert.match(template, /[Rr]euse|established/);
   });

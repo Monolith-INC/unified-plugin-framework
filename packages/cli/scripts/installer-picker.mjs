@@ -24,8 +24,9 @@ const move = (state, offset) => ({ ...state, cursor: (state.cursor + offset + ro
 const accept = state => isChecklist(state)
   ? state.selected.length === 0 ? state : picked(valuesOf(state).filter(value => state.selected.includes(value)))
   : state.items[state.cursor] === undefined ? state : picked([state.items[state.cursor].value]);
+const toggleAll = state => state.selected.length === state.items.length ? [] : valuesOf(state);
 const space = state => isChecklist(state)
-  ? { ...state, selected: state.cursor === 0 ? valuesOf(state) : toggle(state.selected, state.items[state.cursor - 1].value) }
+  ? { ...state, selected: state.cursor === 0 ? toggleAll(state) : toggle(state.selected, state.items[state.cursor - 1].value) }
   : state;
 
 /** Apply one normalized key and leave the previous state intact. */

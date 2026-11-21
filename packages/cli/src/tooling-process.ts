@@ -5,6 +5,7 @@ import { Transform } from "node:stream";
 import { fail, ok, type Result } from "@agent-plugins/project";
 
 const DEFAULT_LIMIT = 4 * 1024 * 1024;
+const STDERR_LIMIT = 4 * 1024;
 const DEFAULT_GRACE = 250;
 interface ProcessOptions {
   readonly timeout: number;
@@ -17,10 +18,12 @@ interface ProcessOptions {
 export const selectEnvironment = (environment: NodeJS.ProcessEnv, keys: readonly string[]): NodeJS.ProcessEnv =>
   Object.fromEntries(keys.flatMap((key) => environment[key] === undefined ? [] : [[key, environment[key]]]));
 
-const failure = (code: string, program: string, reason: string): Result<never> =>
-  fail(code, `The ${program.split(/[\\/]/).at(-1) ?? "tool"} command ${reason}.`,
+const diagnosticLine = (text: string): string =>
+  text.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1)?.slice(0, 240) ?? "";
+const failure = (code: string, program: string, reason: string, detail = ""): Result<never> =>
+  fail(code, `The ${program.split(/[\\/]/).at(-1) ?? "tool"} command ${reason}${detail === "" ? "." : `: ${detail}`}`,
     "Check the executable, environment, and permissions, then rerun the affected setup step.");
-const processFailure = (program: string): Result<never> => failure("tool-command-failed", program, "did not finish successfully");
+const processFailure = (program: string, detail = ""): Result<never> => failure("tool-command-failed", program, "did not finish successfully", detail);
 const signalGroup = (child: ChildProcess, signal: NodeJS.Signals): boolean => {
   try {
     return process.platform !== "win32" && child.pid !== undefined ? process.kill(-child.pid, signal) : child.kill(signal);
@@ -43,19 +46,34 @@ const bounded = (limit: number): Transform => {
 
 type ToolProcess = ReturnType<typeof start>;
 const start = (program: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv | undefined) =>
-  spawn(program, [...args], { cwd, env, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "ignore"] });
+  spawn(program, [...args], { cwd, env, detached: process.platform !== "win32", stdio: ["pipe", "pipe", "pipe"] });
+
+const collectCapped = (stream: NodeJS.ReadableStream): (() => string) => {
+  const state = { chunks: [] as Buffer[], bytes: 0 };
+  stream.on("data", (chunk: Buffer) => {
+    const remaining = STDERR_LIMIT - state.bytes;
+    if (remaining <= 0) return;
+    const slice = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
+    state.chunks.push(slice); // Bounded stderr capture belongs to the stream edge.
+    state.bytes += slice.length;
+  });
+  stream.on("error", () => undefined);
+  return () => Buffer.concat(state.chunks).toString("utf8");
+};
 
 /** One supervisor owns process-group termination, timing, and pipe cleanup for commands and protocols. */
 const runProcess = <A>(program: string, args: readonly string[], cwd: string, options: ProcessOptions,
-  use: (child: ToolProcess, output: Transform) => Promise<Result<A>>): Promise<Result<A>> => new Promise((settle) => {
+  use: (child: ToolProcess, output: Transform, stderrText: () => string) => Promise<Result<A>>): Promise<Result<A>> => new Promise((settle) => {
   const child = start(program, args, cwd, options.env);
   const output = child.stdout.pipe(bounded(options.limit ?? DEFAULT_LIMIT));
+  const stderrText = collectCapped(child.stderr);
   const expired = new AbortController();
   const finished = new AbortController();
   const stop = (): boolean => {
     const killed = signalGroup(child, "SIGKILL");
     child.stdin.destroy();
     child.stdout.destroy();
+    child.stderr.destroy();
     output.destroy();
     return killed;
   };
@@ -80,7 +98,7 @@ const runProcess = <A>(program: string, args: readonly string[], cwd: string, op
   child.once("error", () => finish(processFailure(program)));
   output.once("error", (error) => finish(error instanceof OutputLimit
     ? failure("tool-command-failed", program, "exceeded its output limit") : processFailure(program)));
-  Promise.resolve().then(() => use(child, output)).then(finish, () => finish(processFailure(program)));
+  Promise.resolve().then(() => use(child, output, stderrText)).then(finish, () => finish(processFailure(program, diagnosticLine(stderrText()))));
 });
 
 const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[]): Promise<string> => {
@@ -88,17 +106,17 @@ const collect = async (stream: AsyncIterator<Buffer>, chunks: readonly Buffer[])
   return next.done ? Buffer.concat(chunks).toString("utf8") : collect(stream, [...chunks, next.value]);
 };
 
-/** Before a deadline, stderr is discarded and stdout is capped. Omit env to inherit it. */
+/** Before a deadline, stdout is capped and stderr is bounded for diagnostics. Omit env to inherit it. */
 /** A time limit stretched for a retry after a timeout; `patience` is 1 on every first run. */
 export const scaled = (milliseconds: number, patience = 1): number => milliseconds * patience;
 export const command = (program: string, args: readonly string[], cwd: string, timeout = 120_000, env?: NodeJS.ProcessEnv): Promise<Result<string>> =>
   commandOutput(program, args, cwd, { timeout, ...(env === undefined ? {} : { env }) });
 
 const commandOutput = (program: string, args: readonly string[], cwd: string, options: ProcessOptions): Promise<Result<string>> =>
-  runProcess(program, args, cwd, options, async (child, output) => {
+  runProcess(program, args, cwd, options, async (child, output, stderrText) => {
     child.stdin.end();
     const [[code], text] = await Promise.all([once(child, "close"), collect(output[Symbol.asyncIterator](), [])]);
-    return code === 0 ? ok(text) : processFailure(program);
+    return code === 0 ? ok(text) : processFailure(program, diagnosticLine(stderrText()) || diagnosticLine(text));
   });
 
 export const boundedOutput = (program: string, args: readonly string[], cwd: string, timeout: number, env: NodeJS.ProcessEnv): Promise<Result<string>> =>

@@ -1451,20 +1451,11 @@ function pathEscapeDiagnostic(relativePath: string): Diagnostic {
 export function loadPluginRoot(root: string): PluginInspection {
   const pluginRoot = resolve(root);
   const rootReal = existingRealPath(pluginRoot) ?? pluginRoot;
-  const skillDiscovery = discoverSkills(rootReal);
-  const mcpDiscovery = discoverMcpServers(rootReal);
   const manifestPath = join(rootReal, "plugin.json");
-  const manifestContained = isPathInside(rootReal, manifestPath);
-  if (!manifestContained && existsPath(manifestPath)) {
-    return {
-      diagnostics: [
-        pathEscapeDiagnostic("plugin.json"),
-        ...skillDiscovery.diagnostics,
-        ...mcpDiscovery.diagnostics,
-      ],
-    };
+  if (!isPathInside(rootReal, manifestPath) && existsPath(manifestPath)) {
+    return { diagnostics: [pathEscapeDiagnostic("plugin.json")] };
   }
-  return foldManifestRead(readJson(manifestPath), skillDiscovery, mcpDiscovery);
+  return foldManifestRead(rootReal, readJson(manifestPath));
 }
 
 function existsPath(path: string): boolean {
@@ -1476,52 +1467,19 @@ function existsPath(path: string): boolean {
   }
 }
 
-function foldManifestRead(
-  manifestRead: JsonRead,
-  skillDiscovery: {
-    readonly skills: readonly Record<string, unknown>[];
-    readonly diagnostics: readonly Diagnostic[];
-  },
-  mcpDiscovery: {
-    readonly mcpServers: unknown;
-    readonly diagnostics: readonly Diagnostic[];
-  },
-): PluginInspection {
+function foldManifestRead(rootReal: string, manifestRead: JsonRead): PluginInspection {
   switch (manifestRead.kind) {
     case "missing":
-      return inspectionWithoutReadableManifest(
-        "Plugin manifest could not be read.",
-        skillDiscovery,
-        mcpDiscovery,
-      );
+      return rejectedManifest("Plugin manifest could not be read.");
     case "invalid":
-      return inspectionWithoutReadableManifest(
-        "Plugin manifest could not be parsed as JSON.",
-        skillDiscovery,
-        mcpDiscovery,
-      );
+      return rejectedManifest("Plugin manifest could not be parsed as JSON.");
     case "ok":
-      return inspectLoadedPlugin(manifestRead.value, skillDiscovery, mcpDiscovery);
+      return inspectLoadedPlugin(rootReal, manifestRead.value);
   }
 }
 
-function inspectionWithoutReadableManifest(
-  message: string,
-  skillDiscovery: {
-    readonly skills: readonly Record<string, unknown>[];
-    readonly diagnostics: readonly Diagnostic[];
-  },
-  mcpDiscovery: {
-    readonly mcpServers: unknown;
-    readonly diagnostics: readonly Diagnostic[];
-  },
-): PluginInspection {
-  const skills = readSkills(skillDiscovery.skills.length === 0 ? undefined : skillDiscovery.skills);
-  const mcpServers = readMcpServers(mcpDiscovery.mcpServers);
-
+function rejectedManifest(message: string): PluginInspection {
   return {
-    ...optionalSkills(skills.value),
-    ...optionalMcpServers(mcpServers.value),
     diagnostics: [
       createDiagnostic({
         severity: "error",
@@ -1529,58 +1487,36 @@ function inspectionWithoutReadableManifest(
         message,
         path: "plugin.json",
       }),
-      ...skillDiscovery.diagnostics,
-      ...mcpDiscovery.diagnostics,
-      ...skills.diagnostics,
-      ...mcpServers.diagnostics,
     ],
   };
 }
 
-function inspectLoadedPlugin(
-  manifestValue: unknown,
-  skillDiscovery: {
-    readonly skills: readonly Record<string, unknown>[];
-    readonly diagnostics: readonly Diagnostic[];
-  },
-  mcpDiscovery: {
-    readonly mcpServers: unknown;
-    readonly diagnostics: readonly Diagnostic[];
-  },
-): PluginInspection {
+function inspectLoadedPlugin(rootReal: string, manifestValue: unknown): PluginInspection {
   if (!isRecord(manifestValue)) {
-    const manifestInspection = inspectManifest(manifestValue);
-    const skills = readSkills(skillDiscovery.skills.length === 0 ? undefined : skillDiscovery.skills);
-    const mcpServers = readMcpServers(mcpDiscovery.mcpServers);
-
-    return {
-      ...manifestInspection,
-      ...optionalSkills(skills.value),
-      ...optionalMcpServers(mcpServers.value),
-      diagnostics: [
-        ...skillDiscovery.diagnostics,
-        ...mcpDiscovery.diagnostics,
-        ...manifestInspection.diagnostics,
-        ...skills.diagnostics,
-        ...mcpServers.diagnostics,
-      ],
-    };
+    return inspectManifest(manifestValue);
   }
 
   const manifest = readManifest(manifestValue, "portable");
+  // Agent Plugins v1.0.0 loading-and-discovery: fatal manifest rejection aborts component discovery.
+  if (manifest.value === undefined) {
+    return { diagnostics: manifest.diagnostics };
+  }
+
+  const skillDiscovery = discoverSkills(rootReal);
+  const mcpDiscovery = discoverMcpServers(rootReal);
   const skills = readSkills(skillDiscovery.skills.length === 0 ? undefined : skillDiscovery.skills);
   const mcpServers = readMcpServers(mcpDiscovery.mcpServers);
-  const onboarded = readOnboardedPlugins(manifest.value?.extensions);
+  const onboarded = readOnboardedPlugins(manifest.value.extensions);
 
   return {
-    ...(manifest.value === undefined ? {} : { manifest: manifest.value }),
+    manifest: manifest.value,
     ...optionalSkills(skills.value),
     ...optionalMcpServers(mcpServers.value),
     ...optionalOnboardedPlugins(onboarded.plugins),
     diagnostics: [
+      ...manifest.diagnostics,
       ...skillDiscovery.diagnostics,
       ...mcpDiscovery.diagnostics,
-      ...manifest.diagnostics,
       ...skills.diagnostics,
       ...mcpServers.diagnostics,
       ...onboarded.diagnostics,

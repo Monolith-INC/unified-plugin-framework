@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {parseBootstrap} from '../dist/tooling-input.js';
 import {safePath,sweepSetupWrites,writeText} from '../dist/tooling-files.js';
-import {configureKnowledge,configureReview,reviewBindingsValid,wireCli,installedCli} from '../dist/tooling-runtime.js';
+import {configureKnowledge,configureReview,installedMaks,installedMaksHooks,reviewBindingsValid,wireCli,installedCli,wireMaks,wireMaksHooks} from '../dist/tooling-runtime.js';
 import {nodeToolingIO} from '../dist/tooling-node.js';
 import {bmadRuntimeReady,skillDrift,stageDependency} from '../dist/tooling-host.js';
 import {readContentTree} from '../dist/plugin-reader.js';
@@ -218,19 +218,21 @@ test('startup moves an interrupted stage aside and preserves its contents',{skip
   assert.deepEqual(await readdir(unrelated),[]);
 });
 
-test('configureKnowledge writes project-knowledge.json, scaffolds support files without clobbering, and rejects conflicting locators', async()=>{
+test('configureKnowledge writes project-knowledge.json, creates docs/vault folders, scaffolds support files without clobbering, and rejects conflicting locators', async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-knowledge-locator-'));
-  const input={...choices,knowledge:{knowledgeRoot:'Project_Knowledge',documentMode:'shared',docsRoot:'docs',vaultRoot:'docs'}};
+  const input={...choices,knowledge:{knowledgeRoot:'Project_Knowledge',documentMode:'shared',docsRoot:'tracker',vaultRoot:'tracker'}};
   const created=await configureKnowledge(project,input);
   assert.equal(created.ok,true,JSON.stringify(created));
   assert.equal(created.value,join(project,'project-knowledge.json'));
+  assert.equal((await stat(join(project,'tracker'))).isDirectory(),true);
   const locator=JSON.parse(await readFile(join(project,'project-knowledge.json'),'utf8'));
   assert.equal(locator.documentMode,'shared');
+  assert.equal(locator.docsRoot,'tracker');
   assert.equal(locator.language,'en');
   assert.equal(locator.tracked,true);
   assert.match(await readFile(join(project,'Project_Knowledge','manifest.md'),'utf8'),/store_root: Project_Knowledge/);
   assert.match(await readFile(join(project,'Project_Knowledge','glossary.md'),'utf8'),/# Project Glossary/);
-  assert.match(await readFile(join(project,'Project_Knowledge','QUERY_GUIDE.md'),'utf8'),/Project Knowledge Query Guide/);
+  assert.match(await readFile(join(project,'Project_Knowledge','QUERY_GUIDE.md'),'utf8'),/\.upf-tools\/bin\/maks/);
   await writeFile(join(project,'Project_Knowledge','glossary.md'),'custom glossary\n');
   assert.equal((await configureKnowledge(project,input)).ok,true);
   assert.equal(await readFile(join(project,'Project_Knowledge','glossary.md'),'utf8'),'custom glossary\n');
@@ -238,6 +240,27 @@ test('configureKnowledge writes project-knowledge.json, scaffolds support files 
   const conflict=await configureKnowledge(project,input);
   assert.equal(conflict.ok,false);
   assert.match(conflict.error.message,/Conflicting knowledge locators/);
+});
+
+test('wireMaks and wireMaksHooks create the maks launcher and wire host hooks while preserving unrelated settings', async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-maks-hooks-'));
+  assert.equal(await installedMaks(project,'python3.12'),false);
+  assert.equal((await wireMaks(project,'python3.12')).ok,true);
+  assert.equal(await installedMaks(project,'python3.12'),true);
+  await mkdir(join(project,'.claude'),{recursive:true});
+  await writeFile(join(project,'.claude/settings.local.json'),JSON.stringify({enabledPlugins:{keep:true},hooks:{SessionStart:[{matcher:'',hooks:[{type:'command',command:'custom-hook'}]}]}}));
+  assert.equal((await wireMaksHooks(project,'claude')).ok,true);
+  assert.equal(await installedMaksHooks(project,'claude'),true);
+  const claude=JSON.parse(await readFile(join(project,'.claude/settings.local.json'),'utf8'));
+  assert.deepEqual(claude.enabledPlugins,{keep:true});
+  assert.equal(claude.hooks.SessionStart.length,2);
+  assert.equal(claude.hooks.Stop.length,1);
+  assert.equal((await wireMaksHooks(project,'codex')).ok,true);
+  assert.equal(await installedMaksHooks(project,'codex'),true);
+  const codex=JSON.parse(await readFile(join(project,'.codex/hooks.json'),'utf8'));
+  assert.equal(codex.hooks.SessionStart.length,1);
+  assert.match(codex.hooks.PreToolUse[0].matcher,/apply_patch/);
+  assert.equal(codex.hooks.Stop.length,1);
 });
 
 test('bmadRuntimeReady requires _bmad scripts and config when staged bmad-method ships setup.py', async()=>{
@@ -257,32 +280,27 @@ test('bmadRuntimeReady requires _bmad scripts and config when staged bmad-method
   assert.equal(await bmadRuntimeReady(project,bmadInput),true,'all runtime files present');
 });
 
-test('skillDrift ignores unrelated global duplicates when the UPF marketplace plugin or repo bare skill matches, and names real drift', async()=>{
+test('skillDrift prefers repo-scoped project skills over unrelated global duplicates and names real drift', async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-drift-scope-'));
   const staged=join(project,'staged/review-setup');
-  const upfCache=join(project,'cache/upf-project/review-setup');
+  const repoCopy=join(project,'repo/review-setup');
   const globalCopy=join(project,'global/review-setup');
-  await Promise.all([staged,upfCache,globalCopy].map(dir=>mkdir(dir,{recursive:true})));
+  await Promise.all([staged,repoCopy,globalCopy].map(dir=>mkdir(dir,{recursive:true})));
   await Promise.all([
     writeFile(join(staged,'SKILL.md'),'pinned skill\n'),
-    writeFile(join(upfCache,'SKILL.md'),'pinned skill\n'),
+    writeFile(join(repoCopy,'SKILL.md'),'pinned skill\n'),
     writeFile(join(globalCopy,'SKILL.md'),'unrelated global skill\n'),
   ]);
   const discovered=[
-    {name:'monolithic-code-review-toolkit:review-setup',path:join(globalCopy,'SKILL.md'),scope:'user',pluginId:null},
-    {name:'monolithic-code-review-toolkit:review-setup',path:join(upfCache,'SKILL.md'),scope:'user',pluginId:'monolithic-code-review-toolkit@upf-project'},
+    {name:'review-setup',path:join(globalCopy,'SKILL.md'),scope:'user',pluginId:null},
+    {name:'review-setup',path:join(repoCopy,'SKILL.md'),scope:'repo',pluginId:null},
   ];
-  assert.equal(skillDrift(discovered,'monolithic-code-review-toolkit:review-setup','monolithic-code-review-toolkit',false,staged),undefined);
-  await writeFile(join(upfCache,'SKILL.md'),'drifted upf skill\n');
-  assert.deepEqual(skillDrift(discovered,'monolithic-code-review-toolkit:review-setup','monolithic-code-review-toolkit',false,staged),{
-    name:'monolithic-code-review-toolkit:review-setup',
-    paths:[join(upfCache,'SKILL.md')],
+  assert.equal(skillDrift(discovered,'review-setup','monolithic-code-review-toolkit',true,staged),undefined);
+  await writeFile(join(repoCopy,'SKILL.md'),'drifted repo skill\n');
+  assert.deepEqual(skillDrift(discovered,'review-setup','monolithic-code-review-toolkit',true,staged),{
+    name:'review-setup',
+    paths:[join(repoCopy,'SKILL.md')],
   });
-  const bareDiscovered=[
-    {name:'bmad-deep-recon',path:join(globalCopy,'SKILL.md'),scope:'user',pluginId:null},
-    {name:'bmad-deep-recon',path:join(staged,'SKILL.md'),scope:'repo',pluginId:null},
-  ];
-  assert.equal(skillDrift(bareDiscovered,'bmad-deep-recon','bmad-method',true,staged),undefined);
 });
 
 test('bootstrap holds a saved request while incomplete and applies it once after required setup',async()=>{
