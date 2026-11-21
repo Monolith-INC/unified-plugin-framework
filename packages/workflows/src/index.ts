@@ -1,6 +1,7 @@
 import type { Result, VendorAdapter, VendorBundle } from "@agent-plugins/compiler";
 import type { WorkflowName } from "@agent-plugins/core";
 import { agentContinuityAdapter } from "./continuity.js";
+import { knowledgeStoreAdapter } from "./knowledge.js";
 import { superpowersImplementationAdapter } from "./implementation.js";
 
 import type { WorkflowAdapter } from "./adapter.js";
@@ -83,7 +84,10 @@ export const WORKFLOWS: Readonly<Record<WorkflowName, WorkflowAdapter<string>>> 
   "project-tracking": backlogTrackingAdapter,
   continuity: agentContinuityAdapter,
   implementation: superpowersImplementationAdapter,
+  knowledge: knowledgeStoreAdapter,
 });
+
+export { KNOWLEDGE_OPERATIONS, KNOWLEDGE_CONTRACT_VERSION, knowledgeStoreAdapter, type KnowledgeAdapter, type KnowledgeOperation } from "./knowledge.js";
 
 export { IMPLEMENTATION_OPERATIONS, IMPLEMENTATION_CONTRACT_VERSION, superpowersImplementationAdapter, type ImplementationAdapter, type ImplementationOperation } from "./implementation.js";
 

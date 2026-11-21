@@ -19,7 +19,7 @@ import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
 
 /** Plugins whose host payloads CI builds and attaches to each GitHub release. */
-export const SHIPPED_PLUGINS = Object.freeze(["unified-plugin-framework", "project-knowledge"] as const);
+export const SHIPPED_PLUGINS = Object.freeze(["unified-plugin-framework"] as const);
 
 /** A shipped plugin name paired with its source root directory. */
 export interface ShippedSource {
@@ -30,10 +30,7 @@ export interface ShippedSource {
 /** Resolves the repository's shipped plugin roots (`unified-plugin-framework` at repo root `.`). */
 export const repositoryShippedSources = (repositoryRoot: string): readonly ShippedSource[] => {
   const root = resolve(repositoryRoot);
-  return Object.freeze([
-    { plugin: "unified-plugin-framework", root },
-    { plugin: "project-knowledge", root: join(root, "plugins", "project-knowledge") },
-  ]);
+  return Object.freeze([{ plugin: "unified-plugin-framework", root }]);
 };
 
 /** What `use` returned for the assembled copy, or why the plugin could not be assembled. */

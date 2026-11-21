@@ -17,13 +17,13 @@ Start with the workflow that matches your task. You can bring an idea, a proposa
 | Implementation | Execute or resume an authorized plan, then check the result against its acceptance criteria. | `implement-work`, `implement-verify` |
 | Code review | Review a task, story or feature against its requirements and the project's recorded decisions. | `review-task`, `review-story`, `review-feature` |
 | Continuity | Restore project context, save observed progress and recover usable context from readable records. | `continuity-continue`, `continuity-checkpoint`, `continuity-recover` |
-| Project knowledge | Build and maintain a shared, source-backed record of the project for all workflows to consult. | `setup-project-knowledge`, `discover-project-knowledge` |
+| Project knowledge | Build and maintain a shared, source-backed record of the project for all workflows to consult. | `setup-project-knowledge`, `discover-project-knowledge`, `query-project-knowledge`, `refresh-project-knowledge`, `ingest-docs`, `publish-docs` |
 
-Discovery, tracking, implementation, review and continuity skills belong to `unified-plugin-framework`. The knowledge skills belong to the included `project-knowledge` plugin.
+Discovery, tracking, implementation, review and continuity skills belong to `unified-plugin-framework`. The project knowledge skills belong to the onboarded standalone `monolithic-agent-knowledge-store` plugin (zero MCP, stdlib Python 3.12+).
 
 ## Install in your project
 
-The complete release contains the framework CLI, its production Node dependencies, the five workflow plugins and the project-knowledge runtime source. You do not need a framework development checkout, pnpm or separate plugin downloads to use that distribution.
+The complete release contains the framework CLI, its production Node dependencies, and the six pinned workflow plugins (including `monolithic-agent-knowledge-store`). You do not need a framework development checkout, pnpm or separate plugin downloads to use that distribution.
 
 ### One command
 
@@ -103,8 +103,9 @@ The complete archive includes these pinned dependencies as unchanged upstream re
 | Agile Backlog Toolkit | Work-item preparation, validation and decomposition |
 | Monolithic Code Review Toolkit | Requirements-grounded code review |
 | Agent Continuity | Session orientation, progress records and recovery |
+| Monolithic Agent Knowledge Store | Standalone, zero-MCP five-tier project knowledge store, curation, refresh, and doc sync |
 
-UPF also ships the independent `project-knowledge` plugin and its runtime. The framework's [dependency lock](io.github.monolith-inc.upf/onboarded.lock.json) records the exact plugin versions and the workflow mappings they were checked against. A dependency upgrade must pass the relevant adapter checks before it is accepted.
+The framework's [dependency lock](io.github.monolith-inc.upf/onboarded.lock.json) records the exact plugin versions and the workflow mappings they were checked against. A dependency upgrade must pass the relevant adapter checks before it is accepted.
 
 Installed releases use bundled dependencies locally. Missing or changed bundled content is reported as an error rather than silently fetching a replacement. Each release also provides checksums and signed build provenance.
 

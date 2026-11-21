@@ -1,35 +1,20 @@
-# Project knowledge qualification
+# Project Knowledge Qualification
 
-Local qualification ran on Linux with Python 3.12.13, `mcp` 2.3.0,
-`pydantic` 2.14.3, and `setuptools` 84.2.1. Declared dependency ranges are
-`mcp>=2.0,<3` and `pydantic>=2.7,<3`. The bundled upstream source is pinned at
-`3af148b44421521bb453be0abea05750e45f6f8a`.
+Project Knowledge is qualified via the standalone repository **[Monolith-INC/monolithic-agent-knowledge-store](https://github.com/Monolith-INC/monolithic-agent-knowledge-store)** (`v0.3.0`), pinned in `io.github.monolith-inc.upf/onboarded.lock.json`.
 
-Commands and results:
+## Verified Releases & CI Evidence
 
-- `python -m unittest discover -s runtimes/project-knowledge/tests -t runtimes/project-knowledge` — passed, 21 tests.
-- `PYTHONPATH=runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge python -m unittest discover -s runtimes/project-knowledge/vendor/review-knowledge/adapters/knowledge/tests -p 'test_*.py'` — passed, 60 inherited tests.
-- `pnpm install --frozen-lockfile`, `pnpm build`, `pnpm typecheck`, `pnpm test`, and `pnpm payloads:verify` — passed.
+- **Upstream engine:** `Monolith-INC/monolithic-code-review-toolkit` commit `7461aed54f12c050fcff4cb70998d23206721d25` (portable `knowledge-write.lock` on Linux, macOS, and native Windows; `ReadView` projected reads; SHA-256 verified by `tests/test_provenance.py`).
+- **Standalone plugin releases:**
+  - `v0.1.0` — store, setup, migration, curation, lineage validation, projected retrieval (`52` upstream + `11` owned tests green on Ubuntu, macOS, Windows Python 3.12).
+  - `v0.2.0` — agent wiring hooks (`orient`, `inject`, `gate`, `session-end`), default-branch & non-Git refresh, host qualification matrix (`docs/host-qualification.md`), installer (`scripts/install.sh`), and GitHub Release packaging ([Run `44877821971`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/actions/runs/44877821971), `52` upstream + `16` owned tests green on Ubuntu, macOS, Windows Python 3.12).
+  - `v0.3.0` — `ingest-docs`, `publish-docs`, `apply-doc-patch`, and append-only `flow-log.jsonl` recovery ([Release `v0.3.0`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/releases/tag/v0.3.0), [Run `44878821240`](https://github.com/Monolith-INC/monolithic-agent-knowledge-store/actions/runs/44878821240), `52` upstream + `19` owned tests green on Ubuntu, macOS, Windows Python 3.12).
 
-Last run 2026-11-15 on the AGE-90 branch, rebased onto `main` after AGE-88.
+## Host Coverage & Unsupported Surfaces
 
-The Python wheel was built from a temporary checkout copy, installed, and
-launched outside the source tree by both protocol suites. The consumer fixture
-restarts the server between write and read and checks that two clients see the
-same unit update. This validates the shared server contract, not complete
-integration with either external plugin. Skill cases are static walkthroughs;
-no assistant conversation or external-plugin integration was run.
+Per-action host coverage across **Claude Code**, **Codex**, and **Cursor** (including explicit **instructions-only** reporting for unsupported host hook surfaces) is maintained in `docs/host-qualification.md` inside `monolithic-agent-knowledge-store`.
 
-Only Linux was run locally. CI is configured for full Python suites on Ubuntu
-and macOS with Python 3.12; Windows runs configuration, platform, and packaging
-checks but skips Unix-only server protocol tests. macOS and Windows results
-remain pending CI.
+## Retired Legacy Surface
 
-Two qualification limits remain. Inherited catalog regeneration uses unit
-locks, not a store-wide catalog lock: concurrent processes can leave a stale
-catalog file as the last published snapshot, while unit data survives and live
-tools reload the catalog. This does not establish full multi-process catalog
-consistency. Also, source-distribution packaging is unqualified: the custom
-wheel build copies vendor files outside `src`, and no source manifest currently
-includes that tree. Checkout-to-wheel installation is covered; publication
-needs source-distribution inclusion and a source-to-wheel check.
+- Removed embedded `plugins/project-knowledge/` and `runtimes/project-knowledge/`.
+- Retired the UPF knowledge MCP server transport and private Python venv provisioning in favor of user-provided Python 3.12+ and stdlib-only scripts.

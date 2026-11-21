@@ -60,9 +60,9 @@ export type WorkflowAdapter<Operation extends string> = {
   readonly protocol?: string;
 };
 
-/** The framework skill that creates the shared project knowledge store. */
+/** The onboarded standalone skill that creates the shared project knowledge store. */
 export const PROJECT_KNOWLEDGE_SETUP: PluginSkillRef = Object.freeze({
-  plugin: "project-knowledge",
+  plugin: "monolithic-agent-knowledge-store",
   skill: "setup-project-knowledge",
 });
 

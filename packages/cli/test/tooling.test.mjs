@@ -161,7 +161,7 @@ test('rerun sweeps an interrupted writer temporary file with a matching receipt'
   const project=await mkdtemp(join(tmpdir(),'upf-interrupted-write-'));
   const path=join(project,'settings.json');
   const neighbor=join(project,'settings.json.upf-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.tmp');
-  const writer=fileURLToPath(new URL('../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py',import.meta.url));
+  const writer=fileURLToPath(new URL('../scripts/setup-write.py',import.meta.url));
   await Promise.all([writeFile(path,'original'),writeFile(neighbor,'user contents')]);
   const delayed=`import importlib.util, os, sys, time
 from pathlib import Path
@@ -193,7 +193,7 @@ writer.update(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), "new", "
 
 test('startup moves an interrupted stage aside and preserves its contents',{skip:process.platform==='win32',timeout:10000},async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-stage-restart-'));
-  const writer=fileURLToPath(new URL('../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py',import.meta.url));
+  const writer=fileURLToPath(new URL('../scripts/setup-write.py',import.meta.url));
   const staging=join(project,'.upf-tools','staging');
   await mkdir(staging,{recursive:true});
   const unrelated=join(staging,'unmanaged');

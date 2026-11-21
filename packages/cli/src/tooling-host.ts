@@ -105,7 +105,7 @@ const activeMatches = (discovered: readonly DiscoveredSkill[], name: string, sou
 };
 
 /** Plugins this framework ships itself, rather than pinned dependencies. */
-export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework", "project-knowledge"]);
+export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework"]);
 /** Every skill the installed framework plugins provide, under the name the host discovers it by. */
 export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly source: string }[] =>
   FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(frameworkTarget(project, host, plugin), "skills"))

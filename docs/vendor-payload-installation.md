@@ -1,6 +1,6 @@
 # Vendor Payload Installation
 
-Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) is released with a verified payload for each host: `unified-plugin-framework` (at the repository root `.`) and `project-knowledge` (under `plugins/project-knowledge`, pending Phase 2 extraction). The repository keeps one copy of each plugin, its canonical source. Host payloads are generated: CI builds them from the tagged source and attaches them to the GitHub release. They are never committed.
+Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) is released with a verified payload for each host: `unified-plugin-framework` (at the repository root `.`). Project knowledge is onboarded as the standalone `monolithic-agent-knowledge-store` dependency plugin. The repository keeps one copy of the plugin, its canonical source. Host payloads are generated: CI builds them from the tagged source and attaches them to the GitHub release. They are never committed.
 
 ```text
 canonical source (the only copy in git)
@@ -161,9 +161,6 @@ pnpm build
 pnpm agent-plugin install --source . --vendor claude --target <target-directory>
 pnpm agent-plugin install --source . --vendor cursor --target <target-directory>
 pnpm agent-plugin install --source . --vendor codex --target <target-directory>
-pnpm agent-plugin install --source plugins/project-knowledge --vendor claude --target <target-directory>
-pnpm agent-plugin install --source plugins/project-knowledge --vendor cursor --target <target-directory>
-pnpm agent-plugin install --source plugins/project-knowledge --vendor codex --target <target-directory>
 ```
 
 A source install reflects the checkout as it is, including uncommitted edits, so it is the way to try a skill change on a host before it is released.

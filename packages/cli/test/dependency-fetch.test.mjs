@@ -10,7 +10,7 @@ import { NODE_PLUGIN_FACTS_IO } from "../dist/plugin-reader.js";
 import { nodeToolingIO } from "../dist/tooling-node.js";
 import { TOOLKIT_SKILLS, fakeToolkit, framework, frameworkPinning } from "./onboarded-helpers.mjs";
 
-const WORKFLOWS = ["code-review", "discovery", "project-tracking", "continuity", "implementation"];
+const WORKFLOWS = ["code-review", "discovery", "project-tracking", "continuity", "implementation", "knowledge"];
 
 /** A fetch capability that copies a local tree to where the source's plugin folder would be, and records each call. */
 const fakeFetcher = (tree) => {
