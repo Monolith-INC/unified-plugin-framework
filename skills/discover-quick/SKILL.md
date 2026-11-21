@@ -1,6 +1,6 @@
 ---
 name: discover-quick
-description: Use when an idea, proposal or plan needs shaping and a light, fast conversation is enough — a clear request, a small change, or a first pass. Part of the Discovery workflow (contract v1).
+description: Use when the user wants to work on, explore, or shape an idea, idea file, proposal or plan and a light, structured conversation is enough — a clear request, a small change, or a first pass. Part of the Discovery workflow (contract v1).
 ---
 {{generated}}
 

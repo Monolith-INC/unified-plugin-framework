@@ -1,6 +1,6 @@
 ---
 name: discover-research
-description: Use when an idea, proposal or plan depends on facts the user does not have yet, such as a market, a technology or a competitor, and each decision should rest on cited evidence. Part of the Discovery workflow (contract v1).
+description: Use when the user wants to work on, explore, or shape an idea, idea file, proposal or plan that depends on facts the user does not have yet, such as a market, a technology or a competitor, and each decision should rest on cited evidence. Part of the Discovery workflow (contract v1).
 ---
 {{generated}}
 

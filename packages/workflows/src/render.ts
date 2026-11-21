@@ -37,10 +37,21 @@ const oneOf = (qualify: Qualify, served: NonEmpty<PluginSkillRef>): string => {
     : ["Hand the work to the skill that fits:", "", ...listed(qualify, served)].join("\n");
 };
 
+const DISCOVERY_FACILITATION_RULES: readonly string[] = Object.freeze([
+  "",
+  "### Session framing and facilitation",
+  "",
+  "- **Frame the workflow first:** before asking any question, briefly state the active discovery mode, the stages this session will follow, and the written design artifact it will produce.",
+  "- **Ground before asking:** read the user's starting idea file and the shared project knowledge store first, then summarize what is already known and what decisions remain open in 2–4 concise bullets.",
+  "- **One focused question at a time:** never bundle multiple broad questions into one message or ask the user to frame the whole problem from scratch. Ask one concrete, decision-driving question per turn; when clear directions exist, propose 2–4 concrete options using native selection controls with **Other**.",
+  "- **Show stage progress:** as each stage completes, briefly recap the settled decisions and name the next stage until the user approves the written design file.",
+]);
+
 const leadAndLayers = (qualify: Qualify, [lead, ...layers]: NonEmpty<PluginSkillRef>): string =>
   [
     `Run ${qualify(lead)} throughout, passing along the user's request and any starting material.`,
     ...(layers.length === 0 ? [] : ["", "Add these at the stages shown:", "", ...listed(qualify, layers)]),
+    ...DISCOVERY_FACILITATION_RULES,
   ].join("\n");
 
 const delegate = (adapter: WorkflowAdapter<string>, qualify: Qualify, served: NonEmpty<PluginSkillRef>): string => {

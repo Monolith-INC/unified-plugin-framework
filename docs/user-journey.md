@@ -90,7 +90,7 @@ Whenever a workflow asks a fixed-answer question (single choice, multiple choice
 
 ### Discovery: choose the rigor
 
-Every mode runs the same brainstorming flow from the first question to the written design. The modes differ in what is added to it. Each also offers, once at the start, the optional skills of the catalog it does not already use.
+Every mode runs the same brainstorming flow from the first question to the written design. The modes differ in what is added to it. Each frames the active mode, stages and target design up front, grounds itself in the starting idea file and project knowledge store, offers the optional catalog paths via grouped multi-select before starting, and moves forward one focused question at a time rather than bundling broad ad hoc prompts.
 
 ```mermaid
 flowchart LR
