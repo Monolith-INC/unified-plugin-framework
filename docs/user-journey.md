@@ -86,6 +86,8 @@ From a checkout, `agent-plugin adapter-check <workflow>` runs the same checks an
 
 ## Choices inside the workflows
 
+Whenever a workflow asks a fixed-answer question (single choice, multiple choice, or yes/no consent), it uses your host's native selection controls (buttons, multi-select checkboxes, or two-button confirmation) with the recommended option first, an **Other** option for custom replies, and plain wording in the project's saved language. Long lists such as optional discovery skills are split into groups of at most 4 options per question. Confirmation prompts default to decline (closing or sending an empty reply never counts as yes). Hosts without native selection controls fall back to a numbered list ending with **Other (type your own answer)**. Open-ended questions remain typed.
+
 ### Discovery: choose the rigor
 
 Every mode runs the same brainstorming flow from the first question to the written design. The modes differ in what is added to it. Each also offers, once at the start, the optional skills of the catalog it does not already use.

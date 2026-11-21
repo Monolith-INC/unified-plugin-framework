@@ -3,6 +3,7 @@ import { declaredWorkflows, type OnboardedPlugin, type WorkflowName } from "@age
 import { sha256, stableJson } from "@agent-plugins/compiler";
 
 import { LOCK_FILE, bindingPins, pinFor, type ContentSource, type OnboardedLock, type PluginPin } from "./lock.js";
+import type { Question } from "./questions.js";
 import { parseRange, satisfies } from "./versions.js";
 
 /** A plugin skill that carries out part of a contract operation; `use` says when to choose it among several. */
@@ -10,6 +11,7 @@ export type PluginSkillRef = {
   readonly plugin: string;
   readonly skill: string;
   readonly use?: string;
+  readonly group?: string;
 };
 
 /** At least one value. */
@@ -96,7 +98,7 @@ export type ReadinessStep = "declared" | "installed" | "bound";
 /** How to recover from a failed step: run a skill and continue, or ask the user for something only they can do. */
 export type Recovery =
   | { readonly action: "run-skill"; readonly skill: PluginSkillRef; readonly goal: string }
-  | { readonly action: "ask-user"; readonly message: string };
+  | { readonly action: "ask-user"; readonly message: string; readonly question?: Question };
 
 export type Readiness =
   | { readonly status: "ready" }

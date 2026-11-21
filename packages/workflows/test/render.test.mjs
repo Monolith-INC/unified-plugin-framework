@@ -67,6 +67,9 @@ test("rendered discovery skills require offering fitting BMad paths before start
   const result = renderSkill(templateText("discover-quick"), brainstormingDiscoveryAdapter, "discover-quick", committedLock);
   assert.equal(result.ok, true, result.message);
   assert.match(result.text, /Before starting the lead workflow, offer the user the fitting paths/);
+  assert.match(result.text, /grouped native multi-select questions \(at most 4 options per group\)/);
+  assert.match(result.text, /## Presenting questions to the user/);
+  assert.match(result.text, /### Shape & Ideate/);
   assert.match(result.text, /bmad-forge-idea/);
   assert.match(result.text, /never report ready while the store is empty/);
   assert.match(result.text, /query\.py curate/);

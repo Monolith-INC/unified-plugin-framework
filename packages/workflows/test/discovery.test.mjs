@@ -53,6 +53,7 @@ test("rendered modes run the flow throughout, add their layers, offer the rest o
   assert.match(thorough.text, /Run `superpowers:brainstorming` throughout/);
   assert.match(thorough.text, /- `bmad-forge-idea` — Before the written design/);
   assert.match(thorough.text, /## Optional skills/);
+  assert.match(thorough.text, /### Pressure-Test/);
   assert.match(thorough.text, /- `bmad-party-mode` — During the conversation/);
   assert.doesNotMatch(thorough.text.split("## Optional skills")[1].split("## Run the session")[0], /bmad-forge-idea/);
   assert.doesNotMatch(thorough.text, /bmad-method:/);
