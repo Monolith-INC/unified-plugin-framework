@@ -9,7 +9,7 @@ import { buildVendorBundle } from "@agent-plugins/workflows";
 import { runInstallCommand } from "../dist/index.js";
 
 const repo = resolve(import.meta.dirname, "../../..");
-const plugin = join(repo, "plugins", "hello-world");
+const plugin = join(repo, "fixtures", "plugins", "hello-world");
 
 async function capture(operation) {
   const stdout = [];

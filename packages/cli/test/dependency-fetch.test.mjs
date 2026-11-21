@@ -44,7 +44,7 @@ test("a github source maps its pin to the v<version> tag unless it names a ref, 
 
 test("the framework declares a fetchable source at the locked version for every onboarded plugin", () => {
   const manifest = JSON.parse(readFileSync(join(framework, "plugin.json"), "utf8")).extensions["io.github.monolith-inc.upf"].onboardedPlugins;
-  const lock = JSON.parse(readFileSync(join(framework, "onboarded.lock.json"), "utf8")).plugins;
+  const lock = JSON.parse(readFileSync(join(framework, "io.github.monolith-inc.upf", "onboarded.lock.json"), "utf8")).plugins;
   const planned = sourcesFor(NODE_PLUGIN_FACTS_IO, framework, WORKFLOWS, []);
   assert.equal(planned.ok, true, JSON.stringify(planned));
   assert.deepEqual(planned.value.map(({ plugin }) => plugin).sort(), manifest.map(({ name }) => name).sort());

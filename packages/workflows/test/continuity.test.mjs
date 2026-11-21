@@ -29,7 +29,7 @@ test("continuity dependency and source drift report the existing recovery", () =
 });
 
 test("continuity templates stay provider-free, reuse setup and bind the pinned operation", () => {
-  const templates = CONTINUITY_OPERATIONS.map((op) => [op, readFileSync(new URL(`../../../plugins/unified-plugin-framework/skills/${op}/SKILL.md`, import.meta.url), "utf8")]);
+  const templates = CONTINUITY_OPERATIONS.map((op) => [op, readFileSync(new URL(`../../../skills/${op}/SKILL.md`, import.meta.url), "utf8")]);
   templates.forEach(([op, template]) => {
     assert.doesNotMatch(template, /agent-continuity|Linear|Azure DevOps|Obsidian/);
     const rendered = renderSkill(template, agentContinuityAdapter, op, lock);

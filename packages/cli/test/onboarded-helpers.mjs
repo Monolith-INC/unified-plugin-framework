@@ -10,7 +10,7 @@ import { mappingDigest, reviewToolkitAdapter } from "@agent-plugins/workflows";
 
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-export const framework = join(repoRoot, "plugins/unified-plugin-framework");
+export const framework = repoRoot;
 
 export const TOOLKIT_SKILLS = ["review-task", "review-story-preflight", "review-story-postflight", "review-feature", "review-setup"];
 
@@ -37,11 +37,18 @@ export const digestOf = (root) => {
   return canonical.value.sourceDigest;
 };
 
+export const copyFrameworkAllowlist = (dest, { unpinned = false } = {}) => {
+  mkdirSync(dest, { recursive: true });
+  cpSync(join(framework, "plugin.json"), join(dest, "plugin.json"));
+  cpSync(join(framework, "skills"), join(dest, "skills"), { recursive: true });
+  if (!unpinned) cpSync(join(framework, "io.github.monolith-inc.upf"), join(dest, "io.github.monolith-inc.upf"), { recursive: true });
+  return dest;
+};
+
 /** A copy of the framework plugin whose lock pins `toolkit` against the current code review mapping. */
 export const frameworkPinning = (toolkit) => {
-  const root = join(mkdtempSync(join(tmpdir(), "upf-framework-")), "unified-plugin-framework");
-  cpSync(framework, root, { recursive: true });
-  writeJson(join(root, "onboarded.lock.json"), {
+  const root = copyFrameworkAllowlist(join(mkdtempSync(join(tmpdir(), "upf-framework-")), "unified-plugin-framework"), { unpinned: true });
+  writeJson(join(root, "io.github.monolith-inc.upf", "onboarded.lock.json"), {
     lockVersion: 1,
     plugins: [
       {

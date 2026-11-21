@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
-SPEC = importlib.util.spec_from_file_location("workflow", ROOT / ".codex/hooks/workflow.py")
+SPEC = importlib.util.spec_from_file_location("workflow", ROOT / "scripts/dev-hooks/codex-workflow.py")
 WORKFLOW = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(WORKFLOW)
 
@@ -18,7 +18,7 @@ class WorkflowTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.project = Path(self.temporary.name)
-        shutil.copytree(ROOT / ".claude/hooks", self.project / ".claude/hooks")
+        shutil.copytree(ROOT / "scripts/dev-hooks", self.project / "scripts/dev-hooks", ignore=shutil.ignore_patterns("tests", "__pycache__"))
         self.git("init", "-q", "-b", "main")
         self.git("-c", "user.email=t@t", "-c", "user.name=test", "commit", "-q", "--allow-empty", "-m", "init")
 
@@ -82,7 +82,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(0, WORKFLOW.run(self.project, "post", self.event("Bash", "gh pr merge 1 --auto"))[0])
 
     def test_malformed_event_fails_closed(self):
-        result = subprocess.run(("python3", str(ROOT / ".codex/hooks/workflow.py"), "pre"), input="{}", text=True, capture_output=True)
+        result = subprocess.run(("python3", str(ROOT / "scripts/dev-hooks/codex-workflow.py"), "pre"), input="{}", text=True, capture_output=True)
         self.assertEqual(2, result.returncode)
         self.assertIn("could not process", result.stderr)
 
@@ -91,26 +91,16 @@ class WorkflowTests(unittest.TestCase):
             WORKFLOW.normalized_events(self.event("apply_patch", "unknown patch"))
 
     def test_invalid_json_shape_fails_closed(self):
-        result = subprocess.run(("python3", str(ROOT / ".codex/hooks/workflow.py"), "pre"), input="[]", text=True, capture_output=True)
+        result = subprocess.run(("python3", str(ROOT / "scripts/dev-hooks/codex-workflow.py"), "pre"), input="[]", text=True, capture_output=True)
         self.assertEqual(2, result.returncode)
 
-    def test_registered_commands_work_from_subdirectory(self):
-        config = json.loads((ROOT / ".codex/hooks.json").read_text())
-        pre = config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        post = config["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+    def test_direct_invocation_works_from_subdirectory(self):
+        script = str(ROOT / "scripts/dev-hooks/codex-workflow.py")
         event = {"tool_name": "Bash", "cwd": str(ROOT), "tool_input": {"command": "git status"}}
-        self.assertEqual(0, subprocess.run(pre, shell=True, cwd=ROOT / "docs", input=json.dumps(event), text=True, capture_output=True).returncode)
-        result = subprocess.run(post, shell=True, cwd=ROOT / "docs", input=json.dumps({**event, "tool_input": {"command": "gh pr merge 1 --squash"}}), text=True, capture_output=True)
+        self.assertEqual(0, subprocess.run(("python3", script, "pre"), cwd=ROOT / "docs", input=json.dumps(event), text=True, capture_output=True).returncode)
+        result = subprocess.run(("python3", script, "post"), cwd=ROOT / "docs", input=json.dumps({**event, "tool_input": {"command": "gh pr merge 1 --squash"}}), text=True, capture_output=True)
         self.assertEqual(2, result.returncode)
         self.assertIn("to Done", result.stderr)
-
-    def test_registered_command_outside_repository_allows(self):
-        config = json.loads((ROOT / ".codex/hooks.json").read_text())
-        pre = config["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-        event = {"tool_name": "Bash", "cwd": self.temporary.name, "tool_input": {"command": "git commit -m x"}}
-        with tempfile.TemporaryDirectory() as outside:
-            result = subprocess.run(pre, shell=True, cwd=outside, input=json.dumps(event), text=True, capture_output=True)
-        self.assertEqual(0, result.returncode)
 
 
 if __name__ == "__main__":

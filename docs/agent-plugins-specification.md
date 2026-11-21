@@ -9,7 +9,7 @@ The specification is the authority. Where this summary and the published text di
 The specification describes the source format only. It says how a client loads a plugin, not how a plugin reaches a particular host. UPF adds that second half:
 
 ```text
-plugins/<name>/                 portable plugin, the format this page describes
+. (plugin.json + skills/)       portable root plugin, the format this page describes
         |
         v  packages/core        reads and validates the manifest, skills and MCP servers
         v  packages/compiler    turns them into one canonical model, plus UPF's own extension data

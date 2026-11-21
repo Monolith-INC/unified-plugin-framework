@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 import {
   compileVendorPayload,
@@ -18,17 +18,31 @@ import { loadPluginRoot, pluginDirectoryName, type Diagnostic } from "@agent-plu
 import type { WorkflowAdapter } from "./adapter.js";
 import { assemblePluginSource } from "./assemble.js";
 
-/** Plugins whose host payloads CI builds and attaches to each GitHub release, by directory name under `plugins/`. */
-export const SHIPPED_PLUGINS = Object.freeze(["hello-world", "unified-plugin-framework", "project-knowledge"] as const);
+/** Plugins whose host payloads CI builds and attaches to each GitHub release. */
+export const SHIPPED_PLUGINS = Object.freeze(["unified-plugin-framework", "project-knowledge"] as const);
+
+/** A shipped plugin name paired with its source root directory. */
+export interface ShippedSource {
+  readonly plugin: string;
+  readonly root: string;
+}
+
+/** Resolves the repository's shipped plugin roots (`unified-plugin-framework` at repo root `.`). */
+export const repositoryShippedSources = (repositoryRoot: string): readonly ShippedSource[] => {
+  const root = resolve(repositoryRoot);
+  return Object.freeze([
+    { plugin: "unified-plugin-framework", root },
+    { plugin: "project-knowledge", root: join(root, "plugins", "project-knowledge") },
+  ]);
+};
 
 /** What `use` returned for the assembled copy, or why the plugin could not be assembled. */
 export type Staged<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly problems: readonly string[] };
 
 /** Where the repository's plugins live and where one host adapter writes its generated, git-ignored payloads. */
-export interface ReleaseLayout {
-  readonly pluginsRoot: string;
-  readonly payloadsRoot: string;
-}
+export type ReleaseLayout =
+  | { readonly sources: readonly ShippedSource[]; readonly payloadsRoot: string }
+  | { readonly pluginsRoot: string; readonly payloadsRoot: string };
 
 /** One shipped plugin's build or verification outcome. */
 export interface PayloadReport {
@@ -68,7 +82,8 @@ export const withAssembledSource = <A>(
 ): Staged<A> => {
   const scratch = mkdtempSync(join(tmpdir(), "upf-assembled-"));
   try {
-    const staged = join(scratch, basename(sourceRoot));
+    const leaf = basename(resolve(sourceRoot)) || "plugin";
+    const staged = join(scratch, leaf);
     const assembled = assemblePluginSource(sourceRoot, staged, adapters);
     return assembled.ok ? { ok: true, value: use(staged) } : assembled;
   } finally {
@@ -123,17 +138,17 @@ const releaseStaged =
     return staged.ok ? staged.value : failed("release.assembly.failed", staged.problems, plugin);
   };
 
+const layoutSources = (layout: ReleaseLayout): readonly ShippedSource[] =>
+  "sources" in layout ? layout.sources : SHIPPED_PLUGINS.map((plugin) => ({ plugin, root: join(layout.pluginsRoot, plugin) }));
+
 const releaseOne =
-  (step: PayloadStep, adapter: VendorAdapter, layout: ReleaseLayout, adapters: readonly WorkflowAdapter<string>[]) =>
-  (plugin: string): PayloadReport => {
-    const root = join(layout.pluginsRoot, plugin);
-    return {
-      plugin,
-      result:
-        nameMismatch(plugin, root) ??
-        releaseStaged(step, adapter, adapters)({ plugin, root, shipped: join(layout.payloadsRoot, plugin) }),
-    };
-  };
+  (step: PayloadStep, adapter: VendorAdapter, payloadsRoot: string, adapters: readonly WorkflowAdapter<string>[]) =>
+  ({ plugin, root }: ShippedSource): PayloadReport => ({
+    plugin,
+    result:
+      nameMismatch(plugin, root) ??
+      releaseStaged(step, adapter, adapters)({ plugin, root, shipped: join(payloadsRoot, plugin) }),
+  });
 
 /** Builds (`build`) or checks (`verify`) one host's payload for every shipped plugin, each from its assembled source. */
 export const releasePayloads = (
@@ -145,7 +160,7 @@ export const releasePayloads = (
   const step = PAYLOAD_STEPS.get(operation);
   return step === undefined
     ? [{ plugin: "*", result: failed("release.operation.unknown", ["Expected build or verify."], operation) }]
-    : SHIPPED_PLUGINS.map(releaseOne(step, adapter, layout, adapters));
+    : layoutSources(layout).map(releaseOne(step, adapter, layout.payloadsRoot, adapters));
 };
 
 const buildDiagnostic =

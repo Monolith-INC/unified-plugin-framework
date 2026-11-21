@@ -1,11 +1,12 @@
 # Vendor Payload Installation
 
-Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) is released with a verified payload for each host: `hello-world`, `unified-plugin-framework` and `project-knowledge`. The repository keeps one copy of each plugin, its canonical source. Host payloads are generated: CI builds them from the tagged source and attaches them to the GitHub release. They are never committed.
+Every plugin listed in `SHIPPED_PLUGINS` (`packages/workflows/src/release.ts`) is released with a verified payload for each host: `unified-plugin-framework` (at the repository root `.`) and `project-knowledge` (under `plugins/project-knowledge`, pending Phase 2 extraction). The repository keeps one copy of each plugin, its canonical source. Host payloads are generated: CI builds them from the tagged source and attaches them to the GitHub release. They are never committed.
 
 ```text
 canonical source (the only copy in git)
-  plugins/<plugin>/plugin.json
-  plugins/<plugin>/skills/<skill>/SKILL.md   (contract skills are templates)
+  plugin.json                              (root unified-plugin-framework plugin)
+  skills/<skill>/SKILL.md                  (contract skills are templates)
+  io.github.monolith-inc.upf/onboarded.lock.json
         |
         v  tag v<version> pushed  ->  .github/workflows/release.yml
 release-time assembly into a temporary copy (templates filled from their workflow adapters; other skills unchanged)
@@ -113,9 +114,6 @@ agent-plugin install unified-plugin-framework --version <version> --vendor codex
 agent-plugin install project-knowledge --version <version> --vendor claude --target <target-directory>
 agent-plugin install project-knowledge --version <version> --vendor cursor --target <target-directory>
 agent-plugin install project-knowledge --version <version> --vendor codex --target <target-directory>
-agent-plugin install hello-world --version <version> --vendor claude --target <target-directory>
-agent-plugin install hello-world --version <version> --vendor cursor --target <target-directory>
-agent-plugin install hello-world --version <version> --vendor codex --target <target-directory>
 ```
 
 The command downloads the release's `SHA256SUMS`, then `<plugin>-<host>.bundle.json.gz`. Before anything is written it checks:
@@ -160,12 +158,9 @@ For development, pass the plugin's source directory with `--source` instead of a
 
 ```sh
 pnpm build
-pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor claude --target <target-directory>
-pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor cursor --target <target-directory>
-pnpm agent-plugin install --source plugins/unified-plugin-framework --vendor codex --target <target-directory>
-pnpm agent-plugin install --source plugins/hello-world --vendor claude --target <target-directory>
-pnpm agent-plugin install --source plugins/hello-world --vendor cursor --target <target-directory>
-pnpm agent-plugin install --source plugins/hello-world --vendor codex --target <target-directory>
+pnpm agent-plugin install --source . --vendor claude --target <target-directory>
+pnpm agent-plugin install --source . --vendor cursor --target <target-directory>
+pnpm agent-plugin install --source . --vendor codex --target <target-directory>
 pnpm agent-plugin install --source plugins/project-knowledge --vendor claude --target <target-directory>
 pnpm agent-plugin install --source plugins/project-knowledge --vendor cursor --target <target-directory>
 pnpm agent-plugin install --source plugins/project-knowledge --vendor codex --target <target-directory>
@@ -183,7 +178,7 @@ To release another plugin, add its directory name to `SHIPPED_PLUGINS`. The dire
 
 ## Authoring Guide
 
-Canonical plugin authors edit only the portable plugin source under `plugins/<plugin>/`. Contract skills of the framework plugin are templates; ADR-001 describes how they are assembled from workflow adapters.
+Canonical plugin authors edit only the portable plugin source at `.` (`plugin.json` and `skills/`). Contract skills of the framework plugin are templates; ADR-001 describes how they are assembled from workflow adapters.
 
 Generated payload content is owned by the adapter packages. Each adapter's payload script (`packages/adapter-*/scripts/payload.mjs`) assembles every shipped plugin into a temporary copy, which is removed afterwards. The compiler normalizes that copy, computes the source digest, asks the selected adapter to render vendor files, and finalizes `bundle.json` with file bytes, modes, hashes, adapter identity, and payload digest. To look at what a host receives, run `pnpm payloads:build` and read `packages/adapter-<host>/payloads/<plugin>/`; the directory is git-ignored and rebuilt on every run.
 

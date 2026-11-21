@@ -5,6 +5,7 @@ import type { Result } from "@agent-plugins/compiler";
 import type { Diagnostic, OnboardedPlugin, PluginInspection } from "@agent-plugins/core";
 import {
   EMPTY_LOCK,
+  LEGACY_LOCK_FILE,
   LOCK_FILE,
   bindingPins,
   pluginSourceChecksum,
@@ -173,7 +174,8 @@ export const installedFrom = (
 
 /** The framework's lock: absent is the empty lock; unreadable or malformed is a configuration problem. */
 export const lockFrom = (io: PluginFactsIo, framework: string): Gathered<OnboardedLock> => {
-  const file = io.readJson(join(framework, LOCK_FILE));
+  const primary = io.readJson(join(framework, LOCK_FILE));
+  const file = primary.kind === "absent" ? io.readJson(join(framework, LEGACY_LOCK_FILE)) : primary;
   switch (file.kind) {
     case "absent":
       return facts(EMPTY_LOCK);

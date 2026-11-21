@@ -45,7 +45,7 @@ def normalized_events(event: dict) -> tuple[dict, ...]:
 
 def invoke(project: Path, hook: str, event: dict) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ("bash", str(project / ".claude" / "hooks" / hook)),
+        ("bash", str(project / "scripts" / "dev-hooks" / hook)),
         input=json.dumps(event), text=True, capture_output=True,
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)}, check=False,
     )

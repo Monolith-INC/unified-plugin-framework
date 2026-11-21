@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Tests for .claude/hooks/require-ticket-branch.sh. Exit 1 on any failure.
+# Tests for scripts/dev-hooks/require-ticket-branch.sh. Exit 1 on any failure.
 set -u
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
 hook=$(cd "$(dirname "$0")/.." && pwd)/require-ticket-branch.sh

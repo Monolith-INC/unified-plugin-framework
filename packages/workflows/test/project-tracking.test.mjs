@@ -8,8 +8,8 @@ import {
   checkAdapterReadiness, findWorkflow, mappingDigest, renderSkill, selectContent, providerLeak, pinFor,
 } from "../dist/index.js";
 
-const root = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
-const lock = JSON.parse(readFileSync(new URL("onboarded.lock.json", root), "utf8"));
+const root = new URL("../../../", import.meta.url);
+const lock = JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json", root), "utf8"));
 const template = (name) => readFileSync(new URL(`skills/${name}/SKILL.md`, root), "utf8");
 const pin = pinFor(lock, "agile-backlog-toolkit", "project-tracking");
 const plugin = {

@@ -3,17 +3,18 @@ dist/
 *.tsbuildinfo
 .DS_Store
 
-# Local tool installs and state (AGE-88)
-.harness/
-_bmad/
-_bmad-output/
-.superpowers/
-
-# Codex: share the workflow hook adapter, keep the rest local (AGE-88)
-!/.codex/
-/.codex/*
-!/.codex/hooks.json
-!/.codex/hooks/
+# Local host & plugin development state (never versioned)
+/.agent-plugins/
+/.agents/
+/.claude/
+/.codex/
+/.cursor/
+/.fp-enforcer/
+/.harness/
+/.monolithic-code-review/
+/.superpowers/
+/_bmad/
+/_bmad-output/
 __pycache__/
 
 # Host payloads are built in CI and attached to GitHub releases (AGE-104)
@@ -23,10 +24,6 @@ release-assets/
 # UPF is never installed into its own source; dogfood in a separate test project.
 # These hold installed plugin copies and installer state, so they can never be committed.
 /.upf-tools/
-/.agents/
-/.claude/skills/
-/.claude/worktrees/
-/.claude/settings.local.json
 /.project-knowledge/
 /.project-knowledge.json
 /.unified-plugin-framework.json

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { run } from "../dist/index.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-const pluginRoot = join(repoRoot, "plugins/translation");
+const pluginRoot = join(repoRoot, "fixtures/plugins/translation");
 
 test("dogfood end-to-end: validate, inspect, multi-skill, mcp, extensions", () => {
   const validate = withCapturedIo(() => run(["validate", pluginRoot]));

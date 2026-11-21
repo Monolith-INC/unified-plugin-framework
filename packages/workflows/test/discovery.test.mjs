@@ -15,8 +15,8 @@ import {
   pinFor,
 } from "../dist/index.js";
 
-const framework = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
-const lock = JSON.parse(readFileSync(new URL("onboarded.lock.json", framework), "utf8"));
+const framework = new URL("../../../", import.meta.url);
+const lock = JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json", framework), "utf8"));
 const template = (operation) => readFileSync(new URL(`skills/${operation}/SKILL.md`, framework), "utf8");
 const rendered = (operation) => renderSkill(template(operation), brainstormingDiscoveryAdapter, operation, lock);
 

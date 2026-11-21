@@ -1,8 +1,10 @@
 import { sha256, stableJson } from "@agent-plugins/compiler";
 import { WORKFLOW_ADAPTERS, type WorkflowName } from "@agent-plugins/core";
 
-/** The lock beside the framework manifest: one pin per onboarded plugin, like `package-lock.json` beside `package.json`. */
-export const LOCK_FILE = "onboarded.lock.json";
+/** The lock inside UPF's reverse-domain extension directory (Agent Plugins v1.0.0 §8). */
+export const LOCK_FILE = "io.github.monolith-inc.upf/onboarded.lock.json";
+/** Legacy lock location beside `plugin.json`, still accepted as a read fallback for older fixtures. */
+export const LEGACY_LOCK_FILE = "onboarded.lock.json";
 
 /** Underlying plugin identity and previously reviewed public files, independent of selection growth. */
 export type ContentSource = {

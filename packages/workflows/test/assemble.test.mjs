@@ -9,9 +9,9 @@ import { assemblePluginSource, assembleSkills, reviewToolkitAdapter } from "../d
 
 const template = (name) => `---\nname: ${name}\ndescription: Test.\n---\n{{generated}}\n\n{{readiness}}\n\n{{delegate}}\n`;
 
-const pluginSource = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
+const pluginSource = new URL("../../../", import.meta.url);
 
-const lock = JSON.parse(readFileSync(new URL("onboarded.lock.json", pluginSource), "utf8"));
+const lock = JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json", pluginSource), "utf8"));
 const EMPTY = { lockVersion: 1, plugins: [] };
 
 test("templates named after a contract operation are rendered from its adapter", () => {
@@ -33,6 +33,19 @@ test("a template whose name is no contract operation fails", () => {
   const result = assembleSkills(new Map([["review-everything", template("review-everything")]]), lock);
   assert.equal(result.ok, false);
   assert.match(result.problems.join("\n"), /review-everything/);
+});
+
+test("assemblePluginSource copies only the v1.0.0 plugin allowlist and never leaks repo or dev folders", () => {
+  const staging = join(mkdtempSync(join(tmpdir(), "upf-allowlist-")), "staged");
+  const result = assemblePluginSource(fileURLToPath(pluginSource), staging);
+  assert.equal(result.ok, true, result.problems?.join("; "));
+  const entries = readdirSync(staging).sort();
+  assert.equal(entries.includes("plugin.json"), true);
+  assert.equal(entries.includes("skills"), true);
+  assert.equal(entries.includes("io.github.monolith-inc.upf"), true);
+  for (const forbidden of ["packages", "fixtures", "docs", "node_modules", ".git", ".claude", ".codex", ".agents", "scripts"]) {
+    assert.equal(existsSync(join(staging, forbidden)), false, `non-plugin path ${forbidden} must not leak into staged payload`);
+  }
 });
 
 test("an unknown placeholder fails, naming the skill", () => {
@@ -78,6 +91,6 @@ test("assemblePluginSource refuses a staging directory that already exists", () 
 test("a template whose plugin has no pin fails assembly; a plugin without templates needs no lock", () => {
   const unpinned = assembleSkills(new Map([["review-task", template("review-task")]]), EMPTY);
   assert.equal(unpinned.ok, false);
-  assert.match(unpinned.problems.join("\n"), /no pin in onboarded\.lock\.json/);
+  assert.match(unpinned.problems.join("\n"), /no pin in io\.github\.monolith-inc\.upf\/onboarded\.lock\.json/);
   assert.equal(assembleSkills(new Map([["notes", "---\nname: notes\ndescription: Plain.\n---\n"]]), EMPTY).ok, true);
 });

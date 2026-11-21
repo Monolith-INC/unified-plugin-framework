@@ -7,13 +7,13 @@ import { loadPluginRoot } from "@agent-plugins/core";
 
 import { CODE_REVIEW_OPERATIONS, adapterPlugins, assembleSkills, findWorkflow, reviewToolkitAdapter } from "../dist/index.js";
 
-const frameworkRoot = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
+const frameworkRoot = new URL("../../../", import.meta.url);
 
 const templates = new Map(
   CODE_REVIEW_OPERATIONS.map((operation) => [operation, readFileSync(new URL(`skills/${operation}/SKILL.md`, frameworkRoot), "utf8")]),
 );
 
-const assembled = assembleSkills(templates, JSON.parse(readFileSync(new URL("onboarded.lock.json", frameworkRoot), "utf8")));
+const assembled = assembleSkills(templates, JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json", frameworkRoot), "utf8")));
 
 const skillText = (operation) => (assembled.ok ? assembled.skills.get(operation) : assert.fail(assembled.problems.join("; ")));
 

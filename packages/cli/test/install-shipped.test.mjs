@@ -7,7 +7,7 @@ import test from "node:test";
 import { runInstallCommand } from "../dist/index.js";
 
 const repo = resolve(import.meta.dirname, "../../..");
-const framework = join(repo, "plugins", "unified-plugin-framework");
+const framework = repo;
 const VENDORS = ["claude", "codex", "cursor"];
 
 async function capture(operation) {

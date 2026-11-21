@@ -101,7 +101,7 @@ test("a declared range the framework cannot read fails at the declared step, not
 test("an installed plugin whose checksum differs from the lock fails at the installed step, naming both", () => {
   const result = checkAdapterReadiness({ ...facts, installed: kit(ALL_SKILLS, { checksum: "b".repeat(64) }) });
   assert.equal(result.step, "installed");
-  assert.match(result.reason, /review-kit 1\.2\.0 \(bbbbbbbbbbbb\) is installed, but onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
+  assert.match(result.reason, /review-kit 1\.2\.0 \(bbbbbbbbbbbb\) is installed, but io\.github\.monolith-inc\.upf\/onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
   assert.match(result.recovery.message, /Reinstall the pinned release/);
 });
 
@@ -130,7 +130,7 @@ test("the upgrade gate refuses new content under the version the lock already pi
   const candidate = { adapter, onboarded: [declared("review-kit")], lock: pinned(), installed: kit(ALL_SKILLS, { checksum: "d".repeat(64) }) };
   const result = checkPluginBinding(candidate);
   assert.equal(result.step, "installed");
-  assert.match(result.reason, /must not change under its own version: review-kit 1\.2\.0 \(dddddddddddd\) is installed, but onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
+  assert.match(result.reason, /must not change under its own version: review-kit 1\.2\.0 \(dddddddddddd\) is installed, but io\.github\.monolith-inc\.upf\/onboarded\.lock\.json pins 1\.2\.0 \(aaaaaaaaaaaa\)/);
   assert.deepEqual(checkPluginBinding({ ...candidate, installed: kit(ALL_SKILLS) }), { status: "ready" });
 });
 

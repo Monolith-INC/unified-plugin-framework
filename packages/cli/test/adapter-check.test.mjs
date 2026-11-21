@@ -121,7 +121,7 @@ test("adapter-check names the plugin and both checksums when the installed toolk
 test("adapter-check reports a malformed lock as a configuration error", () => {
   const toolkit = fakeToolkit(TOOLKIT_SKILLS);
   const root = frameworkPinning(toolkit);
-  writeJson(join(root, "onboarded.lock.json"), { lockVersion: 1, plugins: [{ plugin: "monolithic-code-review-toolkit" }] });
+  writeJson(join(root, "io.github.monolith-inc.upf", "onboarded.lock.json"), { lockVersion: 1, plugins: [{ plugin: "monolithic-code-review-toolkit" }] });
   const result = check(["--plugin-root", toolkit, "--project", project()], root);
   assert.equal(result.exitCode, 2);
   assert.match(result.stderr, /onboarded\.lock\.json requires complete unique pins/);

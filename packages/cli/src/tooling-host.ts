@@ -20,7 +20,10 @@ export const FRAMEWORK_ROOT = resolve(fileURLToPath(new URL("../../..", import.m
 export const toolsRoot = (project: string): string => join(project, ".upf-tools");
 export const pluginTarget = (project: string, name: string): string => join(toolsRoot(project), "plugins", name);
 export const pluginNames = (input: BootstrapInput): readonly string[] => selectedPlugins(input.workflows);
-const FRAMEWORK_PLUGIN = join(FRAMEWORK_ROOT, "plugins/unified-plugin-framework");
+const FRAMEWORK_PLUGIN = FRAMEWORK_ROOT;
+/** Source directory of a framework-shipped plugin (`unified-plugin-framework` lives at repo root `.`). */
+export const frameworkPluginRoot = (name: string): string =>
+  name === "unified-plugin-framework" ? FRAMEWORK_ROOT : join(FRAMEWORK_ROOT, "plugins", name);
 /** Verified checkouts of fetched dependency sources, one per plugin and pinned version. */
 export const sourcesRoot = (project: string): string => join(toolsRoot(project), "sources");
 

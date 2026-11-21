@@ -1,5 +1,5 @@
-import { renameSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
 import {
   adapterPlugins,
@@ -176,6 +176,7 @@ export const runUpgradeCheck = (io: UpgradeCheckIo, argv: readonly string[], cwd
 const writeTextToDisk = (path: string, text: string): Written => {
   const staged = `${path}.tmp`;
   try {
+    mkdirSync(dirname(path), { recursive: true }); // fp-allow: no-ambient-effect
     writeFileSync(staged, text); // fp-allow: no-ambient-effect
     renameSync(staged, path); // fp-allow: no-ambient-effect
     return { ok: true };
