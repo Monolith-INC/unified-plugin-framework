@@ -48,6 +48,24 @@ export {
 export { renderSkill, type Rendered } from "./render.js";
 
 export {
+  SHARED_INTERACTION_SECTION,
+  checkQuestionWording,
+  concatAll,
+  groupOptions,
+  renderNativeQuestionGuidance,
+  renderNumberedFallback,
+  wordingFindings,
+  type ConfirmQuestion,
+  type OptionGroup,
+  type Question,
+  type QuestionOption,
+  type SeveralQuestion,
+  type SingleQuestion,
+  type WordingFinding,
+  type WordingFindingCode,
+} from "./questions.js";
+
+export {
   EMPTY_LOCK,
   LEGACY_LOCK_FILE,
   LOCK_FILE,

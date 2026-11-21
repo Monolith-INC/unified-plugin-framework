@@ -19,6 +19,16 @@ After the user accepts the choices, write the answers as JSON in a temporary fil
 
 Use the returned language for subsequent prose. On a credential or connection failure, follow the specific recovery and keep the saved choices. Do not restart the interview or repeat a write whose outcome is unknown.
 
+## Presenting setup questions to the user
+
+For fixed-answer setup questions, use the host's native selection controls instead of asking the user to type free-form replies:
+
+- **Single choice** (such as tracker, language, or document mode): present native buttons with the recommended option first and an **Other** option for custom answers.
+- **Multiple choice** (such as workflows or hosts): present native multi-select controls with an **Other** option. If a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group.
+- **Setup plan and consent approval:** present a two-button confirmation with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.
+- **Plain wording:** write every prompt in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.
+- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format, and re-ask cleanly if the reply does not match. Keep open-ended inputs (such as custom paths or project URLs) typed.
+
 ## Bootstrap tooling together
 
 For explicit full setup, or when a required tool is missing, use `agent-plugin project bootstrap --input <plan.json> --project <project-directory>`. The plan selects one or more supported hosts (Codex and Claude Code), a Python executable, workflow names, clean pinned dependency roots, accepted knowledge/document locations, and any missing project answers. Use the same runtime location as the commands above.

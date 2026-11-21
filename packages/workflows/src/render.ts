@@ -6,6 +6,7 @@ import {
   type WorkflowAdapter,
 } from "./adapter.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
+import { SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
 
 /** A rendered skill file, or why it could not be rendered. */
 export type Rendered = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string };
@@ -66,16 +67,40 @@ const sameEntry = (x: PluginSkillRef) => (y: PluginSkillRef): boolean =>
 const offeredCatalog = (adapter: WorkflowAdapter<string>, served: readonly PluginSkillRef[]): readonly PluginSkillRef[] =>
   adapter.catalog.filter((entry) => !served.some(sameEntry(entry)));
 
-const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): string =>
-  offered.length === 0
+const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[]): readonly string[] => {
+  const byLabel = new Map(offered.map((ref) => [qualify(ref), ref] as const));
+  const groups = groupOptions(
+    offered.map((ref) => ({
+      label: qualify(ref),
+      ...(ref.use === undefined ? {} : { description: ref.use }),
+      ...(ref.group === undefined ? {} : { group: ref.group }),
+    })),
+  );
+  return groups.flatMap((group) => [
+    `### ${group.name}`,
+    "",
+    ...group.options.map((option) => {
+      const ref = byLabel.get(option.label);
+      return `- ${option.label}${ref?.use === undefined ? "" : ` — ${ref.use}`}`;
+    }),
+    "",
+  ]);
+};
+
+const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): string => {
+  const hasGroups = offered.some((ref) => ref.group !== undefined);
+  return offered.length === 0
     ? ""
     : [
         "## Optional skills",
         "",
-        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Run every skill they pick at the point it fits, or proceed directly if they decline.",
+        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Present the offer as grouped native multi-select questions (at most 4 options per group) with an **Other** option, or as a numbered list ending with **Other (type your own answer)** when the host lacks native controls. Run every skill they pick at the point it fits, or proceed directly if they decline.",
         "",
-        ...listed(qualify, offered),
-      ].join("\n");
+        ...(hasGroups ? groupedCatalogLines(qualify, offered) : listed(qualify, offered)),
+      ]
+        .join("\n")
+        .trimEnd();
+};
 
 /** The skills to look for: every one the operation runs, plus one offered skill of each other required plugin. */
 const checkedSkills = (served: readonly PluginSkillRef[], offered: readonly PluginSkillRef[]): readonly PluginSkillRef[] => [
@@ -113,6 +138,8 @@ const readiness = (
     `1. **Available:** ${andList(checked.map(qualify))} ${checked.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${andList(pins.map(({ plugin }) => `\`${plugin}\``))} for this host, then continue once it is.${testedWith(pins)}`,
     `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with \`monolithic-agent-knowledge-store:discover-project-knowledge\` (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
     ...sharedStoreStep(qualify, adapter.knowledgeStores),
+    "",
+    SHARED_INTERACTION_SECTION,
   ].join("\n");
 
 const generated = (adapter: WorkflowAdapter<string>, operation: string): string =>

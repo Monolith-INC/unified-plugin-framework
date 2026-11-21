@@ -88,7 +88,7 @@ Ask your agent to use the appropriate installed skill. For example:
 
 > Use `unified-plugin-framework:continuity-checkpoint` to save the current progress and unfinished work.
 
-The workflows use your project's saved tracker, language and document locations. Missing choices are handled through `project-bootstrap`. The current project-operation adapters support Linear and repository-local work items; remote credentials belong in the supported adapter environment, not in a setup plan or chat.
+The workflows use your project's saved tracker, language and document locations. Missing choices are handled through `project-bootstrap`. Fixed-answer prompts use your host's native selection controls (buttons, grouped multi-select, and safe two-button confirmations with an **Other** option) and fall back to numbered lists when native controls are unavailable; open-ended questions remain typed. The current project-operation adapters support Linear and repository-local work items; remote credentials belong in the supported adapter environment, not in a setup plan or chat.
 
 Continuity operations can be invoked explicitly. Installing their skills does not establish automatic capture of host events or automatic session management.
 
