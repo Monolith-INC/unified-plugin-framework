@@ -66,7 +66,7 @@ await plans.reduce((previous,hostPlan)=>previous.then(()=>stageHost(hostPlan)),P
 assert.equal((await host.stageDependencies(project,plan,denied)).ok,true);
 const manifest=JSON.parse(await readFile(join(root,'distribution.json'),'utf8'));
 assert.equal(manifest.plugins.length,6);
-assert.equal((await readFile(join(root,'dependencies/monolithic-agent-knowledge-store@0.3.0/scripts/query.py'),'utf8')).includes('Standalone stdlib Python 3.12+ CLI'),true);
+assert.equal((await readFile(join(root,'dependencies/monolithic-agent-knowledge-store@0.4.1/scripts/query.py'),'utf8')).includes('Standalone stdlib Python 3.12+ CLI'),true);
 assert.equal((await readFile(join(root,'dependencies/monolithic-code-review-toolkit@0.6.0/LICENSE'),'utf8')).length>0,true);
 const relocated=join(await mkdtemp(join(tmpdir(),'upf-relocated-')),'distribution');
 await cp(root,relocated,{recursive:true,verbatimSymlinks:true});
