@@ -13,7 +13,7 @@ What users and agents rely on. It changes only by a deliberate contract version 
 | `discover-comprehensive` | `skills/discover-comprehensive` | Large, costly or hard-to-reverse work: several perspectives, a customer-side test, a reviewed design and formal documents |
 | `discover-research` | `skills/discover-research` | The design depends on facts the user does not have yet: each decision rests on cited evidence |
 
-Every mode also offers, once at the start, the optional skills of the catalog that it does not already use. The skills in `plugins/unified-plugin-framework` are templates: they hold the contract and name no plugin or plugin skill. The contract type is `DiscoveryOperation` in `packages/workflows/src/discovery.ts`.
+Every mode also offers, once at the start, the optional skills of the catalog that it does not already use. Each session frames the active mode, stages and target written design up front, grounds itself in the starting idea file and project knowledge store before asking, progresses one focused decision-driving question at a time (never bundling broad open-ended prompts), and recaps stage progress until the user approves the written design. The skills in `skills/discover-*` are templates: they hold the contract and name no plugin or plugin skill. The contract type is `DiscoveryOperation` in `packages/workflows/src/discovery.ts`.
 
 ## Current adapter
 

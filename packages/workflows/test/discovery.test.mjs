@@ -100,3 +100,18 @@ test("a template that drops the catalog placeholder while the mode offers a cata
   assert.equal(result.ok, false);
   assert.match(result.message, /missing placeholders: \{\{catalog\}\}/);
 });
+
+test("every discovery mode frames the workflow up front, grounds first, asks one focused question at a time, and shows stage progress", () => {
+  DISCOVERY_OPERATIONS.map((operation) => {
+    const result = rendered(operation);
+    assert.equal(result.ok, true, result.message);
+    assert.match(result.text, /### Session framing and facilitation/);
+    assert.match(result.text, /Frame the workflow first/);
+    assert.match(result.text, /Ground before asking/);
+    assert.match(result.text, /One focused question at a time/);
+    assert.match(result.text, /never bundle multiple broad questions/i);
+    assert.match(result.text, /Show stage progress/);
+    assert.match(template(operation), /work on, explore, or shape an idea, idea file/i);
+    return operation;
+  });
+});
