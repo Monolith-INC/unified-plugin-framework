@@ -34,6 +34,7 @@ test("the public contract preserves project authority and evidence-based resume/
   const work=template("implement-work");
   const verify=template("implement-verify");
   assert.match(work,/historical session approvals do not grant new permission/);
+  assert.match(work,/chat outline is not an approved implementation plan/i);
   assert.match(work,/first unfinished authorized task/);
   assert.match(work,/continuity-checkpoint/);
   assert.match(work,/resolve an uncertain write before replaying it/i);

@@ -12,7 +12,7 @@ Use the project's selected language, document paths, coding rules, branch policy
 
 ## Establish the authorized scope
 
-Read the story/task and linked approved plan through `project-operations`. Read current checkout/diff and the relevant shared knowledge through catalog, search and targeted fetch. When a feature/epic lacks an implementable story/task plan, use `track-breakdown` or the appropriate existing tracking operation before coding; preserve its original requirements rather than creating another plan here.
+Read the story/task and linked approved plan through `project-operations`. Read current checkout/diff and the relevant shared knowledge through catalog, search and targeted fetch. A chat outline is not an approved implementation plan: when no durable plan file exists under `artifactsPath` or as a linked artifact, or when a feature/epic lacks an implementable story/task plan, stop before coding and use `track-breakdown` (or the appropriate existing tracking operation) to create and save the plan first; preserve its original requirements rather than creating another plan here.
 
 Before editing any file, ensure the approved implementation plan includes an explicit **File Inventory** listing every existing file to modify or delete and every new file to create. Treat that inventory as the authorized edit boundary: if implementation requires touching any file outside the approved inventory, pause and ask the user for permission before editing it, then record the approved addition.
 

@@ -1,6 +1,6 @@
 ---
 name: track-from-design
-description: Turn an approved design into enriched, validated work items, implementation plans and tasks. Part of Project tracking contract v1.
+description: Use for planning requests from an approved design or work item — turn it into enriched, validated work items, durable implementation plans under artifactsPath, and atomic tasks before implementation approval. Part of Project tracking contract v1.
 ---
 {{generated}}
 
@@ -20,4 +20,4 @@ Size the approved scope: several capabilities suggest an epic, one capability a 
 
 Draft the initial item with traceable source requirements and acceptance criteria. Run `track-enrich` and `track-validate`. For an epic or feature use `track-decompose` and apply those steps to its children. For an oversized story use `track-split`; for an implementable story use `track-breakdown`. Continue until each leaf story has a validated plan and atomic tasks. Reuse the same context and authorization across these steps.
 
-Present the complete tree, coverage report and plans before publication through the shared protocol. Finish with the saved artifact paths, verified item refs, any remaining user decisions and the first implementable task.
+Present the complete tree, coverage report and saved plan files (with their exact paths and status) before publication through the shared protocol. Never ask for implementation approval when a plan exists only as a chat outline; if writing a plan file needs approval, request that write approval explicitly first. Finish with the saved artifact paths, verified item refs, any remaining user decisions and the first implementable task.
