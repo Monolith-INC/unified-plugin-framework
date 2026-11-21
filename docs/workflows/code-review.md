@@ -38,7 +38,7 @@ Each step is checked in order. A failing step never just stops the review: it ca
 | Bound: project store | `.project-knowledge.json` has no `knowledgeRoot` | Run `setup-project-knowledge` with its defaults, then continue |
 | Bound: shared store | `.monolithic-code-review/sources.json` does not set `knowledge.root` to the project store (the toolkit reads only its own setting) | Run `monolithic-code-review-toolkit:review-setup`, point it at the project store, then continue |
 
-Problems no recovery action can fix go to the repair agent ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
+Problems no recovery action can fix hand over to the `repair-workflow` repair agent ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
 
 From a checkout, check readiness with:
 

@@ -66,7 +66,7 @@ flowchart TD
     G -- yes --> W["Run the workflow<br/><small>delegate to plugin skills</small>"]
     G -- no --> X
     X -.-> W
-    U -. severe .-> RA["Repair agent<br/><small>AGE-94, planned</small>"]
+    U -. severe .-> RA["Repair agent<br/><small>repair-workflow · AGE-94</small>"]
 
     classDef check fill:#EEEDFE,stroke:#534AB7,color:#3C3489
     classDef recover fill:#FAECE7,stroke:#993C1D,color:#712B13
@@ -80,7 +80,7 @@ flowchart TD
 
 - **Ask the user once:** for what only the user can do, such as installing a plugin, or installing the pinned version when the installed one differs from the lock.
 - **Run a setup skill:** for what the framework can fix itself, such as creating the project knowledge store or pointing a plugin's own store at it.
-- **Repair agent:** for problems no recovery fixes. It explains the problem in one message, proposes a fix, and resumes the work ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
+- **Repair agent (`repair-workflow`):** for severe problems no listed recovery fixes, or when an automatic recovery fails. It runs read-only diagnostics, explains the problem in one short message, proposes a concrete fix with confirmation (or gives exact manual next steps if unfixable), and resumes the original work ([AGE-94](https://linear.app/agentical-monolithics/issue/AGE-94/repair-agent-for-severe-workflow-failures)).
 
 From a checkout, `agent-plugin adapter-check <workflow>` runs the same checks and prints each recovery.
 
