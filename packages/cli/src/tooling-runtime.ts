@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sha256 } from "@agent-plugins/compiler";
 import { installVendorBundle } from "@agent-plugins/installer";
@@ -49,8 +49,17 @@ const knowledgeSupportFiles = (relRoot: string, language: string): readonly (rea
   ["glossary.md", "# Project Glossary\n\nSourced project terms and aliases. Every entry cites its authoritative source.\n\n| Term | Aliases | Definition | Source |\n| --- | --- | --- | --- |\n"],
 ];
 
-const ensureMissingSupportFile = (project: string, file: string, content: string, python: string): Promise<Result<string>> =>
-  readText(file).then((existing) => !existing.ok ? existing : existing.value !== null ? ok(file) : writeText(project, file, content, null, python));
+const isExistError = (error: unknown): boolean => object(error) && error.code === "EEXIST";
+
+const ensureMissingSupportFile = async (project: string, file: string, content: string): Promise<Result<string>> => {
+  if (!await safePath(project, file)) {
+    return fail("symlink-escape", "The knowledge support file escapes the project or follows a symbolic link.",
+      "Preserve the linked path and choose an unlinked location inside the project.");
+  }
+  return writeFile(file, content, { encoding: "utf8", flag: "wx" })
+    .then(() => ok(file))
+    .catch((error: unknown) => isExistError(error) ? ok(file) : setupFailure("Could not scaffold a project knowledge support file."));
+};
 
 /** Writes canonical `project-knowledge.json` for new installs; updates legacy `.project-knowledge.json` if it is the sole locator; fails on conflicts. */
 export const configureKnowledge = async (project: string, input: BootstrapInput): Promise<Result<string>> => {
@@ -80,7 +89,7 @@ export const configureKnowledge = async (project: string, input: BootstrapInput)
           ? nodeProjectFiles.write(targetPath, { ...selected, schemaVersion: 1, language, tracked, ...input.knowledge }, existingValue)()
               .then((saved) => saved.ok
                 ? sequence(knowledgeSupportFiles(input.knowledge.knowledgeRoot, language),
-                    ([name, content]) => ensureMissingSupportFile(project, join(storeDir, name), content, input.python), targetPath)
+                    ([name, content]) => ensureMissingSupportFile(project, join(storeDir, name), content), targetPath)
                 : saved)
           : created,
       );
