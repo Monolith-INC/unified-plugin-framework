@@ -6,7 +6,7 @@ import { nodeProjectFiles, object, ok, fail, type Result } from "@agent-plugins/
 import type { BootstrapInput } from "./tooling-input.js";
 import { command, scaled, sequence } from "./tooling-process.js";
 import { backupOwnedText, directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
-import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, frameworkTarget, toolsRoot } from "./tooling-host.js";
+import { FRAMEWORK_PLUGINS, FRAMEWORK_ROOT, frameworkPluginRoot, frameworkTarget, toolsRoot } from "./tooling-host.js";
 import type { HostName } from "./host-names.js";
 import { resolveSourceBundle } from "./bundle-source.js";
 import { readOwnership, recordOwnership, type OwnershipLedger } from "./tooling-ownership.js";
@@ -23,14 +23,14 @@ export const installedSkills = async (project: string, host: HostName): Promise<
   return checked.every(Boolean);
 };
 const installedPlugin = async (project: string, host: HostName, name: string): Promise<boolean> => {
-  const shipped = resolveSourceBundle(join(FRAMEWORK_ROOT, "plugins", name), host);
+  const shipped = resolveSourceBundle(frameworkPluginRoot(name), host);
   return !shipped.ok ? false : Promise.all(shipped.value.bundle.manifest.files.map(async (file) => {
     const read = await readFile(join(frameworkTarget(project, host, name), file.path)).catch(() => null);
     return read !== null && sha256(read) === file.sha256;
   })).then((files) => files.every(Boolean));
 };
 const installPlugin = (project: string, host: HostName, name: string): Promise<Result<string>> => directory(project, frameworkTarget(project, host, name)).then((created) => {
-  const distribution = resolveSourceBundle(join(FRAMEWORK_ROOT, "plugins", name), host);
+  const distribution = resolveSourceBundle(frameworkPluginRoot(name), host);
   const installed = created.ok && distribution.ok ? installVendorBundle({ ...distribution.value, target: { root: created.value } }) : undefined;
   return !created.ok ? created : !distribution.ok ? setupFailure(distribution.diagnostics.map((d) => d.message).join(" "))
     : installed?.kind === "installed" || installed?.kind === "unchanged" ? ok(name) : setupFailure(`Could not install ${name}; preserve the installer diagnostics and resolve its target conflict.`);

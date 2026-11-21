@@ -19,7 +19,7 @@ import {
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(packageRoot, "../..");
-const helloWorldRoot = join(repositoryRoot, "plugins", "hello-world");
+const helloWorldRoot = join(repositoryRoot, "fixtures", "plugins", "hello-world");
 
 function richCanonical(overrides = {}) {
   return {

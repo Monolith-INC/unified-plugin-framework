@@ -25,7 +25,7 @@ import {
 import { downloadReleaseBundle, nodeFetchBytes } from "../dist/release-download.js";
 
 const repo = resolve(import.meta.dirname, "../../..");
-const helloWorld = join(repo, "plugins", "hello-world");
+const helloWorld = join(repo, "fixtures", "plugins", "hello-world");
 const BASE = "https://releases.example/download";
 
 const built = (adapter) => {

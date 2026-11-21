@@ -128,9 +128,9 @@ export const main=async(args,io=NODE_IO)=>{
 };
 // A UPF source checkout holds the framework's own plugin and CLI sources. Installing into it makes sessions there load
 // the frozen installed skills instead of the editable ones in plugins/, so dogfooding happens in a separate project.
-const SOURCE_MARKERS=Object.freeze(['plugins/unified-plugin-framework/plugin.json','packages/cli/package.json']);
+const SOURCE_MARKERS=Object.freeze(['plugin.json','io.github.monolith-inc.upf/onboarded.lock.json','packages/cli/package.json']);
 const isSourceCheckout=project=>SOURCE_MARKERS.every(marker=>existsSync(join(project,marker)));
-const SOURCE_CHECKOUT='This folder is a Unified Plugin Framework source checkout; installing UPF here would make its sessions load installed skills instead of the editable ones in plugins/.';
+const SOURCE_CHECKOUT='This folder is a Unified Plugin Framework source checkout; installing UPF here would make its sessions load installed skills instead of the editable ones in skills/.';
 const prepare=async(args,io)=>{
  const acceptedPlan=args.input===undefined ? null : await readFile(resolve(args.input),'utf8').then(JSON.parse).catch(()=>null);
  const python=pythonExecutable(args.python ?? acceptedPlan?.python,io) ?? await reusablePrivatePython(args.project ?? args.dest ?? io.cwd(),io);

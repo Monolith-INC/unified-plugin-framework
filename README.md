@@ -104,7 +104,7 @@ The complete archive includes these pinned dependencies as unchanged upstream re
 | Monolithic Code Review Toolkit | Requirements-grounded code review |
 | Agent Continuity | Session orientation, progress records and recovery |
 
-UPF also ships the independent `project-knowledge` plugin and its runtime. The framework's [dependency lock](plugins/unified-plugin-framework/onboarded.lock.json) records the exact plugin versions and the workflow mappings they were checked against. A dependency upgrade must pass the relevant adapter checks before it is accepted.
+UPF also ships the independent `project-knowledge` plugin and its runtime. The framework's [dependency lock](io.github.monolith-inc.upf/onboarded.lock.json) records the exact plugin versions and the workflow mappings they were checked against. A dependency upgrade must pass the relevant adapter checks before it is accepted.
 
 Installed releases use bundled dependencies locally. Missing or changed bundled content is reported as an error rather than silently fetching a replacement. Each release also provides checksums and signed build provenance.
 
@@ -135,7 +135,7 @@ pnpm test
 pnpm payloads:verify
 ```
 
-Try your changes in a separate test project, never in this repository. An installed copy here would make sessions load the frozen installed skills instead of the editable ones in `plugins/`, so the installer refuses a UPF source checkout. To try a plugin change, install it into the test project, for example with `agent-plugin install --source plugins/<plugin> --vendor claude --target <test project>`, or run the release installer there.
+Try your changes in a separate test project, never in this repository. An installed copy here would make sessions load the frozen installed skills instead of the editable ones in `skills/`, so the installer refuses a UPF source checkout. To try a plugin change, install it into the test project, for example with `agent-plugin install --source . --vendor claude --target <test project>`, or run the release installer there.
 
 Read [AGENTS.md](AGENTS.md) for repository rules and [the architecture guide](docs/architecture.md) for implementation boundaries. Release packaging and artifact checks are documented in the [installation guide](docs/vendor-payload-installation.md#building-and-checking-the-complete-distribution).
 

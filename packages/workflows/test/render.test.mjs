@@ -5,10 +5,10 @@ import test from "node:test";
 import { CODE_REVIEW_OPERATIONS, DISCOVERY_OPERATIONS, renderSkill, reviewToolkitAdapter } from "../dist/index.js";
 
 const templateText = (operation) =>
-  readFileSync(new URL(`../../../plugins/unified-plugin-framework/skills/${operation}/SKILL.md`, import.meta.url), "utf8");
+  readFileSync(new URL(`../../../skills/${operation}/SKILL.md`, import.meta.url), "utf8");
 
 const committedLock = JSON.parse(
-  readFileSync(new URL("../../../plugins/unified-plugin-framework/onboarded.lock.json", import.meta.url), "utf8"),
+  readFileSync(new URL("../../../io.github.monolith-inc.upf/onboarded.lock.json", import.meta.url), "utf8"),
 );
 
 const rendered = (operation) => renderSkill(templateText(operation), reviewToolkitAdapter, operation, committedLock);
@@ -60,5 +60,5 @@ test("the readiness step names the pinned toolkit version as a one-line heads-up
 test("rendering fails when a served plugin has no pin, naming the plugin and the fix", () => {
   const result = renderSkill(templateText("review-task"), reviewToolkitAdapter, "review-task", { lockVersion: 1, plugins: [] });
   assert.equal(result.ok, false);
-  assert.match(result.message, /monolithic-code-review-toolkit has no pin in onboarded\.lock\.json: pin it with agent-plugin upgrade-check/);
+  assert.match(result.message, /monolithic-code-review-toolkit has no pin in io\.github\.monolith-inc\.upf\/onboarded\.lock\.json: pin it with agent-plugin upgrade-check/);
 });

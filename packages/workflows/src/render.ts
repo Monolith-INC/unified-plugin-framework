@@ -116,7 +116,7 @@ const readiness = (
   ].join("\n");
 
 const generated = (adapter: WorkflowAdapter<string>, operation: string): string =>
-  `<!-- Assembled at release time from the ${operation} template in plugins/unified-plugin-framework and the ${adapter.workflow} adapter. Edit those, not this copy. -->`;
+  `<!-- Assembled at release time from the ${operation} template in skills/ and the ${adapter.workflow} adapter. Edit those, not this copy. -->`;
 
 /** Everything one operation renders from: the operation's skills, the catalog it offers, and the required plugins' pins. */
 type Inputs = {

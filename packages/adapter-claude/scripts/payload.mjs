@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { releasePayloads, withPayloadsRoot } from "@agent-plugins/workflows";
+import { releasePayloads, repositoryShippedSources, withPayloadsRoot } from "@agent-plugins/workflows";
 
 import { claudeAdapter } from "../dist/index.js";
 import { officialFailures } from "./official-check.mjs";
@@ -27,7 +27,7 @@ const runCli = (args) => {
 
 /** Build reports plus, for verify, Claude Code's own verdict on each payload, read while the payloads still exist. */
 const releaseAndValidate = (payloadsRoot) => {
-  const built = releasePayloads(operation, claudeAdapter, { pluginsRoot: resolve(packageRoot, "../../plugins"), payloadsRoot });
+  const built = releasePayloads(operation, claudeAdapter, { sources: repositoryShippedSources(resolve(packageRoot, "../..")), payloadsRoot });
   // Claude Code is the authority on what it loads, so a verified payload must also pass its own validator.
   return [
     ...built,

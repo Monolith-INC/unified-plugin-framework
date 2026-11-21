@@ -10,6 +10,7 @@ import { run } from "../dist/index.js";
 import { runUpgradeCheck } from "../dist/upgrade-check.js";
 import {
   capture,
+  copyFrameworkAllowlist,
   digestOf,
   fakeToolkit,
   framework,
@@ -26,7 +27,7 @@ const check = (args, root) => capture(() => run(["adapter-check", "code-review",
 const upgrade = (root, toolkits) =>
   capture(() => run(["upgrade-check", "code-review", "--framework", root, ...toolkits.flatMap((toolkit) => ["--plugin-root", toolkit])]));
 
-const lockAt = (root) => readFileSync(join(root, "onboarded.lock.json"), "utf8");
+const lockAt = (root) => readFileSync(join(root, "io.github.monolith-inc.upf", "onboarded.lock.json"), "utf8");
 
 test("upgrade-check pins a newer release that passes the adapter's checks, and adapter-check then accepts it", () => {
   const root = frameworkPinning(fakeToolkit(TOOLKIT_SKILLS));
@@ -113,7 +114,7 @@ test("upgrade-check writes the lock once, through its injected effect, only when
   const passing = injected();
   assert.equal(passing.run(), 0);
   assert.equal(passing.writes.length, 1);
-  assert.equal(passing.writes[0][0], resolve("/framework", "onboarded.lock.json"));
+  assert.equal(passing.writes[0][0], resolve("/framework", "io.github.monolith-inc.upf", "onboarded.lock.json"));
   assert.equal(JSON.parse(passing.writes[0][1]).plugins[0].version, "0.6.3");
   const failing = injected({ skills: ["review-task"] });
   assert.equal(failing.run(), 1);
@@ -156,11 +157,8 @@ const skillsFolder = (eol = "\n") => {
 };
 
 /** A copy of the framework plugin; `unpinned` drops its lock, so fakes can be pinned afresh. */
-const frameworkCopy = ({ unpinned = false } = {}) => {
-  const root = join(mkdtempSync(join(tmpdir(), "upf-framework-")), "unified-plugin-framework");
-  cpSync(framework, root, { recursive: true, filter: (source) => !(unpinned && source.endsWith("onboarded.lock.json")) });
-  return root;
-};
+const frameworkCopy = ({ unpinned = false } = {}) =>
+  copyFrameworkAllowlist(join(mkdtempSync(join(tmpdir(), "upf-framework-")), "unified-plugin-framework"), { unpinned });
 
 const upgradeDiscovery = (root, roots) =>
   capture(() => run(["upgrade-check", "discovery", "--framework", root, ...roots.flatMap((value) => ["--plugin-root", value])]));

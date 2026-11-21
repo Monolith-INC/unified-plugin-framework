@@ -57,7 +57,7 @@ test('a confirmed artifact revision is reused regardless of input field order', 
 });
 
 test('framework skills use the shared project boundary without tracker details', () => {
-  const root = new URL('../../../plugins/unified-plugin-framework/skills/', import.meta.url);
+  const root = new URL('../../../skills/', import.meta.url);
   readdirSync(root).map((name) => {
     const source = readFileSync(new URL(`${name}/SKILL.md`, root), 'utf8');
     assert.doesNotMatch(source, /\bLinear\b|\bAzure\b|\bwit_\w+|\bget_issue\b|\bsave_issue\b/);

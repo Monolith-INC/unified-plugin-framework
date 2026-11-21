@@ -1,8 +1,8 @@
-import { cpSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { WorkflowAdapter } from "./adapter.js";
-import { EMPTY_LOCK, LOCK_FILE, parseLock, type OnboardedLock, type ParsedLock } from "./lock.js";
+import { EMPTY_LOCK, LEGACY_LOCK_FILE, LOCK_FILE, parseLock, type OnboardedLock, type ParsedLock } from "./lock.js";
 import { renderSkill } from "./render.js";
 
 /** Assembled skills (skill directory name → SKILL.md text), or every problem found. */
@@ -62,9 +62,18 @@ const readSkills = (root: string): ReadonlyMap<string, string> =>
       .map((name) => [name, readFileSync(skillFile(root, name), "utf8")] as const),
   );
 
+const lockPath = (root: string): string | undefined =>
+  existsSync(join(root, LOCK_FILE))
+    ? join(root, LOCK_FILE)
+    : existsSync(join(root, LEGACY_LOCK_FILE))
+      ? join(root, LEGACY_LOCK_FILE)
+      : undefined;
+
 /** The plugin's lock: absent is the empty lock, so only a plugin with template skills needs one. */
-const readLock = (root: string): ParsedLock =>
-  existsSync(join(root, LOCK_FILE)) ? parseJsonLock(readFileSync(join(root, LOCK_FILE), "utf8")) : { ok: true, lock: EMPTY_LOCK };
+const readLock = (root: string): ParsedLock => {
+  const path = lockPath(root);
+  return path === undefined ? { ok: true, lock: EMPTY_LOCK } : parseJsonLock(readFileSync(path, "utf8"));
+};
 
 const parseJsonLock = (text: string): ParsedLock => {
   try {
@@ -74,9 +83,40 @@ const parseJsonLock = (text: string): ParsedLock => {
   }
 };
 
+const ALLOWLIST_FILES: readonly string[] = Object.freeze(["plugin.json", "mcp.json", "LICENSE", "NOTICE", LEGACY_LOCK_FILE]);
+const ALLOWLIST_DIRS: readonly string[] = Object.freeze(["skills"]);
+const SAFE_NAMESPACE = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+
+const declaredExtensionDirs = (root: string): readonly string[] => {
+  const manifestPath = join(root, "plugin.json");
+  if (!existsSync(manifestPath)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(manifestPath, "utf8")) as unknown;
+    const ext = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? (parsed as Readonly<Record<string, unknown>>).extensions
+      : undefined;
+    return typeof ext === "object" && ext !== null && !Array.isArray(ext)
+      ? Object.keys(ext).filter((ns) => SAFE_NAMESPACE.test(ns) && !ns.includes(".."))
+      : [];
+  } catch {
+    return [];
+  }
+};
+
+const isExistingDirectory = (path: string): boolean => existsSync(path) && lstatSync(path).isDirectory();
+
+const copyAllowlisted = (sourceRoot: string, stagingRoot: string): void => {
+  if (!isExistingDirectory(sourceRoot)) throw new Error(`Plugin source ${sourceRoot} is not a readable directory.`);
+  mkdirSync(stagingRoot, { recursive: true });
+  const files = ALLOWLIST_FILES.filter((name) => existsSync(join(sourceRoot, name)) && !lstatSync(join(sourceRoot, name)).isDirectory());
+  const dirs = [...new Set([...ALLOWLIST_DIRS, ...declaredExtensionDirs(sourceRoot)])].filter((name) => isExistingDirectory(join(sourceRoot, name)));
+  files.map((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name)));
+  dirs.map((name) => cpSync(join(sourceRoot, name), join(stagingRoot, name), { recursive: true }));
+};
+
 /**
- * Copies the plugin at `sourceRoot` to `stagingRoot` and writes its assembled skills there. The source is never
- * modified, and an existing staging directory is refused rather than overwritten.
+ * Copies only the v1.0.0 plugin allowlist from `sourceRoot` to `stagingRoot` and writes its assembled skills there.
+ * The source is never modified, non-plugin repo files never leak, and an existing staging directory is refused.
  */
 export const assemblePluginSource = (
   sourceRoot: string,
@@ -88,7 +128,7 @@ export const assemblePluginSource = (
   if (!lock.ok) return { ok: false, problems: [lock.message] };
   const assembled = assembleSkills(readSkills(sourceRoot), adapters, lock.lock);
   if (!assembled.ok) return assembled;
-  cpSync(sourceRoot, stagingRoot, { recursive: true });
+  copyAllowlisted(sourceRoot, stagingRoot);
   [...assembled.skills].map(([name, text]) => writeFileSync(skillFile(stagingRoot, name), text));
   return assembled;
 };

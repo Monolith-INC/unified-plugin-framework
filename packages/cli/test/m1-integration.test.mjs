@@ -9,8 +9,8 @@ import { run } from "../dist/index.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-test("validate succeeds for plugins/hello-world", () => {
-  const code = withCapturedIo(() => run(["validate", join(repoRoot, "plugins/hello-world")]));
+test("validate succeeds for fixtures/plugins/hello-world", () => {
+  const code = withCapturedIo(() => run(["validate", join(repoRoot, "fixtures/plugins/hello-world")]));
   assert.equal(code.exitCode, 0);
   assert.deepEqual(JSON.parse(code.stdout), { ok: true });
 });
@@ -39,7 +39,7 @@ test("inspect discovers only immediate skills from skill-discovery fixture", () 
 });
 
 test("inspect reports hello-world portable components", () => {
-  const code = withCapturedIo(() => run(["inspect", join(repoRoot, "plugins/hello-world")]));
+  const code = withCapturedIo(() => run(["inspect", join(repoRoot, "fixtures/plugins/hello-world")]));
   assert.equal(code.exitCode, 0);
   const inspection = JSON.parse(code.stdout);
   assert.equal(inspection.manifest.name, "hello-world");

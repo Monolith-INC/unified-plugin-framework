@@ -15,7 +15,7 @@ const repository=resolve(import.meta.dirname,'../../..');
 const version=process.env.UPF_RELEASE_VERSION ?? '0.0.0-dev';
 const output=resolve(process.argv[2] ?? join(repository,'release-assets'));
 const workflows=Object.keys(WORKFLOWS);
-const framework=join(repository,'plugins/unified-plugin-framework');
+const framework=repository;
 const build=async()=>{
  const scratch=await mkdtemp(join(tmpdir(),'upf-release-distribution-'));
  const root=join(scratch,`unified-plugin-framework-${version}`);
@@ -36,7 +36,7 @@ const localizeSelfLink=async(root)=>{
  await symlink(relative(dirname(link),cli),link,'dir');
 };
 const copyContents=async(root,scratch,sources)=>{
- await Promise.all(['plugins','runtimes/project-knowledge','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
+ await Promise.all(['plugin.json','skills','io.github.monolith-inc.upf','plugins/project-knowledge','runtimes/project-knowledge','packages/cli/scripts/setup-write.py','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
   cp(join(repository,path),join(root,path),{recursive:true,filter:path=>!['node_modules','.venv','__pycache__','build','dist'].some(part=>path.split(/[\\/]/).includes(part))})));
  const copied=await sequence(sources,source=>cp(join(scratch,'fetched',`${source.plugin}@${source.version}`),join(root,'dependencies',`${source.plugin}@${source.version}`),{recursive:true,verbatimSymlinks:true})
   .then(()=>ok(source.plugin)),'Dependencies included.');

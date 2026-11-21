@@ -254,7 +254,7 @@ def guard(repo: Path, name: str) -> str:
         case Ticket(other, merge) if merge:
             raise Refusal(f"Delivery for {other} is verified. Finish its tracker and session closeout from main.")
         case None if run(repo, "git", "show-ref", "--verify", "--quiet", ORIGIN_MAIN, accepted=(0, 1)).returncode == 0:
-            raise Refusal("Register the existing ticket branch with python3 .claude/hooks/ticket-flow.py resume.")
+            raise Refusal("Register the existing ticket branch with python3 scripts/dev-hooks/ticket-flow.py resume.")
         case _:
             return ""
 

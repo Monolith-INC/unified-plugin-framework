@@ -52,7 +52,7 @@ export const writeText = (project: string, path: string, content: string, previo
       .catch((error: unknown) => fileFailure(error, "Could not resolve the setup project."))
     : unsafePath());
 
-const WRITER = fileURLToPath(new URL("../../../runtimes/project-knowledge/src/upf_knowledge/setup_write.py", import.meta.url));
+const WRITER = fileURLToPath(new URL("../scripts/setup-write.py", import.meta.url));
 /** The writer's last diagnostic line names the cause, such as a missing module or an unsupported Python. */
 const writerCrash = (diagnostics: string): string =>
   `The isolated setup writer could not finish${diagnostics.trim() === "" ? "" : `: ${diagnostics.trim().split("\n").at(-1)?.slice(0, 200)}`}.`;

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { run } from "../dist/index.js";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
-const pluginRoot = join(repoRoot, "plugins/translation");
+const pluginRoot = join(repoRoot, "fixtures/plugins/translation");
 
 test("translation plugin validates", () => {
   const result = withCapturedIo(() => run(["validate", pluginRoot]));

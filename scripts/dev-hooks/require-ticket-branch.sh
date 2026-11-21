@@ -70,7 +70,7 @@ case $tool in
         destination=${BASH_REMATCH[0]}
         if { [[ $branch_args =~ $branch_create ]] && [[ ${BASH_REMATCH[3]} =~ $new_flag ]]; } \
           || [[ $branch_args =~ [[:space:]]branch[[:space:]]+(-[fF][[:space:]]+)?[\"\']?feature/ ]]; then
-          block "start $destination from main with: python3 .claude/hooks/ticket-flow.py start $destination"
+          block "start $destination from main with: python3 scripts/dev-hooks/ticket-flow.py start $destination"
         fi
       fi
     done < <(tr ';&|' '\n' <<<"$command")
@@ -101,7 +101,7 @@ if [ -z "$branch" ]; then
   exit 0
 fi
 [[ $branch =~ ^feature/([A-Z][A-Z0-9]*-[0-9]+)-.+ ]] \
-  || block "branch '$branch' is not a ticket branch. Start one with python3 .claude/hooks/ticket-flow.py start feature/<KEY>-<n>-<slug>"
+  || block "branch '$branch' is not a ticket branch. Start one with python3 scripts/dev-hooks/ticket-flow.py start feature/<KEY>-<n>-<slug>"
 key=${BASH_REMATCH[1]}
 
 (cd "$repo" && python3 -B "$flow" guard "$branch") || exit 2

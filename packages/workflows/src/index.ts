@@ -48,6 +48,7 @@ export { renderSkill, type Rendered } from "./render.js";
 
 export {
   EMPTY_LOCK,
+  LEGACY_LOCK_FILE,
   LOCK_FILE,
   lockText,
   parseLock,
@@ -115,7 +116,15 @@ import {
   type Staged,
 } from "./release.js";
 
-export { SHIPPED_PLUGINS, withPayloadsRoot, type PayloadReport, type ReleaseLayout, type Staged } from "./release.js";
+export {
+  SHIPPED_PLUGINS,
+  repositoryShippedSources,
+  withPayloadsRoot,
+  type PayloadReport,
+  type ReleaseLayout,
+  type ShippedSource,
+  type Staged,
+} from "./release.js";
 
 /** Runs `use` on a temporary, assembled copy of the plugin at `sourceRoot`, then removes the copy. */
 export const withAssembledSource = <A>(sourceRoot: string, use: (assembledRoot: string) => A): Staged<A> =>

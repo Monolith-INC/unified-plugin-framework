@@ -19,7 +19,7 @@ import {
   withPin,
 } from "../dist/index.js";
 
-const framework = new URL("../../../plugins/unified-plugin-framework/", import.meta.url);
+const framework = new URL("../../../", import.meta.url);
 
 const pin = (plugin, overrides = {}) => ({
   plugin,

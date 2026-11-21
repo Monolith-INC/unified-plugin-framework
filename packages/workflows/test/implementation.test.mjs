@@ -3,8 +3,8 @@ import {readFileSync} from "node:fs";
 import test from "node:test";
 import {IMPLEMENTATION_OPERATIONS, superpowersImplementationAdapter as adapter, renderSkill, pinFor} from "../dist/index.js";
 
-const source=new URL("../../../plugins/unified-plugin-framework/",import.meta.url);
-const lock=JSON.parse(readFileSync(new URL("onboarded.lock.json",source),"utf8"));
+const source=new URL("../../../",import.meta.url);
+const lock=JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json",source),"utf8"));
 const template=(op)=>readFileSync(new URL(`skills/${op}/SKILL.md`,source),"utf8");
 
 test("implementation assembles reviewed guidance without invoking native conductors",()=>{

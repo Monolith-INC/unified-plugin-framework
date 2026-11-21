@@ -7,12 +7,12 @@ import { fileURLToPath } from "node:url";
 
 import { buildVendorBundle, releasePayloads, SHIPPED_PLUGINS, withAssembledSource, withPayloadsRoot } from "../dist/index.js";
 
-const framework = fileURLToPath(new URL("../../../plugins/unified-plugin-framework/", import.meta.url));
+const framework = fileURLToPath(new URL("../../../", import.meta.url));
 
 const unusedAdapter = Object.freeze({ vendor: "claude" });
 
-test("the framework, knowledge and reference plugins are shipped", () => {
-  assert.deepEqual([...SHIPPED_PLUGINS], ["hello-world", "unified-plugin-framework", "project-knowledge"]);
+test("the framework and knowledge plugins are shipped", () => {
+  assert.deepEqual([...SHIPPED_PLUGINS], ["unified-plugin-framework", "project-knowledge"]);
 });
 
 test("verify writes payloads to a scratch folder it removes; build keeps them in the package", () => {

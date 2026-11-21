@@ -27,7 +27,7 @@ The complete distribution contains all five upstream repositories under `depende
 
 Only a development workspace may fetch dependencies: the release builder and development bootstrap use the source declarations and existing lock checks. The following fetch/cache details apply to that development path.
 
-A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit whose content the lock pins. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root. The declarations in `plugins/unified-plugin-framework/plugin.json` and the pins in its `onboarded.lock.json` are the only record of what is fetched.
+A source has the form `github:<owner>/<repo>[/<folder>][#<ref>]`. The pinned version maps to the git ref `v<version>`, unless the declaration names another ref, such as a commit whose content the lock pins. `<folder>` is the plugin's folder inside the repository; without it the plugin is the repository root. The declarations in `plugin.json` and the pins in `io.github.monolith-inc.upf/onboarded.lock.json` are the only record of what is fetched.
 
 Each source is fetched as a shallow git checkout into a private directory and checked against the lock for every selected workflow it serves. Only a matching tree is kept, as `.upf-tools/sources/<plugin>@<version>`; later runs reuse it while it still matches, and fetch it again otherwise. A tree that differs from its pin fails with `dependency-fetch-mismatch`: the copy is discarded and nothing is staged. A failed fetch reports `dependency-fetch`. Until the sources are fetched, the `dependencies` capability reports as missing rather than misconfigured.
 
