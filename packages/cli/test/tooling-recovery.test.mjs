@@ -17,12 +17,14 @@ test("discovery runs zero-MCP stdlib query.py curate without legacy MCP servers"
   assert.equal(codex[codex.indexOf("-C") + 1], input.project);
   assert.ok(codex.includes("--ignore-user-config"));
   assert.ok(!codex.some((arg) => arg.includes("mcp_servers.")));
-  assert.match(codex.at(-1), /query\.py.*curate/);
+  assert.match(codex.at(-1), /query\.py" curate --project/);
+  assert.match(codex.at(-1), /query\.py" catalog --project/);
+  assert.match(codex.at(-1), /Do not run `query\.py setup`/);
   const claude = headlessDiscovery("claude", input);
   assert.ok(!claude.includes("--strict-mcp-config"));
   assert.equal(claude[claude.indexOf("--add-dir") + 1], input.project);
   assert.equal(claude[claude.indexOf("--allowedTools") + 1], "Read,Glob,Grep,Bash");
-  assert.match(claude.at(-1), /query\.py.*curate/);
+  assert.match(claude.at(-1), /query\.py" curate --project/);
 });
 
 test("uncompleted knowledge discovery has the first-session hand-off and exit code 2", () => {

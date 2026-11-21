@@ -64,7 +64,7 @@ test("rendered modes run the flow throughout, add their layers, offer the rest o
 
 test("Discovery readiness is all or nothing: a missing plugin fails it, naming the plugin", () => {
   const skills = (plugin) =>
-    [...Object.values(brainstormingDiscoveryAdapter.fulfil).flat(), ...brainstormingDiscoveryAdapter.catalog]
+    [...Object.values(brainstormingDiscoveryAdapter.fulfil).flat(), ...brainstormingDiscoveryAdapter.catalog, ...(brainstormingDiscoveryAdapter.supportSkills ?? [])]
       .filter((ref) => ref.plugin === plugin)
       .map(({ skill }) => skill);
   const pinOf = (plugin) => pinFor(lock, plugin, "implementation") ?? pinFor(lock, plugin, "discovery");
@@ -110,8 +110,18 @@ test("every discovery mode frames the workflow up front, grounds first, asks one
     assert.match(result.text, /Ground before asking/);
     assert.match(result.text, /One focused question at a time/);
     assert.match(result.text, /never bundle multiple broad questions/i);
+    assert.match(result.text, /Never silently downgrade a selected skill/);
     assert.match(result.text, /Show stage progress/);
+    assert.match(result.text, /3\. \*\*BMad project runtime:\*\* `_bmad\/scripts\/resolve_customization\.py`, `_bmad\/scripts\/resolve_config\.py` and `_bmad\/config\.toml`/);
+    assert.match(result.text, /if the locator already exists and `catalog\.tsv` is empty, skip setup/);
     assert.match(template(operation), /work on, explore, or shape an idea, idea file/i);
     return operation;
   });
+});
+
+test("discovery declares BMad hub and module support skills without offering them in the user catalog", () => {
+  const supportNames = (brainstormingDiscoveryAdapter.supportSkills ?? []).map(({ skill }) => skill);
+  assert.deepEqual(supportNames, ["bmad", "bmod-core-tools", "bmod-method"]);
+  const optionalSection = rendered("discover-quick").text.split("## Optional skills")[1].split("## Run the session")[0];
+  assert.doesNotMatch(optionalSection, /`bmad`|`bmod-core-tools`|`bmod-method`/);
 });

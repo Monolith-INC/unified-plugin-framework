@@ -132,7 +132,7 @@ test("upgrade-check reports a lock it cannot write as a configuration problem, n
 
 const discoverySkills = (plugin) => [
   ...new Set(
-    [...Object.values(brainstormingDiscoveryAdapter.fulfil).flat(), ...brainstormingDiscoveryAdapter.catalog]
+    [...Object.values(brainstormingDiscoveryAdapter.fulfil).flat(), ...brainstormingDiscoveryAdapter.catalog, ...(brainstormingDiscoveryAdapter.supportSkills ?? [])]
       .filter((ref) => ref.plugin === plugin)
       .map(({ skill }) => skill),
   ),

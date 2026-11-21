@@ -10,7 +10,12 @@ import { codexAppServerRequest, command, scaled } from "./tooling-process.js";
 import { readText, readToml, writeText } from "./tooling-files.js";
 import type { HostCli } from "./tooling-host-cli.js";
 
-export interface DiscoveredSkill { readonly name: string; readonly path: string }
+export interface DiscoveredSkill {
+  readonly name: string;
+  readonly path: string;
+  readonly scope?: string;
+  readonly pluginId?: string | null;
+}
 /** A plugin directory the host should load, under the name its skills are namespaced by. */
 export interface HostPlugin { readonly name: string; readonly root: string; readonly kind: "framework" | "dependency" }
 /**
@@ -103,13 +108,21 @@ const codexCatalog = (context: HostContext, plugins: readonly HostPlugin[]): Pro
       : writeText(context.project, path, JSON.stringify(merged.value, null, 2), document.value.text, context.python);
   });
 };
+const toCodexSkill = (skill: unknown): readonly DiscoveredSkill[] =>
+  object(skill) && typeof skill.name === "string" && typeof skill.path === "string"
+    ? [{
+        name: skill.name,
+        path: skill.path,
+        ...(typeof skill.scope === "string" ? { scope: skill.scope } : {}),
+        ...(typeof skill.pluginId === "string" || skill.pluginId === null ? { pluginId: skill.pluginId } : {}),
+      }]
+    : [];
 const codexSkills = (reply: unknown): Result<readonly DiscoveredSkill[]> => {
   const result = object(reply) && object(reply.result) ? reply.result : {};
   const entries = Array.isArray(result.data) ? result.data : [];
   const errors = entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.errors) ? entry.errors : []);
   return errors.length > 0 ? fail("host-skill-errors", "The host reported skill discovery errors.", "Correct the reported skill installation through its supported installer; then repeat discovery.")
-    : ok(entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.skills) ? entry.skills : [])
-      .filter((skill: unknown): skill is DiscoveredSkill => object(skill) && typeof skill.name === "string" && typeof skill.path === "string"));
+    : ok(entries.flatMap((entry: unknown) => object(entry) && Array.isArray(entry.skills) ? entry.skills : []).flatMap(toCodexSkill));
 };
 const CODEX = Object.freeze<HostTooling>({
   label: "Codex", changes: "Codex configuration (.codex/config.toml) and plugin registrations",

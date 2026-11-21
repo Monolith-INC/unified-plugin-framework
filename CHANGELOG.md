@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Discovery installs BMad's `bmad`, `bmod-core-tools`, and `bmod-method` support skills, initializes the project `_bmad/` runtime (`resolve_customization.py`, `resolve_config.py`, `config.toml`) during dependency setup, checks `_bmad/` readiness, and prohibits silently downgrading blocked skills to shallow ad-hoc searches.
+- Codex `host-discovery` verifies UPF-owned marketplace plugins (`<plugin>@upf-project`) and repo-scoped bare skills without false-positive `active-skill-drift` failures from unrelated global skills, and names exact drifting skills and paths when real drift occurs.
+- Headless knowledge discovery uses subcommand-first `query.py` invocations (`catalog --project ... --root ...`, `curate --project ... --root ...`) and accepts host CLIs at or above the minimum pinned semver version.
+- `configureKnowledge` preserves `documentMode`, `docsRoot`, and `vaultRoot` while scaffolding missing `manifest.md`, `QUERY_GUIDE.md`, and `glossary.md`; discovery readiness and `knowledge-discover` / `project-bootstrap` no longer overwrite `project-knowledge.json` with `query.py setup` and enforce thorough five-tier curation standards.
 - The one-command installer requests GitHub release metadata as JSON, fixing the HTTP 415 failure when resolving the latest release ([AGE-109](https://linear.app/agentical-monolithics/issue/AGE-109)).
 
 ### Changed

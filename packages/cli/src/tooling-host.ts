@@ -10,8 +10,9 @@ import { bundledRoots } from "./distribution.js";
 import type { BootstrapInput } from "./tooling-input.js";
 import { gatherBinding, parseRootArgs, type PluginRootArg } from "./plugin-facts.js";
 import { NODE_PLUGIN_FACTS_IO, readContentTree, skillNames } from "./plugin-reader.js";
+import { CODEX_TOOLING } from "@agent-plugins/adapter-codex";
 import { checkPluginBinding } from "@agent-plugins/workflows";
-import { sequence } from "./tooling-process.js";
+import { command, scaled, sequence } from "./tooling-process.js";
 import { HOSTS, type DiscoveredSkill, type HostContext, type HostEnvironment, type HostPlugin } from "./host-table.js";
 import type { HostName } from "./host-names.js";
 import { directory, readText, safePath, setupFailure, withSetupStage, writeText } from "./tooling-files.js";
@@ -87,32 +88,71 @@ const checkedBindings = (bindings: readonly BindingFacts[]): Result<readonly Bin
 export const expectedDependencySkills = (bindings: readonly BindingFacts[]): readonly string[] => [...new Set(bindings.flatMap(({ adapter }) =>
   dependencyRefs(adapter).map(({ plugin, skill }) => adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`)))];
 const dependencyRefs = (adapter: BindingFacts["adapter"]) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog,
-  ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup }))];
+  ...(adapter.supportSkills ?? []), ...adapter.knowledgeStores.map(({ plugin, setup }) => ({ plugin, skill: setup }))];
+
+export interface DriftedSkill {
+  readonly name: string;
+  readonly paths: readonly string[];
+}
+
+/** Prefer the UPF-owned marketplace plugin or repo-scoped copy when a host also discovers unrelated global skills. */
+export const selectActiveMatches = (
+  discovered: readonly DiscoveredSkill[],
+  name: string,
+  plugin: string,
+  bare: boolean,
+): readonly DiscoveredSkill[] => {
+  const matches = discovered.filter((entry) => entry.name === name);
+  const scoped = bare
+    ? matches.filter((entry) => entry.scope === "repo")
+    : matches.filter((entry) => entry.pluginId === `${plugin}@${CODEX_TOOLING.marketplace}`);
+  return scoped.length > 0 ? scoped : matches;
+};
+
+export const skillDrift = (
+  discovered: readonly DiscoveredSkill[],
+  name: string,
+  plugin: string,
+  bare: boolean,
+  sourceDir: string,
+): DriftedSkill | undefined => {
+  const matches = selectActiveMatches(discovered, name, plugin, bare);
+  const source = readContentTree(sourceDir);
+  const mismatched = !source.ok
+    ? matches.map(({ path }) => path)
+    : matches.filter((entry) => {
+        const active = readContentTree(dirname(entry.path));
+        return !active.ok || active.value !== source.value;
+      }).map(({ path }) => path);
+  return matches.length === 0 ? { name, paths: [] } : mismatched.length > 0 ? { name, paths: mismatched } : undefined;
+};
+
+/** Report every expected dependency skill whose active copy differs from its pinned staged source. */
+export const driftedSkills = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): readonly DriftedSkill[] => {
+  const bindings = stagedBindings(project, input);
+  if (!bindings.ok) return [];
+  const checked = bindings.value.flatMap(({ adapter }) => dependencyRefs(adapter).flatMap(({ plugin, skill }) => {
+    const bare = adapter.bareSkillPlugins.includes(plugin);
+    const name = bare ? skill : `${plugin}:${skill}`;
+    const drift = skillDrift(discovered, name, plugin, bare, join(pluginTarget(project, plugin), "source/skills", skill));
+    return drift === undefined ? [] : [drift];
+  }));
+  return [...new Map(checked.map((entry) => [entry.name, entry])).values()];
+};
 
 /** Validate the content the host actually discovered, including cache copies and bare skills. */
-export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): boolean => {
-  const bindings = stagedBindings(project, input);
-  return bindings.ok && bindings.value.every(({ adapter }) => dependencyRefs(adapter).every(({ plugin, skill }) =>
-    activeMatches(discovered, adapter.bareSkillPlugins.includes(plugin) ? skill : `${plugin}:${skill}`, join(pluginTarget(project, plugin), "source/skills", skill))));
-};
-const activeMatches = (discovered: readonly DiscoveredSkill[], name: string, sourceDir: string): boolean => {
-  const matches = discovered.filter((entry) => entry.name === name);
-  const source = readContentTree(sourceDir);
-  return source.ok && matches.length > 0 && matches.every((entry) => {
-    const active = readContentTree(dirname(entry.path));
-    return active.ok && active.value === source.value;
-  });
-};
+export const activeSkillsMatch = (project: string, input: BootstrapInput, discovered: readonly DiscoveredSkill[]): boolean =>
+  stagedBindings(project, input).ok && driftedSkills(project, input, discovered).length === 0;
 
 /** Plugins this framework ships itself, rather than pinned dependencies. */
 export const FRAMEWORK_PLUGINS: readonly string[] = Object.freeze(["unified-plugin-framework"]);
 /** Every skill the installed framework plugins provide, under the name the host discovers it by. */
-export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly source: string }[] =>
+export const frameworkSkills = (project: string, host: HostName): readonly { readonly name: string; readonly plugin: string; readonly source: string }[] =>
   FRAMEWORK_PLUGINS.flatMap((plugin) => skillNames(join(frameworkTarget(project, host, plugin), "skills"))
-    .map((skill) => ({ name: `${plugin}:${skill}`, source: join(frameworkTarget(project, host, plugin), "skills", skill) })));
+    .map((skill) => ({ name: `${plugin}:${skill}`, plugin, source: join(frameworkTarget(project, host, plugin), "skills", skill) })));
 /** The host serves its own cached copy, current only once activation succeeds; an earlier install's copy can share every name, so compare bytes. */
 export const frameworkSkillsMatch = (project: string, discovered: readonly DiscoveredSkill[], host: HostName): boolean =>
-  frameworkSkills(project, host).every(({ name, source }) => activeMatches(discovered, name, source));
+  frameworkSkills(project, host).every(({ name, plugin, source }) => skillDrift(discovered, name, plugin, false, source) === undefined);
 
 /** Fetch and verify missing pinned sources, then stage complete unmodified trees; host-only manifests live in a separate wrapper. */
 export const stageDependencies = (project: string, input: BootstrapInput, fetcher: SourceFetcher = GIT_FETCHER): Promise<Result<string>> =>
@@ -211,15 +251,56 @@ export const installHostPlugins = (project: string, input: BootstrapInput, envir
     .then((listed) => listed.ok ? host.register(context) : listed)
     .then((registered) => registered.ok ? sequence(hostPlugins(project, input, names.filter((name) => !bare.includes(name))),
       (plugin) => wrapped(project, input, plugin).then((manifest) => manifest.ok ? host.activate(context, plugin) : manifest), "Host plugins activated.") : registered)
-    .then((installed) => installed.ok ? activateBare(project, input, names) : installed);
+    .then((installed) => installed.ok ? activateBare(project, input, names) : installed)
+    .then((activated) => activated.ok ? ensureBmadRuntime(project, input, environment, names) : activated);
 };
+const BMAD_PLUGIN = "bmad-method";
+const BMAD_RUNTIME_FILES: readonly string[] = Object.freeze([
+  "_bmad/scripts/resolve_customization.py",
+  "_bmad/scripts/resolve_config.py",
+  "_bmad/config.toml",
+]);
+const bmadSetupScript = (project: string): string => join(pluginTarget(project, BMAD_PLUGIN), "source/skills/bmad/scripts/setup.py");
+const hasStagedBmadSetup = (project: string, input: BootstrapInput): Promise<boolean> =>
+  !pluginNames(input).includes(BMAD_PLUGIN)
+    ? Promise.resolve(false)
+    : readText(bmadSetupScript(project)).then((read) => read.ok && read.value !== null);
+
+/** BMad skills require the project `_bmad/` runtime scripts and config created by the staged `bmad` setup script. */
+export const bmadRuntimeReady = async (project: string, input: BootstrapInput): Promise<boolean> => {
+  if (!await hasStagedBmadSetup(project, input)) return true;
+  const checks = await Promise.all(BMAD_RUNTIME_FILES.map(async (rel) => {
+    const file = join(project, rel);
+    return await safePath(project, file) && await readText(file).then((read) => read.ok && read.value !== null);
+  }));
+  return checks.every(Boolean);
+};
+
+const ensureBmadRuntime = async (
+  project: string,
+  input: BootstrapInput,
+  environment: HostEnvironment,
+  names: readonly string[],
+): Promise<Result<string>> => {
+  if (!names.includes(BMAD_PLUGIN) || !await hasStagedBmadSetup(project, input)) return ok("BMad runtime not required.");
+  if (!await safePath(project, join(project, "_bmad"))) {
+    return fail("symlink-escape", "The _bmad runtime directory follows a linked path.", "Preserve the link and reconcile the project runtime location.");
+  }
+  const bareDir = join(project, HOSTS[input.host].bareSkills);
+  const activeBmad = join(bareDir, "bmad");
+  const activeExists = await readText(join(activeBmad, "scripts/setup.py")).then((read) => read.ok && read.value !== null);
+  const skillDir = activeExists ? activeBmad : join(pluginTarget(project, BMAD_PLUGIN), "source/skills/bmad");
+  const script = join(skillDir, "scripts/setup.py");
+  return command(input.python, [script, "--project-root", project, "--skill", skillDir, "--root", bareDir], project, scaled(60_000, environment.patience));
+};
+
 const barePlugins = (project: string, input: BootstrapInput): readonly string[] => {
   const bindings = pluginBindings(project, input);
   return bindings.ok ? [...new Set(bindings.value.flatMap(({ adapter }) => adapter.bareSkillPlugins))] : [];
 };
 const activateBare = (project: string, input: BootstrapInput, names: readonly string[]): Promise<Result<string>> => {
   const bindings = pluginBindings(project, input);
-  const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog]
+  const skills = bindings.ok ? bindings.value.flatMap(({ adapter }) => [...Object.values(adapter.fulfil).flat(), ...adapter.catalog, ...(adapter.supportSkills ?? [])]
     .filter(({ plugin }) => names.includes(plugin) && adapter.bareSkillPlugins.includes(plugin))) : [];
   return sequence([...new Map(skills.map((ref) => [`${ref.plugin}/${ref.skill}`, ref])).values()],
     (ref) => copyBare(project, HOSTS[input.host].bareSkills, ref.plugin, ref.skill, input.python), "Bare dependency skills activated.");

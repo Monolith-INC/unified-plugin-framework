@@ -43,8 +43,9 @@ const DISCOVERY_FACILITATION_RULES: readonly string[] = Object.freeze([
   "### Session framing and facilitation",
   "",
   "- **Frame the workflow first:** before asking any question, briefly state the active discovery mode, the stages this session will follow, and the written design artifact it will produce.",
-  "- **Ground before asking:** read the user's starting idea file and the shared project knowledge store first, then summarize what is already known and what decisions remain open in 2–4 concise bullets.",
+  "- **Ground before asking:** read the user's starting idea file and the shared project knowledge store first, then summarize what is already known and what decisions remain open in 2–4 concise bullets before offering optional skills or launching research.",
   "- **One focused question at a time:** never bundle multiple broad questions into one message or ask the user to frame the whole problem from scratch. Ask one concrete, decision-driving question per turn; when clear directions exist, propose 2–4 concrete options using native selection controls with **Other**.",
+  "- **Never silently downgrade a selected skill:** if a required layer or user-selected optional skill cannot activate because its project runtime or prerequisites are missing, run its recovery step or hand over to `repair-workflow` — never silently substitute an ad-hoc web search or shallow summary.",
   "- **Show stage progress:** as each stage completes, briefly recap the settled decisions and name the next stage until the user approves the written design file.",
 ]);
 
@@ -126,6 +127,13 @@ const sharedStoreStep = (qualify: Qualify, stores: readonly PluginKnowledgeStore
         ...stores.map(({ plugin, file, key, setup }) => `   - \`${file}\` sets \`${key.join(".")}\`; setup skill ${qualify({ plugin, skill: setup })}.`),
       ];
 
+const bmadRuntimeStep = (adapter: WorkflowAdapter<string>, stepNumber: number): readonly string[] =>
+  adapter.bareSkillPlugins.includes("bmad-method")
+    ? [
+        `${stepNumber}. **BMad project runtime:** \`_bmad/scripts/resolve_customization.py\`, \`_bmad/scripts/resolve_config.py\` and \`_bmad/config.toml\` exist in the project. If any are missing, run the \`bmad\` skill's setup (or run \`python3.12 .upf-tools/plugins/bmad-method/source/skills/bmad/scripts/setup.py --project-root <project> --skill .upf-tools/plugins/bmad-method/source/skills/bmad --root <active-skills-dir>\`) and verify they exist before continuing; if setup cannot run, hand over to \`repair-workflow\`.`,
+      ]
+    : [];
+
 /** The version each required plugin is pinned at; a heads-up for the user, never a reason to stop. */
 const testedWith = (pins: readonly PluginPin[]): string =>
   ` This workflow is tested with ${andList(pins.map(({ plugin, version }) => `\`${plugin}\` ${version}`))}. If the session shows another version installed, mention it to the user once, in one line, and continue.`;
@@ -144,8 +152,9 @@ const readiness = (
     "Before starting, check each step in order. When a step fails, take its recovery action and continue. Involve the user only where a step says so, in one short message. If a recovery step fails or hits a severe problem no listed recovery fixes, hand over to `repair-workflow` with the failing step, error summary and original operation so the work can resume once repaired.",
     "",
     `1. **Available:** ${andList(checked.map(qualify))} ${checked.length === 1 ? "is" : "are"} available in this session. If not, ask the user to install and enable ${andList(pins.map(({ plugin }) => `\`${plugin}\``))} for this host, then continue once it is.${testedWith(pins)}`,
-    `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If missing or empty, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults and fill the store with ${qualify(PROJECT_KNOWLEDGE_DISCOVER)} (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
+    `2. **Project knowledge store:** \`project-knowledge.json\` (or legacy \`.project-knowledge.json\`) names a \`knowledgeRoot\` whose \`catalog.tsv\` is populated. If the locator or store directory is missing, run ${qualify(PROJECT_KNOWLEDGE_SETUP)} with its recommended defaults (preserving any existing \`documentMode\`, \`docsRoot\` and \`vaultRoot\` fields); if the locator already exists and \`catalog.tsv\` is empty, skip setup and fill the store directly with ${qualify(PROJECT_KNOWLEDGE_DISCOVER)} (writing through \`query.py curate\` so version tokens and validation apply), or ask the user to fill it; never report ready while the store is empty.`,
     ...sharedStoreStep(qualify, adapter.knowledgeStores),
+    ...bmadRuntimeStep(adapter, adapter.knowledgeStores.length === 0 ? 3 : 4),
     "",
     SHARED_INTERACTION_SECTION,
   ].join("\n");
