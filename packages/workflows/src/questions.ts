@@ -2,6 +2,7 @@ import type { Monoid, NonEmpty } from "./adapter.js";
 
 /** One selectable answer in a fixed-answer question. */
 export interface QuestionOption {
+  readonly key?: string;
   readonly label: string;
   readonly description?: string;
   readonly recommended?: boolean;
@@ -81,6 +82,8 @@ export const SHARED_INTERACTION_SECTION: string = [
   "- **Plain wording:** write every prompt and option in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.",
   "- **Numbered fallback (never unnumbered `-` bullets):** when the host lacks a suitable structured-question tool but a reply channel exists, print a numbered list (`1.`, `2.`, ...) ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
   "- **No reply channel:** yield a needs-input result with the pending question, permitted answers and continuation context, without reading stdin or performing the protected action. Resume only when an explicit matching answer arrives.",
+  "- **One decision, one answer channel:** use a native control only if it can carry the full answer, custom text and required consent; an optional-only prompt cannot carry a required decision. Otherwise use a suitable interactive canvas or numbered text when replies are available. Associate each response with the current decision instance and stable option keys, decode numbers against the displayed order, preserve custom text literally, and ignore stale or repeated callbacks. A dismissal or ambiguous response is not consent; ask again or stop safely.",
+  "- **Shared decision contract:** call `agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.",
   "- **Open questions:** keep purely open-ended questions typed; do not force open answers into buttons, and do not append unnumbered option menus to open questions.",
 ].join("\n");
 
@@ -168,7 +171,7 @@ export const renderNativeQuestionGuidance = (question: Question): string => {
         "",
         "Present as a native two-button confirmation:",
         `- ${question.acceptLabel}`,
-        `- ${question.declineLabel} (safe default; closing or an empty reply means decline)`,
+        `- ${question.declineLabel} (safe default; closing or an empty reply is not consent)`,
       ].join("\n");
   }
 };
@@ -209,7 +212,7 @@ export const renderNumberedFallback = (question: Question): string => {
         `1. ${question.acceptLabel}`,
         `2. ${question.declineLabel} (default)`,
         "",
-        `Reply with 1 or 2. An empty reply or closing the prompt selects "${question.declineLabel}".`,
+        "Reply with 1 or 2. An empty reply or closing the prompt is not an answer; ask again or stop safely.",
       ].join("\n");
   }
 };

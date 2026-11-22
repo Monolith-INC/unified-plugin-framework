@@ -9,12 +9,27 @@ import {
   concatAll,
   formatRepairSummary,
   planRepair,
+  prepareRepairDecision,
+  normalizeQuestionAnswer,
   renderSkill,
   repairActions,
 } from "../dist/index.js";
 
 const framework = new URL("../../../", import.meta.url);
 const lock = JSON.parse(readFileSync(new URL("io.github.monolith-inc.upf/onboarded.lock.json", framework), "utf8"));
+
+test('a repair approval yields a resumable pending decision when no answer channel exists', () => {
+  const plan = planRepair({ workflow: 'discovery', operation: 'discover', failureKind: 'recovery-failed', summary: 'Setup failed.' });
+  const result = prepareRepairDecision(plan, 'session/repair/1', { native: null, canvas: null, reply: false });
+  assert.equal(result.kind, 'needs-input');
+  assert.equal(result.continuation.instance, 'session/repair/1');
+  assert.deepEqual(result.displayedKeys, ['accept', 'decline']);
+  assert.equal(result.continuation.acceptKey, 'accept');
+  const ready = prepareRepairDecision(plan, 'session/repair/1', { native: null, canvas: null, reply: true });
+  assert.equal(ready.kind, 'text');
+  assert.equal(normalizeQuestionAnswer(ready.continuation, { channel: 'text', instance: ready.instance, value: '1' }).consent, 'accepted');
+  assert.equal(normalizeQuestionAnswer(ready.continuation, { channel: 'text', instance: 'old', value: '1' }).kind, 'ignored');
+});
 
 test("classifyReadinessFailure separates ready, first-attempt recoverable, and severe failures", () => {
   assert.deepEqual(classifyReadinessFailure({ status: "ready" }), { severity: "none" });

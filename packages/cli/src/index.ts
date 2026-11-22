@@ -25,6 +25,7 @@ import { bundleResolver, type BundleSource, type ResolvedBundle } from "./bundle
 import { RELEASE_VERSION } from "./release-asset.js";
 import { nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
 import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
+import { runQuestion } from "./question-command.js";
 
 const USAGE = `Usage: agent-plugin <command> [options]
 
@@ -44,6 +45,7 @@ Commands:
                                     Check candidate plugin versions against the adapter and pin them
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
+  question prepare|answer <json>     Prepare or normalize a host decision without storing state
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -75,6 +77,8 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
   const [command, ...rest] = argv;
 
   switch (command) {
+    case "question":
+      return runQuestion(io, rest);
     case "project":
       return runProject(rest, io);
     case "validate":

@@ -21,13 +21,16 @@ Use the returned language for subsequent prose. On a credential or connection fa
 
 ## Presenting setup questions to the user
 
-For fixed-answer setup questions, use the host's native selection controls instead of asking the user to type free-form replies:
+For fixed-answer setup questions, use the host's native selection controls only when they support the complete decision, including custom answers and required consent. An optional-only prompt cannot carry a required decision.
 
 - **Single choice** (such as tracker, language, or document mode): present native buttons with the recommended option first and an **Other** option for custom answers.
 - **Multiple choice** (such as workflows or hosts): present native multi-select controls with an **Other** option. If a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group.
 - **Setup plan and consent approval:** present a two-button confirmation with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.
 - **Plain wording:** write every prompt in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.
-- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format, and re-ask cleanly if the reply does not match. Keep open-ended inputs (such as custom paths or project URLs) typed.
+- **Numbered fallback:** when the native control cannot carry the complete decision, use a suitable interactive canvas or a numbered list only when a reply channel is available. End choice lists with **Other (type your own answer)**, state the expected reply format, and re-ask if the reply does not match. Keep open-ended inputs (such as custom paths or project URLs) typed.
+- **No reply channel:** yield `needs-input` with the pending decision, question, permitted answers and continuation; do not read stdin or apply the setup change. Resume only on a matching explicit answer.
+- **Decision safety:** use one answer channel per decision, associate responses with the current decision instance and stable option keys, decode numbers in displayed order, preserve custom text, and ignore stale or repeated callbacks. Dismissal, ambiguity and a default are not consent.
+- **Shared decision contract:** call `agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.
 
 ## Bootstrap tooling together
 

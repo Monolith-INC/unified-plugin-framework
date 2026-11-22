@@ -13,6 +13,19 @@ export { backlogTrackingAdapter, TRACKING_OPERATIONS, TRACKING_CONTRACT_VERSION,
 export { selectContent, providerLeak, type ContentSelection } from "./content-view.js";
 
 export {
+  chooseQuestionChannel,
+  normalizeQuestionAnswer,
+  prepareQuestion,
+  type ChannelCapability,
+  type DecisionContext,
+  type PreparedQuestion,
+  type QuestionAnswer,
+  type QuestionCapabilities,
+  type QuestionChannel,
+  type QuestionResponse,
+} from "./question-channel.js";
+
+export {
   brainstormingDiscoveryAdapter,
   DISCOVERY_CONTRACT_VERSION,
   DISCOVERY_OPERATIONS,
@@ -70,6 +83,7 @@ export {
 export {
   classifyReadinessFailure,
   formatRepairSummary,
+  prepareRepairDecision,
   planRepair,
   repairActions,
   type FailureClassification,

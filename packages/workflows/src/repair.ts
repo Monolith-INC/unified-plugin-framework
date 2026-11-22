@@ -1,4 +1,5 @@
 import type { Monoid, Readiness } from "./adapter.js";
+import { chooseQuestionChannel, prepareQuestion, type PreparedQuestion, type QuestionCapabilities } from "./question-channel.js";
 import {
   concatAll,
   renderNativeQuestionGuidance,
@@ -210,6 +211,15 @@ export const planRepair = (context: RepairContext): RepairPlan => {
     canProposeFix,
     resumeInstruction,
   });
+};
+
+/** Prepare the proposed repair as a required consent decision without executing its effect. */
+export const prepareRepairDecision = (plan: RepairPlan, instance: string, capabilities: QuestionCapabilities): PreparedQuestion => {
+  const proposal = plan.actions.find((action) => action.kind === "propose-with-consent");
+  return proposal === undefined ? { kind: "invalid", instance } : prepareQuestion({
+    instance, question: proposal.confirmation, displayedKeys: ["accept", "decline"], acceptKey: "accept", answered: false,
+    channel: chooseQuestionChannel(proposal.confirmation, capabilities, true),
+  }, capabilities, true);
 };
 
 const renderAction = (action: RepairAction): string => {
