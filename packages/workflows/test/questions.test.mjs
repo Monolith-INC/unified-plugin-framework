@@ -51,6 +51,20 @@ const confirmQuestion = Object.freeze({
   safeDefault: "decline",
 });
 
+test("SHARED_INTERACTION_SECTION names concrete host question tools and forbids unnumbered bullet menus", () => {
+  for (const tool of ["request_user_input", "AskUserQuestion", "AskQuestion", "ask_question"]) {
+    assert.ok(SHARED_INTERACTION_SECTION.includes(tool), `missing host tool ${tool}`);
+  }
+  assert.match(SHARED_INTERACTION_SECTION, /never unnumbered `-` bullets/i);
+  assert.match(SHARED_INTERACTION_SECTION, /Other \(type your own answer\)/);
+});
+
+test("question guidance yields needs-input when there is no reply channel", () => {
+  assert.match(SHARED_INTERACTION_SECTION, /no reply channel/i);
+  assert.match(SHARED_INTERACTION_SECTION, /needs-input/i);
+  assert.match(SHARED_INTERACTION_SECTION, /without (reading|waiting on) stdin/i);
+});
+
 test("single-choice renderers place recommended first, include Other, and provide numbered fallback", () => {
   const native = renderNativeQuestionGuidance(singleQuestion);
   assert.match(native, /native single-choice prompt/);

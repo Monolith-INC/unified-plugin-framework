@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { collectInstallation } from '../scripts/installer-wizard.mjs';
+import { collectInstallation, interactiveInstallation } from '../scripts/installer-wizard.mjs';
 
 const savedKnowledge = { documentMode: 'shared', docsRoot: 'docs', vaultRoot: 'docs', knowledgeRoot: 'knowledge' };
 const savedSettings = { schemaVersion: 1, language: 'pt-BR', artifactsPath: 'plans', tracker: { adapter: 'local', values: {} }, unrelated: 'keep' };
@@ -41,6 +41,21 @@ const questions = ({ answers = [], choices = {}, options = {} } = {}) => {
   return { asked, shown, output, run: project => collectInstallation(io, { project, version: '0.2.2', preview, detectedHosts: ['codex'], ...options }) };
 };
 
+test('Codex question controls require a separate explicit opt-in', async () => {
+  const project = await setup();
+  const q = questions({choices: {'Enable Codex question controls?': ['yes'], 'Apply this setup?': ['install']}});
+  const result = await q.run(project);
+  assert.equal(result.ok, true);
+  assert.equal(result.value.plan.consent.codexQuestions, true);
+  assert.deepEqual(q.shown.find(prompt => prompt.title === 'Enable Codex question controls?').initial, ['no']);
+});
+
+test('unattended interactive setup returns needs-input without reading stdin', {skip: process.platform !== 'linux' || process.stdin.isTTY}, async () => {
+  const result = await interactiveInstallation({});
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'needs-input');
+});
+
 test('fresh wizard defaults headless discovery on without prompting for host CLIs and previews both hosts before accepting', async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-wizard-fresh-'));
   const planCalls = [];
@@ -56,7 +71,7 @@ test('fresh wizard defaults headless discovery on without prompting for host CLI
   assert.ok(!q.shown.some(prompt => prompt.title === 'Run headless knowledge discovery?'));
   assert.ok(!q.shown.some(prompt => prompt.title === 'Install missing host CLIs?'));
   assert.deepEqual(result.value.plan.hosts, ['codex', 'claude']);
-  assert.deepEqual(result.value.plan.consent, {privatePython: false, installHostClis: false, headlessDiscovery: true});
+  assert.deepEqual(result.value.plan.consent, {privatePython: false, installHostClis: false, headlessDiscovery: true, codexQuestions: false});
   assert.equal(result.value.plan.answers.tracker.adapter, 'local');
   assert.equal(result.value.plan.workflows.length, 6);
   assert.deepEqual(planCalls, [{target: project, plan: result.value.plan}]);

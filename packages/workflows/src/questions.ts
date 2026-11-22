@@ -73,14 +73,15 @@ export const concatAll =
 export const SHARED_INTERACTION_SECTION: string = [
   "## Presenting questions to the user",
   "",
-  "For fixed-answer questions (single choice, multiple choice, or yes/no consent), use the host's native selection controls (buttons, multi-select checkboxes, or two-button confirmation) instead of asking the user to type a free-form reply.",
+  "For fixed-answer questions (single choice, multiple choice, or yes/no consent), use the host's native structured-question tool when it is available and supports the decision (`request_user_input` on Codex, `AskUserQuestion` on Claude Code, `AskQuestion` on Cursor, `ask_question` on Antigravity). This also applies to concrete choices from delegated skills.",
   "",
-  "- **Single choice:** put the recommended option first and include an **Other** option so the user can type a custom answer.",
-  "- **Multiple choice:** let the user select any combination and include an **Other** option. When a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group.",
+  "- **Single choice:** put the recommended option first and include an **Other** option (unless the host tool adds **Other** automatically) so the user can type a custom answer.",
+  "- **Multiple choice:** let the user select any combination and include an **Other** option. When a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group (or ask one focused decision per tool call when a host supports single-choice pickers only).",
   "- **Confirmation and consent:** show two clear choices with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.",
   "- **Plain wording:** write every prompt and option in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.",
-  "- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
-  "- **Open questions:** keep free-form questions typed; do not force open answers into buttons.",
+  "- **Numbered fallback (never unnumbered `-` bullets):** when the host lacks a suitable structured-question tool but a reply channel exists, print a numbered list (`1.`, `2.`, ...) ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
+  "- **No reply channel:** yield a needs-input result with the pending question, permitted answers and continuation context, without reading stdin or performing the protected action. Resume only when an explicit matching answer arrives.",
+  "- **Open questions:** keep purely open-ended questions typed; do not force open answers into buttons, and do not append unnumbered option menus to open questions.",
 ].join("\n");
 
 const DEFAULT_GROUP = "Options";

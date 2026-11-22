@@ -24,6 +24,11 @@ const usage='Interactive: node install.mjs [--project <project>] [--version <ver
 const stop=message=>{throw new Error(message);}; // Boundary: report installation failures once without partial activation.
 // Stops before the run log exists: cause, the recovery table's instruction, and why there is no log to read.
 const stopEarly=(cause,instruction)=>stop(`${cause} ${instruction} No log was written because the installer stopped before changing the project.`);
+const needsInput=(args,project)=>({
+ ok:false,outcome:'needs-input',
+ decision:{ref:'installation-choices',question:'How should setup choices be supplied?',answerForms:['accepted-plan','interactive-terminal']},
+ continuation:{project,args:[...args]},exitCode:1,
+});
 const RERUN='then run the installer again.';
 const CHECKSUM_TWICE='Try again later or from another network.';
 const NEED_PYTHON=`Install Python 3.12 or newer, or pass --python <executable>, ${RERUN}`;
@@ -113,13 +118,14 @@ const runMain=async(args,io)=>{
  return parsed.help ? {ok:true,message:`${usage}\n`,exitCode:0}
   : Number(io.nodeVersion.split('.')[0])<22 ? stopEarly('Node.js 22+ is required.',`Install Node.js 22 or newer, ${RERUN}`)
   : isSourceCheckout(resolve(parsed.project ?? parsed.dest ?? io.cwd())) ? stopEarly(SOURCE_CHECKOUT,'Install into a separate test project instead, then run the installer there.')
-  : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? stopEarly('Interactive installation needs a terminal.','Run the one-command installer in a terminal or supply --input for automation.')
+  : parsed.input===undefined && (!io.stdinIsTTY || !io.stdoutIsTTY) ? needsInput(args,resolve(parsed.project ?? parsed.dest ?? io.cwd()))
     : prepare(parsed,io);
 };
 export const main=async(args,io=NODE_IO)=>{
  try {
   const result=await runMain(args,io);
   io.writeStdout(`${JSON.stringify(result)}\n`);
+  if(result.outcome==='needs-input') io.writeStderr('Interactive installation needs a terminal. Run the installer in a terminal or supply --input for automation.\n');
   return result.exitCode ?? 0;
  } catch(error) {
   io.writeStderr(`${error instanceof Error ? error.message : 'Unexpected installer failure.'}\n`);

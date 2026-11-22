@@ -46,18 +46,29 @@ export const directory = (project: string, path: string): Promise<Result<string>
   : unsafePath());
 
 /** Compare before atomic replacement; lock prevents two setup writers overwriting each other's configuration. */
-export const writeText = (project: string, path: string, content: string, previous: string | null, python = "python3"): Promise<Result<string>> =>
+export const writeText = (project: string, path: string, content: string, previous: string | null, python = "python3", preserveMode = false): Promise<Result<string>> =>
   safePath(project, path).then((safe) => safe
-    ? realpath(project).then((root) => lockedWrite(python, root, join(root, relative(project, path)), content, previous))
+    ? realpath(project).then((root) => lockedWrite(python, root, join(root, relative(project, path)), content, previous, preserveMode))
       .catch((error: unknown) => fileFailure(error, "Could not resolve the setup project."))
     : unsafePath());
 
 const WRITER = fileURLToPath(new URL("../scripts/setup-write.py", import.meta.url));
+
+/** Read a setup file through the same confined directory walk used for writes. */
+export const readConfinedText = (project: string, path: string, python: string): Promise<Result<string | null>> =>
+  realpath(project).then((root) => new Promise<Result<string | null>>((settle) => {
+    execFile(python, ["-I", WRITER, root, join(root, relative(project, path)), "--read"],
+      { cwd: root, timeout: 30000, maxBuffer: 4 * 1024 * 1024 }, (error, output) => {
+        const parsed = error === null ? parseJson(output) : setupFailure("A setup file is unreadable.");
+        settle(parsed.ok && object(parsed.value) && (parsed.value.content === null || typeof parsed.value.content === "string")
+          ? ok(parsed.value.content) : setupFailure("A setup file is unreadable or follows an unsafe path."));
+      });
+  })).catch(() => setupFailure("The setup project could not be resolved."));
 /** The writer's last diagnostic line names the cause, such as a missing module or an unsupported Python. */
 const writerCrash = (diagnostics: string): string =>
   `The isolated setup writer could not finish${diagnostics.trim() === "" ? "" : `: ${diagnostics.trim().split("\n").at(-1)?.slice(0, 200)}`}.`;
-const lockedWrite = (python: string, project: string, path: string, content: string, previous: string | null): Promise<Result<string>> =>
-  runWriter(python, project, path, JSON.stringify({ content, previous }));
+const lockedWrite = (python: string, project: string, path: string, content: string, previous: string | null, preserveMode: boolean): Promise<Result<string>> =>
+  runWriter(python, project, path, JSON.stringify({ content, previous, preserveMode }));
 const runWriter = (python: string, project: string, target: string, input: string): Promise<Result<string>> =>
   new Promise((settle) => {
     const child = execFile(python, ["-I", WRITER, project, target], { cwd: project, timeout: 30_000, maxBuffer: 8_192 }, (error, output, diagnostics) =>

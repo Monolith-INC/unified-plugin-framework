@@ -40,6 +40,18 @@ def read_text(parent: int, name: str) -> str | None:
         return stream.read()
 
 
+def read_confined(root: Path, path: Path) -> str:
+    target = path.relative_to(root)
+    if not target.parts or ".." in target.parts:
+        return "symlink-escape"
+    try:
+        with ExitStack() as stack:
+            parent = parent_fd(stack, root, target.parts[:-1], create=False)
+            return json.dumps({"content": read_text(parent, target.name)})
+    except FileNotFoundError:
+        return json.dumps({"content": None})
+
+
 def lease_directory(stack: ExitStack, root: Path) -> int:
     tools = parent_fd(stack, root, (".upf-tools",))
     try:
@@ -75,11 +87,13 @@ def recover_temporary(lease: int, parent: int, name: str) -> None:
         return
 
 
-def replace(lease: int, parent: int, target: Path, content: str) -> str:
+def replace(lease: int, parent: int, target: Path, content: str, mode: int | None = None) -> str:
     name = target.name
     temporary = f"{name}.upf-{uuid4().hex}.tmp"
     handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, dir_fd=parent)
     try:
+        if mode is not None:
+            os.fchmod(handle, mode)
         with os.fdopen(handle, "wb") as writer:
             remember(lease, target, temporary, writer.fileno())
             writer.write(content.encode("utf-8"))
@@ -110,7 +124,7 @@ def take_lease(stack: ExitStack, leases: int, key: str, create: bool) -> int:
     return lease
 
 
-def update(root: Path, path: Path, content: str, previous: str | None) -> str:
+def update(root: Path, path: Path, content: str, previous: str | None, preserve_mode: bool = False) -> str:
     target = path.relative_to(root)
     parts = target.parts
     if not parts or ".." in parts:
@@ -126,7 +140,11 @@ def update(root: Path, path: Path, content: str, previous: str | None) -> str:
             return "write-busy"
         except FileNotFoundError:
             recover_temporary(lease, parent, name)
-            return replace(lease, parent, target, content) if read_text(parent, name) == previous else "modified-file"
+            current = read_text(parent, name)
+            if current != previous:
+                return "modified-file"
+            mode = stat.S_IMODE(os.stat(name, dir_fd=parent, follow_symlinks=False).st_mode) if preserve_mode and current is not None else None
+            return replace(lease, parent, target, content, mode)
 
 
 def sweep_entry(root: Path, leases: int, key: str) -> None:
@@ -190,14 +208,16 @@ def stage(root: Path) -> str:
 
 
 def main() -> str:
-    root, path = map(Path, sys.argv[1:])
+    root, path = map(Path, sys.argv[1:3])
     try:
+        if len(sys.argv) == 4 and sys.argv[3] == "--read":
+            return read_confined(root, path)
         if str(path) == "--sweep":
             return sweep(root)
         if str(path) == "--stage":
             return stage(root)
         request = json.load(sys.stdin)
-        return update(root, path, request["content"], request["previous"])
+        return update(root, path, request["content"], request["previous"], request.get("preserveMode", False))
     except ValueError:
         return "symlink-escape"
     except OSError as error:
