@@ -11,6 +11,7 @@ import { readConfinedText, withSetupStage, writeText } from '../dist/tooling-fil
 const windows = { skip: process.platform !== 'win32' };
 const project = () => mkdtemp(join(tmpdir(), 'upf-win-writer-'));
 const writer = fileURLToPath(new URL('../scripts/setup-write.py', import.meta.url));
+const windowsWriter = fileURLToPath(new URL('../scripts/setup-write-windows.py', import.meta.url));
 
 test('Windows writer preserves the reviewed snapshot and rejects a stale update', windows, async () => {
   const root = await project();
@@ -20,7 +21,10 @@ test('Windows writer preserves the reviewed snapshot and rejects a stale update'
   const permissions = spawnSync('icacls', [path], { encoding: 'utf8' });
   assert.equal(permissions.status, 0);
   assert.equal((await readConfinedText(root, path, 'python')).value, 'model = "first"\n');
-  assert.equal((await writeText(root, path, 'model = "second"\n', 'model = "first"\n', 'python', true)).ok, true);
+  const diagnostic = spawnSync('python', ['-I', '-c',
+    'import runpy,sys; from pathlib import Path; m=runpy.run_path(sys.argv[1]); print(m["update"](Path(sys.argv[2]),Path(sys.argv[3]),sys.argv[4],sys.argv[5],True))',
+    windowsWriter, root, path, 'model = "second"\n', 'model = "first"\n'], { encoding: 'utf8' });
+  assert.equal(diagnostic.stdout.trim(), 'written', diagnostic.stderr);
   assert.equal((await writeText(root, path, 'model = "stale"\n', 'model = "first"\n', 'python', true)).error.code, 'modified-file');
   assert.equal(await readFile(path, 'utf8'), 'model = "second"\n');
   assert.equal(spawnSync('icacls', [path], { encoding: 'utf8' }).stdout, permissions.stdout);
