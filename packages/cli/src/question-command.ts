@@ -21,8 +21,14 @@ const capabilities = (value: unknown): value is QuestionCapabilities => record(v
 const response = (value: unknown): value is QuestionResponse => record(value) && typeof value.instance === "string" && (
   value.channel === "dismissed" || value.channel === "text" && typeof value.value === "string"
   || (value.channel === "native" || value.channel === "canvas") && strings(value.keys) && optionalString(value.custom));
+const elicitationState = (value: unknown): boolean => value === undefined || record(value) && (
+  value.kind === "done" || value.kind === "selecting" && strings(value.methods)
+  || (value.kind === "running" || value.kind === "reviewing") && strings(value.methods) && strings(value.selected));
+const elicitationAction = (value: unknown): boolean => record(value) && (
+  (value.kind === "offer" || value.kind === "choose") && strings(value.methods)
+  || value.kind === "review" || value.kind === "apply" || value.kind === "reject" || value.kind === "proceed");
 const activeState = (value: RecordValue): boolean => typeof value.session === "string" && Number.isSafeInteger(value.occurrence)
-  && typeof value.node === "string" && optionalString(value.revision);
+  && typeof value.node === "string" && optionalString(value.revision) && elicitationState(value.elicitation) && optionalStrings(value.elicitationEvents);
 const pending = (value: unknown): boolean => record(value) && channel(value.kind) && typeof value.instance === "string"
   && question(value.question) && strings(value.displayedKeys) && strings(value.answerForms) && context(value.continuation)
   && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
@@ -34,6 +40,7 @@ const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
   || value.kind === "advance" && optionalString(value.revision)
   || value.kind === "review-revision" && typeof value.revision === "string"
+  || value.kind === "elicitation" && typeof value.session === "string" && Number.isSafeInteger(value.occurrence) && typeof value.eventId === "string" && elicitationAction(value.action)
   || value.kind === "pause" || value.kind === "resume");
 
 type Input = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
@@ -63,7 +70,10 @@ Keep the returned state and use pending.question, pending.answerForms and pendin
 For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
 {"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.
 Use advance for a single available direction, with revision when entering review;
-use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.`;
+use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.
+At elicitation, send {"kind":"elicitation","session":...,"occurrence":...,"eventId":...,"action":...}, using a fresh event ID for each new action and the same ID for a retry.
+Actions are offer or choose with methods (stable method IDs), review, apply, reject, and proceed.
+Obtain method IDs from the existing elicitation catalog and normalize the user's selection through the shared question contract. Run and show the selected work at the host boundary; only an explicit apply or reject event records that choice.`;
 const invalid = (io: Io): number => (io.err(JSON.stringify({ kind: "invalid-input", message: "Provide a valid question request as one JSON argument." })), 2);
 const output = (io: Io, value: unknown): number => (io.out(JSON.stringify(value)), 0);
 const executeRecord = (io: Io, operation: string | undefined, value: RecordValue): number => {

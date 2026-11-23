@@ -55,3 +55,14 @@ test('discovery next resumes a closed-input decision through the command boundar
   assert.equal(result.guidance.node, 'conversation');
   assert.notEqual(run('next', { state: { phase: 'waiting' } }).code, 0);
 });
+
+test('elicitation selections stay in the discovery continuation', () => {
+  const state = { session: 's', occurrence: 3, node: 'elicitation', phase: 'active' };
+  const action = (state, action) => run('next', { state, event: { kind: 'elicitation', session: 's', occurrence: 3, eventId: action.kind, action } }).output;
+  const offered = action(state, { kind: 'offer', methods: ['risk', 'premortem'] });
+  const chosen = action(offered.state, { kind: 'choose', methods: ['risk'] });
+  assert.equal(chosen.state.elicitation.kind, 'running');
+  assert.equal(action(chosen.state, { kind: 'choose', methods: ['risk'] }).kind, 'interaction-failure');
+  const paused = run('next', { state: chosen.state, event: { kind: 'pause' } }).output;
+  assert.deepEqual(run('next', { state: paused.state, event: { kind: 'resume' } }).output.state, chosen.state);
+});

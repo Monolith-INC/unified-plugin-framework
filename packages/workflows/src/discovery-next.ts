@@ -1,8 +1,9 @@
 import { resolveDiscoveryStep, type DiscoveryNode } from './discovery-storyboard.js';
 import { normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type PreparedQuestion, type QuestionCapabilities, type QuestionResponse } from './question-channel.js';
 import type { Question } from './questions.js';
+import { reduceElicitation, type ElicitationAction, type ElicitationState } from './elicitation.js';
 
-export interface DiscoveryActive { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'active'; readonly revision?: string }
+export interface DiscoveryActive { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'active'; readonly revision?: string; readonly elicitation?: ElicitationState; readonly elicitationEvents?: readonly string[] }
 export interface DiscoveryWaiting { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'waiting'; readonly revision?: string; readonly pending: Extract<PreparedQuestion, { readonly continuation: DecisionContext }> }
 export interface DiscoveryPaused { readonly phase: 'paused'; readonly previous: DiscoveryActive | DiscoveryWaiting }
 export type DiscoveryState = DiscoveryActive | DiscoveryWaiting | DiscoveryPaused;
@@ -10,10 +11,12 @@ export type DiscoveryEvent = { readonly kind: 'ask' | 'connect'; readonly capabi
   | { readonly kind: 'answer'; readonly response: QuestionResponse; readonly revision?: string }
   | { readonly kind: 'advance'; readonly revision?: string }
   | { readonly kind: 'review-revision'; readonly revision: string }
+  | { readonly kind: 'elicitation'; readonly session: string; readonly occurrence: number; readonly eventId: string; readonly action: ElicitationAction }
   | { readonly kind: 'pause' | 'resume' };
 export interface DiscoveryGuidance { readonly node: string; readonly instruction: string; readonly directions: readonly string[] }
 export type DiscoveryNext = { readonly kind: 'ready' | 'needs-input' | 'waiting' | 'paused' | 'invalid-event'; readonly state: DiscoveryState; readonly guidance: DiscoveryGuidance }
   | { readonly kind: 'needs-clarification'; readonly state: DiscoveryWaiting; readonly guidance: DiscoveryGuidance; readonly custom: string }
+  | { readonly kind: 'interaction-failure'; readonly state: DiscoveryActive; readonly guidance: DiscoveryGuidance; readonly reason: string }
   | { readonly kind: 'recovery'; readonly state: unknown; readonly instruction: string };
 
 const INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({
@@ -60,9 +63,16 @@ const respond = (state: DiscoveryWaiting, node: DiscoveryNode, event: Extract<Di
 };
 const advance = (state: DiscoveryActive, node: DiscoveryNode, event: Extract<DiscoveryEvent, { kind: 'advance' }>): DiscoveryNext => {
   const [only] = node.directions;
-  return node.directions.length !== 1 || only === undefined ? unchanged(state, node, 'invalid-event')
+  return state.node === 'elicitation' && state.elicitation?.kind !== 'done' ? { kind: 'interaction-failure', state, guidance: guidance(node), reason: 'elicitation-incomplete' }
+    : node.directions.length !== 1 || only === undefined ? unchanged(state, node, 'invalid-event')
     : only.target === 'review' && !event.revision ? { kind: 'recovery', state, instruction: 'Provide the revision shown for review.' }
       : nextDiscovery({ session: state.session, occurrence: state.occurrence + 1, node: only.target, phase: 'active', ...(only.target === 'review' ? { revision: event.revision } : {}) });
+};
+const elicitation = (state: DiscoveryActive, node: DiscoveryNode, event: Extract<DiscoveryEvent, { kind: 'elicitation' }>): DiscoveryNext => {
+  const result = event.session === state.session && event.occurrence === state.occurrence && event.eventId.trim().length > 0 && !state.elicitationEvents?.includes(event.eventId)
+    ? reduceElicitation(state.elicitation, event.action) : { ok: false as const, reason: 'stale-event' };
+  return result.ok ? { kind: 'ready', state: { ...state, elicitation: result.value, elicitationEvents: [...(state.elicitationEvents ?? []), event.eventId] }, guidance: guidance(node) }
+    : { kind: 'interaction-failure', state, guidance: guidance(node), reason: result.reason };
 };
 
 /** Resolve one explicit event without persistence, presentation, or execution effects. */
@@ -88,7 +98,9 @@ export const nextDiscovery = (state: DiscoveryState | undefined, event?: Discove
     }
     return unchanged(state, result.node, event === undefined ? state.pending.kind === 'needs-input' ? 'needs-input' : 'waiting' : 'invalid-event');
   }
-  return event?.kind === 'ask' ? prepare(state, result.node, event.capabilities)
+  return event?.kind === 'ask' && state.node === 'elicitation' ? unchanged(state, result.node, 'invalid-event')
+    : event?.kind === 'ask' ? prepare(state, result.node, event.capabilities)
     : event?.kind === 'advance' ? advance(state, result.node, event)
+    : event?.kind === 'elicitation' && state.node === 'elicitation' ? elicitation(state, result.node, event)
     : unchanged(state, result.node, event === undefined ? 'ready' : 'invalid-event');
 };
