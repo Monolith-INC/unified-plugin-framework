@@ -78,3 +78,37 @@ test('discovery question uses saved-language wording without changing answer key
   assert.deepEqual(result.state.pending.displayedKeys, ['conversation', 'execute']);
   assert.equal(result.state.pending.question.options[0].label, 'Conversar');
 });
+
+test('restored review rejects a pending decision from an older revision', () => {
+  const state = { session: 's', occurrence: 1, node: 'review', phase: 'active', revision: 'r1' };
+  const capabilities = { native: null, canvas: null, reply: true };
+  const pending = run('next', { state, event: { kind: 'ask', capabilities } }).output.state;
+  const response = { channel: 'text', instance: pending.pending.instance, value: '2' };
+  const result = run('next', { state: { ...pending, revision: 'r2' }, event: { kind: 'answer', response, revision: 'r2' } }).output;
+  assert.equal(result.kind, 'recovery');
+});
+
+test('custom response can be retried with a fresh decision instance', () => {
+  const state = { session: 's', occurrence: 0, node: 'context', phase: 'active' };
+  const capabilities = { native: null, canvas: null, reply: true };
+  const ask = (value) => run('next', { state: value, event: { kind: 'ask', capabilities } }).output.state;
+  const pending = ask(state);
+  const response = (value) => ({ kind: 'answer', response: { channel: 'text', instance: pending.pending.instance, value } });
+  const other = run('next', { state: pending, event: response('3') }).output;
+  assert.equal(other.kind, 'needs-custom');
+  const custom = run('next', { state: other.state, event: response('other idea') }).output;
+  assert.equal(custom.kind, 'needs-clarification');
+  const retried = run('next', { state: custom.state, event: { kind: 'retry' } }).output;
+  const fresh = ask(retried.state);
+  assert.notEqual(fresh.pending.instance, pending.pending.instance);
+  assert.equal(run('next', { state: fresh, event: { kind: 'answer', response: { channel: 'text', instance: fresh.pending.instance, value: '1' } } }).output.state.node, 'conversation');
+});
+
+test('explicit facts resolve one direction and reject conflicting facts', () => {
+  const state = { session: 's', occurrence: 0, node: 'context', phase: 'active' };
+  const event = { kind: 'facts', facts: { clear: true, discuss: false }, context: 'Fix a typo' };
+  const result = run('next', { state, event }).output;
+  assert.equal(result.state.node, 'execute');
+  assert.equal(result.guidance.context, 'Fix a typo');
+  assert.equal(run('next', { state, event: { ...event, facts: { clear: true, discuss: true } } }).output.kind, 'recovery');
+});

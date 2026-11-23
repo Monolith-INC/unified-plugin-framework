@@ -63,8 +63,42 @@ test('single directions advance only on an event and changed reviews invalidate 
 test('custom answers remain available without choosing a workflow path', () => {
   const pending = connect(next(initial, ask).state);
   const other = next(pending, answer(pending.pending.instance, '3'));
+  assert.equal(other.kind, 'needs-custom');
   const custom = next(other.state, answer(pending.pending.instance, '  another idea  '));
   assert.equal(custom.kind, 'needs-clarification');
   assert.equal(custom.custom, '  another idea  ');
   assert.equal(custom.state.node, 'context');
+  const retried = next(custom.state, { kind: 'retry' });
+  assert.equal(retried.state.phase, 'active');
+  const fresh = connect(next(retried.state, ask).state);
+  assert.notEqual(fresh.pending.instance, pending.pending.instance);
+  assert.equal(next(fresh, answer(fresh.pending.instance, '1')).state.node, 'conversation');
+});
+
+test('restored pending decisions must match the session, revision, and displayed options', () => {
+  const review = { session: 's', occurrence: 3, node: 'review', phase: 'active', revision: 'r1' };
+  const waiting = connect(next(review, ask).state);
+  const wrongRevision = { ...waiting, revision: 'r2' };
+  assert.equal(next(wrongRevision, answer(waiting.pending.instance, '2', 'r2')).kind, 'recovery');
+  const wrongOrder = { ...waiting, pending: { ...waiting.pending, displayedKeys: [...waiting.pending.displayedKeys].reverse() } };
+  assert.equal(next(wrongOrder).kind, 'recovery');
+  const wrongNode = { ...waiting, node: 'sizing' };
+  assert.equal(next(wrongNode).kind, 'recovery');
+});
+
+test('a single-direction transition to review cannot skip the revision precondition', () => {
+  const design = { ...initial, node: 'design' };
+  assert.equal(next(design, ask).kind, 'invalid-event');
+  assert.equal(next(design, { kind: 'advance' }).kind, 'recovery');
+  assert.equal(next(design, { kind: 'advance', revision: 'r1' }).state.revision, 'r1');
+});
+
+test('explicit facts select one valid direction and conflicting facts recover', () => {
+  const clear = next(initial, { kind: 'facts', facts: { clear: true, discuss: false }, context: 'Fix a typo' });
+  assert.equal(clear.state.node, 'execute');
+  assert.equal(clear.guidance.context, 'Fix a typo');
+  assert.equal(next(initial, { kind: 'facts', facts: { clear: true, discuss: true } }).kind, 'recovery');
+  assert.equal(next(initial, { kind: 'facts', facts: {} }).kind, 'recovery');
+  const sizing = { ...initial, node: 'sizing' };
+  assert.equal(next(sizing, { kind: 'facts', facts: { small: false, design: true } }).state.node, 'design');
 });

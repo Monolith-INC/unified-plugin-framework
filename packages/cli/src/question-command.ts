@@ -34,16 +34,18 @@ const pending = (value: unknown): boolean => record(value) && channel(value.kind
   && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
 const wording = (value: unknown): boolean => value === undefined || record(value) && typeof value.explanation === "string"
   && record(value.labels) && Object.values(value.labels).every((item) => typeof item === "string");
+const facts = (value: unknown): boolean => record(value) && Object.entries(value).every(([key, item]) => ["clear", "discuss", "small", "design"].includes(key) && typeof item === "boolean");
 const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
   value.phase === "paused" ? record(value.previous) && value.previous.phase !== "paused" && discoveryState(value.previous)
     : activeState(value) && (value.phase === "active" || value.phase === "waiting" && pending(value.pending)));
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
   (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && wording(value.wording)
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
+  || value.kind === "facts" && facts(value.facts) && optionalString(value.context)
   || value.kind === "advance" && optionalString(value.revision)
   || value.kind === "review-revision" && typeof value.revision === "string"
   || value.kind === "elicitation" && typeof value.session === "string" && Number.isSafeInteger(value.occurrence) && typeof value.eventId === "string" && elicitationAction(value.action)
-  || value.kind === "pause" || value.kind === "resume");
+  || value.kind === "pause" || value.kind === "resume" || value.kind === "retry");
 
 type Input = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const parse = (text: string): Input => {
@@ -68,12 +70,14 @@ After one answer, set continuation.answered to true; resume needs-input by prepa
 next accepts {"state": ..., "event": ...}. Start a discovery session with state
 {"session":"<unique session>","occurrence":0,"node":"context","phase":"active"}.
 Read without an event; send {"kind":"ask","capabilities":...} to prepare a decision.
+Explicit facts can resolve context ({clear, discuss}) and sizing ({small, design}) when exactly one direction applies. Include relevant context in the event; missing or conflicting facts return recovery.
 Pass the project's saved language in the ask event. English uses the authored wording; for another language, supply wording {explanation, labels: {<direction key>: <localized label>}} without changing the stable direction keys.
 Keep the returned state and use pending.question, pending.answerForms and pending.continuation.
 For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
 {"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.
 Use advance for a single available direction, with revision when entering review;
 use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.
+After clarifying a custom answer, use retry to create a fresh decision before asking again.
 At elicitation, send {"kind":"elicitation","session":...,"occurrence":...,"eventId":...,"action":...}, using a fresh event ID for each new action and the same ID for a retry.
 Actions are offer or choose with methods (stable method IDs), review, apply, reject, and proceed.
 Obtain method IDs from the existing elicitation catalog and normalize the user's selection through the shared question contract. Run and show the selected work at the host boundary; only an explicit apply or reject event records that choice.`;
