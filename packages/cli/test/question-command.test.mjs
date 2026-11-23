@@ -98,6 +98,8 @@ test('custom response can be retried with a fresh decision instance', () => {
   assert.equal(other.kind, 'needs-custom');
   const custom = run('next', { state: other.state, event: response('other idea') }).output;
   assert.equal(custom.kind, 'needs-clarification');
+  assert.equal(run('next', { state: custom.state }).output.custom, 'other idea');
+  assert.equal(run('next', { state: custom.state, event: response('1') }).output.kind, 'invalid-event');
   const retried = run('next', { state: custom.state, event: { kind: 'retry' } }).output;
   const fresh = ask(retried.state);
   assert.notEqual(fresh.pending.instance, pending.pending.instance);

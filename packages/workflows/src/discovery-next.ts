@@ -4,7 +4,7 @@ import { reduceElicitation, type ElicitationAction, type ElicitationState } from
 import { resolveQuestion, type QuestionWording } from './question-catalog.js';
 
 export interface DiscoveryActive { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'active'; readonly revision?: string; readonly elicitation?: ElicitationState; readonly elicitationEvents?: readonly string[] }
-export interface DiscoveryWaiting { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'waiting'; readonly revision?: string; readonly pending: Extract<PreparedQuestion, { readonly continuation: DecisionContext }> }
+export interface DiscoveryWaiting { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'waiting'; readonly revision?: string; readonly clarification?: string; readonly pending: Extract<PreparedQuestion, { readonly continuation: DecisionContext }> }
 export interface DiscoveryPaused { readonly phase: 'paused'; readonly previous: DiscoveryActive | DiscoveryWaiting }
 export type DiscoveryState = DiscoveryActive | DiscoveryWaiting | DiscoveryPaused;
 export type DiscoveryEvent = { readonly kind: 'ask' | 'connect'; readonly capabilities: QuestionCapabilities; readonly language?: string; readonly wording?: QuestionWording }
@@ -36,7 +36,7 @@ const validPending = (state: DiscoveryWaiting, node: DiscoveryNode): boolean => 
   const question = pending.question;
   const saved = pending.continuation.question;
   return question.kind === 'single' && saved.kind === 'single' && question.explanation === saved.explanation
-    && question.allowOther === saved.allowOther && question.options.length === saved.options.length
+    && question.allowOther === saved.allowOther && question.options.length === saved.options.length && question.options.length === pending.displayedKeys.length
     && question.options.every((option, index) => option.key === saved.options[index]?.key && option.label === saved.options[index]?.label
       && option.description === saved.options[index]?.description && option.recommended === saved.options[index]?.recommended && option.group === saved.options[index]?.group)
     && question.options.every((option, index) => option.key === pending.displayedKeys[index])
@@ -70,7 +70,7 @@ const respond = (state: DiscoveryWaiting, node: DiscoveryNode, event: Extract<Di
     case event.revision !== state.revision: return unchanged(state, node, 'invalid-event');
     case answer.kind === 'needs-custom': return { kind: 'needs-custom', state: { ...state, pending: { ...state.pending,
       continuation: { ...state.pending.continuation, pendingCustomKeys: answer.keys } } }, guidance: guidance(node) };
-    case answer.kind === 'answer' && answer.custom !== null: return { kind: 'needs-clarification', state, guidance: guidance(node), custom: answer.custom };
+    case answer.kind === 'answer' && answer.custom !== null: return { kind: 'needs-clarification', state: { ...state, clarification: answer.custom }, guidance: guidance(node), custom: answer.custom };
     case valid: return nextDiscovery({ session: state.session, occurrence: state.occurrence + 1, node: target, phase: 'active' });
     default: return unchanged(state, node, 'invalid-event');
   }
@@ -118,8 +118,9 @@ export const nextDiscovery = (state: DiscoveryState | undefined, event?: Discove
   if (event?.kind === 'review-revision' && state.node === 'review' && event.revision && event.revision !== state.revision)
     return nextDiscovery({ session: state.session, occurrence: state.occurrence + 1, node: state.node, phase: 'active', revision: event.revision });
   if (state.phase === 'waiting') {
-    if (event?.kind === 'answer') return respond(state, result.node, event);
     if (event?.kind === 'retry') return nextDiscovery({ session: state.session, occurrence: state.occurrence + 1, node: state.node, phase: 'active', ...(state.revision === undefined ? {} : { revision: state.revision }) });
+    if (state.clarification !== undefined) return event === undefined ? { kind: 'needs-clarification', state, guidance: guidance(result.node), custom: state.clarification } : unchanged(state, result.node, 'invalid-event');
+    if (event?.kind === 'answer') return respond(state, result.node, event);
     if (event?.kind === 'connect' && state.pending.kind === 'needs-input') {
       const pending = prepareQuestion(state.pending.continuation, event.capabilities, true);
       return pending.kind === 'invalid' ? unchanged(state, result.node, 'invalid-event') :

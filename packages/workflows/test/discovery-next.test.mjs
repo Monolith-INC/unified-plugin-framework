@@ -68,6 +68,8 @@ test('custom answers remain available without choosing a workflow path', () => {
   assert.equal(custom.kind, 'needs-clarification');
   assert.equal(custom.custom, '  another idea  ');
   assert.equal(custom.state.node, 'context');
+  assert.equal(next(custom.state).custom, '  another idea  ');
+  assert.deepEqual(next(custom.state, answer(pending.pending.instance, '1')).state, custom.state);
   const retried = next(custom.state, { kind: 'retry' });
   assert.equal(retried.state.phase, 'active');
   const fresh = connect(next(retried.state, ask).state);
@@ -84,6 +86,9 @@ test('restored pending decisions must match the session, revision, and displayed
   assert.equal(next(wrongOrder).kind, 'recovery');
   const wrongNode = { ...waiting, node: 'sizing' };
   assert.equal(next(wrongNode).kind, 'recovery');
+  const shortenedQuestion = { ...waiting.pending.question, options: waiting.pending.question.options.slice(0, 1) };
+  const truncated = { ...waiting, pending: { ...waiting.pending, question: shortenedQuestion, continuation: { ...waiting.pending.continuation, question: shortenedQuestion } } };
+  assert.equal(next(truncated).kind, 'recovery');
 });
 
 test('a single-direction transition to review cannot skip the revision precondition', () => {
