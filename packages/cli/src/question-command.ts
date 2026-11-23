@@ -32,11 +32,13 @@ const activeState = (value: RecordValue): boolean => typeof value.session === "s
 const pending = (value: unknown): boolean => record(value) && channel(value.kind) && typeof value.instance === "string"
   && question(value.question) && strings(value.displayedKeys) && strings(value.answerForms) && context(value.continuation)
   && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
+const wording = (value: unknown): boolean => value === undefined || record(value) && typeof value.explanation === "string"
+  && record(value.labels) && Object.values(value.labels).every((item) => typeof item === "string");
 const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
   value.phase === "paused" ? record(value.previous) && value.previous.phase !== "paused" && discoveryState(value.previous)
     : activeState(value) && (value.phase === "active" || value.phase === "waiting" && pending(value.pending)));
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
-  (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities)
+  (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && wording(value.wording)
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
   || value.kind === "advance" && optionalString(value.revision)
   || value.kind === "review-revision" && typeof value.revision === "string"
@@ -66,6 +68,7 @@ After one answer, set continuation.answered to true; resume needs-input by prepa
 next accepts {"state": ..., "event": ...}. Start a discovery session with state
 {"session":"<unique session>","occurrence":0,"node":"context","phase":"active"}.
 Read without an event; send {"kind":"ask","capabilities":...} to prepare a decision.
+Pass the project's saved language in the ask event. English uses the authored wording; for another language, supply wording {explanation, labels: {<direction key>: <localized label>}} without changing the stable direction keys.
 Keep the returned state and use pending.question, pending.answerForms and pending.continuation.
 For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
 {"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.

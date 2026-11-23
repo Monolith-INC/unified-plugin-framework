@@ -162,7 +162,7 @@ const readiness = (
       "",
       "## Discovery directions",
       "",
-      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Keep the returned state with the session; send explicit events, and use the returned direction rather than choosing a transition yourself. A needs-input result retains the question and continuation without waiting on stdin. Show the current revision before a review decision and invalidate it if the work changes. Pause or recover if the state is unavailable.",
+      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Pass the saved project language when asking and supply localized question wording for languages without authored text, preserving the direction keys. Keep the returned state with the session; send explicit events, and use the returned direction rather than choosing a transition yourself. A needs-input result retains the question and continuation without waiting on stdin. Show the current revision before a review decision and invalidate it if the work changes. Pause or recover if the state is unavailable.",
     ] : []),
   ].join("\n");
 

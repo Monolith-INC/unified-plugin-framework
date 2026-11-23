@@ -1,13 +1,13 @@
 import { resolveDiscoveryStep, type DiscoveryNode } from './discovery-storyboard.js';
 import { normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type PreparedQuestion, type QuestionCapabilities, type QuestionResponse } from './question-channel.js';
-import type { Question } from './questions.js';
 import { reduceElicitation, type ElicitationAction, type ElicitationState } from './elicitation.js';
+import { resolveQuestion, type QuestionWording } from './question-catalog.js';
 
 export interface DiscoveryActive { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'active'; readonly revision?: string; readonly elicitation?: ElicitationState; readonly elicitationEvents?: readonly string[] }
 export interface DiscoveryWaiting { readonly session: string; readonly occurrence: number; readonly node: string; readonly phase: 'waiting'; readonly revision?: string; readonly pending: Extract<PreparedQuestion, { readonly continuation: DecisionContext }> }
 export interface DiscoveryPaused { readonly phase: 'paused'; readonly previous: DiscoveryActive | DiscoveryWaiting }
 export type DiscoveryState = DiscoveryActive | DiscoveryWaiting | DiscoveryPaused;
-export type DiscoveryEvent = { readonly kind: 'ask' | 'connect'; readonly capabilities: QuestionCapabilities }
+export type DiscoveryEvent = { readonly kind: 'ask' | 'connect'; readonly capabilities: QuestionCapabilities; readonly language?: string; readonly wording?: QuestionWording }
   | { readonly kind: 'answer'; readonly response: QuestionResponse; readonly revision?: string }
   | { readonly kind: 'advance'; readonly revision?: string }
   | { readonly kind: 'review-revision'; readonly revision: string }
@@ -28,20 +28,14 @@ const INSTRUCTIONS: Readonly<Record<string, string>> = Object.freeze({
 });
 const guidance = (node: DiscoveryNode): DiscoveryGuidance => ({ node: node.id, instruction: INSTRUCTIONS[node.id] ?? 'Recover the discovery state.', directions: node.directions.map((item) => item.target) });
 const instance = (state: DiscoveryActive): string => JSON.stringify([state.session, state.occurrence, state.revision ?? null]);
-const question = (node: DiscoveryNode): Question | null => {
-  const [first, ...rest] = node.directions;
-  return first === undefined ? null : { kind: 'single', explanation: INSTRUCTIONS[node.id] ?? 'Choose a direction.',
-    options: [{ key: first.target, label: first.label }, ...rest.map((item) => ({ key: item.target, label: item.label }))], allowOther: true };
-};
-const prepare = (state: DiscoveryActive, node: DiscoveryNode, capabilities: QuestionCapabilities): DiscoveryNext => {
-  const item = question(node);
+const prepare = (state: DiscoveryActive, node: DiscoveryNode, event: Extract<DiscoveryEvent, { kind: 'ask' | 'connect' }>): DiscoveryNext => {
+  const item = resolveQuestion('discovery.direction', { language: event.language ?? 'en', instruction: INSTRUCTIONS[node.id] ?? '', directions: node.directions, ...(event.wording === undefined ? {} : { wording: event.wording }) });
   switch (true) {
-    case item === null: return { kind: 'invalid-event', state, guidance: guidance(node) };
+    case !item.ok: return { kind: 'recovery', state, instruction: `Resolve question wording: ${item.reason}.` };
     case state.node === 'review' && !state.revision: return { kind: 'recovery', state, instruction: 'Provide the revision shown for review.' };
     default: {
-      const current = item as Question;
-      const context: DecisionContext = { instance: instance(state), question: current, displayedKeys: node.directions.map((direction) => direction.target), answered: false, channel: 'needs-input' };
-      const pending = prepareQuestion(context, capabilities, true);
+      const context: DecisionContext = { instance: instance(state), question: item.question, displayedKeys: node.directions.map((direction) => direction.target), answered: false, channel: 'needs-input' };
+      const pending = prepareQuestion(context, event.capabilities, true);
       return pending.kind === 'invalid' ? { kind: 'recovery', state, instruction: 'Correct the decision context.' }
         : { kind: pending.kind === 'needs-input' ? 'needs-input' : 'waiting', state: { ...state, phase: 'waiting', pending }, guidance: guidance(node) };
     }
@@ -99,7 +93,7 @@ export const nextDiscovery = (state: DiscoveryState | undefined, event?: Discove
     return unchanged(state, result.node, event === undefined ? state.pending.kind === 'needs-input' ? 'needs-input' : 'waiting' : 'invalid-event');
   }
   return event?.kind === 'ask' && state.node === 'elicitation' ? unchanged(state, result.node, 'invalid-event')
-    : event?.kind === 'ask' ? prepare(state, result.node, event.capabilities)
+    : event?.kind === 'ask' ? prepare(state, result.node, event)
     : event?.kind === 'advance' ? advance(state, result.node, event)
     : event?.kind === 'elicitation' && state.node === 'elicitation' ? elicitation(state, result.node, event)
     : unchanged(state, result.node, event === undefined ? 'ready' : 'invalid-event');

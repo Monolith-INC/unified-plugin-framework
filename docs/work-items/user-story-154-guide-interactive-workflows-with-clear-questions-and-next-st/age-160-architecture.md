@@ -1,0 +1,5 @@
+# AGE-160 architecture
+
+The existing discovery direction prompt is the only recurring question introduced by this flow. A generic catalog registry was compared with a single typed resolver for the currently used question. The latter keeps the stable `discovery.direction` identifier and accepts the storyboard's actual directions as substitutions, avoiding a duplicate route or unused entries. Independent sketches were requested; the harness blocked their workspace reads, so the choice was checked against the local implementation.
+
+The resolver returns the existing `Question` type. Authored English uses the existing wording; for another saved language, the caller supplies localized explanation and labels keyed by the same direction IDs. Missing wording returns a typed failure and leaves the current state intact. Question channel selection, callbacks and normalization remain in the existing question transport. The generated discovery instructions tell the host to pass the saved language and supply localized wording when necessary.

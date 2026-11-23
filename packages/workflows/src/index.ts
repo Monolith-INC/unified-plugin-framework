@@ -39,6 +39,7 @@ export { DISCOVERY_STORYBOARD, resolveDiscoveryStep, validateDiscoveryStoryboard
   type StoryboardIssue, type StoryboardValidation } from "./discovery-storyboard.js";
 export { nextDiscovery, type DiscoveryActive, type DiscoveryEvent, type DiscoveryGuidance, type DiscoveryNext, type DiscoveryPaused, type DiscoveryState, type DiscoveryWaiting } from "./discovery-next.js";
 export { reduceElicitation, type ElicitationAction, type ElicitationResult, type ElicitationState } from "./elicitation.js";
+export { resolveQuestion, type CatalogResult, type DirectionQuestionInput, type QuestionId, type QuestionWording } from "./question-catalog.js";
 
 export {
   adapterPlugins,

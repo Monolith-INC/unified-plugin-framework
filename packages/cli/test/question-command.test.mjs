@@ -66,3 +66,15 @@ test('elicitation selections stay in the discovery continuation', () => {
   const paused = run('next', { state: chosen.state, event: { kind: 'pause' } }).output;
   assert.deepEqual(run('next', { state: paused.state, event: { kind: 'resume' } }).output.state, chosen.state);
 });
+
+test('discovery question uses saved-language wording without changing answer keys', () => {
+  const state = { session: 's', occurrence: 0, node: 'context', phase: 'active' };
+  const capabilities = { native: null, canvas: null, reply: true };
+  const event = { kind: 'ask', capabilities, language: 'pt-br' };
+  assert.equal(run('next', { state, event }).output.kind, 'recovery');
+  const wording = { explanation: 'Como continuar?', labels: { conversation: 'Conversar', execute: 'Prosseguir' } };
+  const result = run('next', { state, event: { ...event, wording } }).output;
+  assert.equal(result.state.pending.question.explanation, wording.explanation);
+  assert.deepEqual(result.state.pending.displayedKeys, ['conversation', 'execute']);
+  assert.equal(result.state.pending.question.options[0].label, 'Conversar');
+});
