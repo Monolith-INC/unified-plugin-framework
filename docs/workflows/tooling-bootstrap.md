@@ -44,7 +44,8 @@ Example structure (replace the illustrative choices with accepted project choice
   "consent": {
     "privatePython": false,
     "installHostClis": false,
-    "headlessDiscovery": false
+    "headlessDiscovery": false,
+    "codexQuestions": false
   },
   "knowledge": {
     "knowledgeRoot": "Project_Knowledge",
@@ -59,6 +60,10 @@ Example structure (replace the illustrative choices with accepted project choice
 Optional `answers` contains accepted project setup answers, using the existing project settings shape. No tracker is selected by this example. Optional `steps` limits an explicit repair to named capabilities; omit it for the complete plan. The capability names are `settings`, `cli`, `skills`, `dependencies`, `knowledge-runtime`, `knowledge-settings`, `knowledge-content`, `knowledge-server`, `review`, `host-discovery`, `tracker`.
 
 All consent flags default to `false`. Set `privatePython` to `true` only to let the release launcher download a pinned private runtime when it cannot find Python 3.12+. Set `headlessDiscovery` to `true` only to allow a model run that reads the project and writes to the accepted knowledge store. Setup attempts discovery after verifying the host and runtime. On Linux x64 and arm64, `installHostClis` allows setup to fetch a missing selected host's pinned native package from the npm registry and verify its checksum. The report prints the private executable path. Add its directory to PATH to launch it by name, or follow the reported manual recovery if setup cannot install it.
+
+Set `codexQuestions` to `true` only to opt in to the Codex project question feature. Setup preserves an existing explicit value, including `false`, and does not change project trust. If the TOML cannot be edited safely, setup leaves it unchanged and reports a recovery. Codex may ignore project configuration in an untrusted project; the flag alone does not establish that a running session offers a question control.
+
+When the release installer has neither an accepted input plan nor an interactive terminal, it returns a `needs-input` result with the pending setup decision and continuation arguments. It performs no download or project write. Resume in a terminal or supply an accepted plan with `--input`.
 
 ```sh
 pnpm agent-plugin project bootstrap --input plan.json --project <target-project>

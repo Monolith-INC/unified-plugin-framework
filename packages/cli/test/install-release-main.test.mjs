@@ -38,6 +38,25 @@ test('a UPF source checkout is refused before any question, download or project 
   assert.match(io.stderr.join(''), /source checkout[\s\S]*separate test project/);
 });
 
+test('unattended setup returns a resumable needs-input result without side effects', async () => {
+  const project = await mkdtemp(join(tmpdir(), 'upf-needs-input-'));
+  const io = ioFor(project, { ask: async () => assert.fail('read from stdin') });
+  assert.equal(await main(['--project', project, '--version', '0.2.2'], io), 1);
+  const result = JSON.parse(io.stdout.join(''));
+  assert.equal(result.outcome, 'needs-input');
+  assert.equal(result.decision.ref, 'installation-choices');
+  assert.match(result.decision.question, /setup choices/i);
+  assert.ok(result.decision.answerForms.includes('accepted-plan'));
+  assert.equal(result.continuation.project, project);
+  assert.deepEqual(result.continuation.args, ['--project', project, '--version', '0.2.2']);
+  const repeated = ioFor(project, { ask: async () => assert.fail('read from stdin') });
+  assert.equal(await main(result.continuation.args, repeated), 1);
+  assert.deepEqual(JSON.parse(repeated.stdout.join('')), result);
+  assert.equal(repeated.fetches.length, 0);
+  assert.equal(io.fetches.length, 0);
+  assert.deepEqual(await readdir(project), []);
+});
+
 test('explicit plan without private Python consent is refused before downloads or project writes', async () => {
   const project = await mkdtemp(join(tmpdir(), 'upf-launcher-consent-'));
   const input = join(project, 'plan.json');

@@ -283,7 +283,7 @@ const pinnedVersion = (name: string): string => {
 
 /** The selected host's view of this project's setup. */
 const hostContext = (project: string, input: BootstrapInput, environment: HostEnvironment, knowledgeCommand?: string): HostContext => ({ project,
-  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python,
+  canonical: realProject(project), claudeState: environment.claudeState, tools: toolsRoot(project), python: input.python, codexQuestions: input.consent.codexQuestions,
   ...(environment.hostCli?.kind === "available" ? { program: environment.hostCli.program } : {}),
   ...(knowledgeCommand === undefined ? {} : { knowledgeCommand }), ...(environment.patience === undefined ? {} : { patience: environment.patience }) });
 const realProject = (project: string): string => {

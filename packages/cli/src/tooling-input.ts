@@ -7,8 +7,9 @@ export interface Consent {
   readonly privatePython: boolean;
   readonly installHostClis: boolean;
   readonly headlessDiscovery: boolean;
+  readonly codexQuestions: boolean;
 }
-export const NO_CONSENT: Consent = Object.freeze({ privatePython: false, installHostClis: false, headlessDiscovery: false });
+export const NO_CONSENT: Consent = Object.freeze({ privatePython: false, installHostClis: false, headlessDiscovery: false, codexQuestions: false });
 
 interface PlanFields {
   readonly python: string;
@@ -65,7 +66,7 @@ const FIELD_CHECKS: readonly ((value: JsonObject) => Result<true>)[] = [
 const railway = (value: JsonObject): Result<true> => FIELD_CHECKS.reduce<Result<true>>((result, next) => flatMap(result, () => next(value)), ok(true));
 
 const consentOf = (value: unknown): Consent => object(value)
-  ? { privatePython: value.privatePython === true, installHostClis: value.installHostClis === true, headlessDiscovery: value.headlessDiscovery === true }
+  ? { privatePython: value.privatePython === true, installHostClis: value.installHostClis === true, headlessDiscovery: value.headlessDiscovery === true, codexQuestions: value.codexQuestions === true }
   : NO_CONSENT;
 const accepted = (value: JsonObject): AcceptedPlan => ({
   hosts: listedHosts(value) as Hosts,

@@ -2,6 +2,7 @@ import type { Monoid, NonEmpty } from "./adapter.js";
 
 /** One selectable answer in a fixed-answer question. */
 export interface QuestionOption {
+  readonly key?: string;
   readonly label: string;
   readonly description?: string;
   readonly recommended?: boolean;
@@ -73,14 +74,36 @@ export const concatAll =
 export const SHARED_INTERACTION_SECTION: string = [
   "## Presenting questions to the user",
   "",
-  "For fixed-answer questions (single choice, multiple choice, or yes/no consent), use the host's native selection controls (buttons, multi-select checkboxes, or two-button confirmation) instead of asking the user to type a free-form reply.",
+  "For fixed-answer questions (single choice, multiple choice, or yes/no consent), use the host's native structured-question tool when it is available and supports the decision (`request_user_input` on Codex, `AskUserQuestion` on Claude Code, `AskQuestion` on Cursor, `ask_question` on Antigravity). This also applies to concrete choices from delegated skills.",
   "",
-  "- **Single choice:** put the recommended option first and include an **Other** option so the user can type a custom answer.",
-  "- **Multiple choice:** let the user select any combination and include an **Other** option. When a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group.",
+  "- **Single choice:** put the recommended option first and include an **Other** option (unless the host tool adds **Other** automatically) so the user can type a custom answer.",
+  "- **Multiple choice:** let the user select any combination and include an **Other** option. Group lists of more than 4 options only when the chosen channel can carry the complete decision; otherwise choose a suitable fallback through the shared decision contract.",
   "- **Confirmation and consent:** show two clear choices with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.",
   "- **Plain wording:** write every prompt and option in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.",
-  "- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
-  "- **Open questions:** keep free-form questions typed; do not force open answers into buttons.",
+  "- **Numbered fallback (never unnumbered `-` bullets):** when the host lacks a suitable structured-question tool but a reply channel exists, print a numbered list (`1.`, `2.`, ...) ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
+  "- **No reply channel:** yield a needs-input result with the pending question, permitted answers and continuation context, without reading stdin or performing the protected action. Resume only when an explicit matching answer arrives.",
+  "- **One decision, one answer channel:** use a native control only if it can carry the full answer, custom text and required consent; an optional-only prompt cannot carry a required decision. Otherwise use a suitable interactive canvas or numbered text when replies are available. Associate each response with the current decision instance and stable option keys, decode numbers against the displayed order, preserve custom text literally, and ignore stale or repeated callbacks. A dismissal or ambiguous response is not consent; ask again or stop safely.",
+  "- **Shared decision contract:** for general questions, call `agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text. For discovery directions, use `agent-plugin question next <json>` for preparation and responses, retaining its state and following its returned continuation.",
+  "- **Open questions:** keep purely open-ended questions typed; do not force open answers into buttons, and do not append unnumbered option menus to open questions.",
+].join("\n");
+
+/** Host-neutral layouts; the host supplies runtime content and owns presentation effects. */
+export const PRESENTATION_BLUEPRINTS: string = [
+  "## Reusable presentation blueprints",
+  "",
+  "Fill these layouts with the current work and saved language. The named slots are runtime values, not build tokens. Use an accessible text version whenever a suitable canvas is unavailable. A blueprint never stores state or makes a decision.",
+  "",
+  "### Artifact blueprint",
+  "Use for a plan or work item. Slots: title, purpose, actual content or accessible link, relevant context, and next action. Layout: title and purpose first; then the content or link; then context and next action. Controls: open the link where supported. Text fallback: show those same fields in reading order; include enough actual content to assess the work.",
+  "Example plan: title 'Migration plan'; purpose 'Move the data'; content 'Back up, migrate, verify'; next action 'Review the plan'. Example work item: title 'Add export'; purpose 'Allow downloads'; content 'Requirements and acceptance conditions'; next action 'Implement the task'.",
+  "",
+  "### Choice blueprint",
+  "Use for a fixed-choice decision. Slots: question, ordered options with stable keys, relevant context, and an open custom answer. Layout: question and context followed by options and custom-answer affordance. Controls: use only the channel selected by the shared decision contract. An accompanying canvas is informational when a native prompt owns the answer. Text fallback: use the numbered question fallback and preserve the literal custom answer.",
+  "Example: question 'Which format?'; options 'CSV' and 'JSON'; custom answer 'Other'. The answer is normalized against the displayed keys, not an inferred choice.",
+  "",
+  "### Review blueprint",
+  "Use only when a decision about work is required. Slots: actual material or an accessible link, context, shown revision, decision instance, and available actions. Layout: show the material and its context before the revision and decision. Controls: use the one selected answer channel; display alone is not approval. Text fallback: include the content or usable link, shown revision, and a numbered decision. Bind any approval to the shown revision and decision instance. If the material changes, show the new revision and obtain a fresh decision before acting; do not create extra approvals.",
+  "Example: show the proposed plan or its accessible link, identify revision r1, then ask whether to approve it. If it changes to r2, show r2 before accepting an approval for r2.",
 ].join("\n");
 
 const DEFAULT_GROUP = "Options";
@@ -167,7 +190,7 @@ export const renderNativeQuestionGuidance = (question: Question): string => {
         "",
         "Present as a native two-button confirmation:",
         `- ${question.acceptLabel}`,
-        `- ${question.declineLabel} (safe default; closing or an empty reply means decline)`,
+        `- ${question.declineLabel} (safe default; closing or an empty reply is not consent)`,
       ].join("\n");
   }
 };
@@ -208,7 +231,7 @@ export const renderNumberedFallback = (question: Question): string => {
         `1. ${question.acceptLabel}`,
         `2. ${question.declineLabel} (default)`,
         "",
-        `Reply with 1 or 2. An empty reply or closing the prompt selects "${question.declineLabel}".`,
+        "Reply with 1 or 2. An empty reply or closing the prompt is not an answer; ask again or stop safely.",
       ].join("\n");
   }
 };

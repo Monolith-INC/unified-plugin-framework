@@ -1,0 +1,5 @@
+# AGE-161 architecture
+
+Two choices were considered: a runtime blueprint renderer with new presentation data types, or a shared instruction fragment in the existing skill renderer. The work requires hosts to adapt their own presentation capabilities, while the question channel and discovery reducer already own decisions. A shared instruction fragment therefore avoids a second rendering and state system. The requested independent sketches could not read the workspace because of the harness assignment guard; this decision was checked against the local renderer and plan.
+
+The fragment describes artifact, choice and review layouts, semantic runtime slots, controls, readable fallback and filled examples. Slot names are ordinary prose, so they cannot collide with build placeholders. The existing assembly and release paths carry the fragment into installed skills. Review instructions require the actual content or accessible link and the shown revision before a decision; the existing reducer invalidates a decision when the revision changes. A canvas accompanying a native prompt remains informational.

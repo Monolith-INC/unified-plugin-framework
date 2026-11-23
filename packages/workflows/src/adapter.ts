@@ -241,8 +241,8 @@ const versionRecoveryQuestion = (workflow: string): Question =>
     kind: "single",
     explanation: `The installed plugin version for ${workflow} does not match the framework pin. How would you like to proceed?`,
     options: Object.freeze([
-      Object.freeze({ label: "Install the pinned version", description: "Match the tested version recorded by the framework.", recommended: true }),
-      Object.freeze({ label: "Check and adopt the newer version", description: "Run the upgrade check before updating the lock." }),
+      Object.freeze({ key: "install-pinned", label: "Install the pinned version", description: "Match the tested version recorded by the framework.", recommended: true }),
+      Object.freeze({ key: "check-upgrade", label: "Check and adopt the newer version", description: "Run the upgrade check before updating the lock." }),
     ] as const),
     allowOther: true,
   });

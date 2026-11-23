@@ -39,6 +39,7 @@ test('each other field fails with its own message',()=>{
   assert.match(message({...base,host:'codex',knowledge:{...base.knowledge,knowledgeRoot:'../outside'}}),/knowledge/);
   assert.match(message({...base,host:'codex',steps:['unknown']}),/steps/);
   assert.match(message({...base,host:'codex',consent:{privatePython:'yes'}}),/consent/);
+  assert.match(message({...base,host:'codex',consent:{codexQuestions:'yes'}}),/consent/);
   assert.equal(parseBootstrap({}).error.code,'invalid-bootstrap');
   assert.equal(parseBootstrap('plan').ok,false);
 });
@@ -46,4 +47,5 @@ test('each other field fails with its own message',()=>{
 test('consent is off unless the plan turns it on',()=>{
   assert.deepEqual(parseBootstrap({...base,host:'codex'}).value.consent,NO_CONSENT);
   assert.deepEqual(parseBootstrap({...base,host:'codex',consent:{headlessDiscovery:true}}).value.consent,{...NO_CONSENT,headlessDiscovery:true});
+  assert.equal(parseBootstrap({...base,host:'codex',consent:{codexQuestions:true}}).value.consent.codexQuestions,true);
 });

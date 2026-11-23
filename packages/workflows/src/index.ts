@@ -13,6 +13,19 @@ export { backlogTrackingAdapter, TRACKING_OPERATIONS, TRACKING_CONTRACT_VERSION,
 export { selectContent, providerLeak, type ContentSelection } from "./content-view.js";
 
 export {
+  chooseQuestionChannel,
+  normalizeQuestionAnswer,
+  prepareQuestion,
+  type ChannelCapability,
+  type DecisionContext,
+  type PreparedQuestion,
+  type QuestionAnswer,
+  type QuestionCapabilities,
+  type QuestionChannel,
+  type QuestionResponse,
+} from "./question-channel.js";
+
+export {
   brainstormingDiscoveryAdapter,
   DISCOVERY_CONTRACT_VERSION,
   DISCOVERY_OPERATIONS,
@@ -20,6 +33,13 @@ export {
   type DiscoveryOperation,
 } from "./discovery.js";
 import { brainstormingDiscoveryAdapter } from "./discovery.js";
+
+export { DISCOVERY_STORYBOARD, resolveDiscoveryStep, validateDiscoveryStoryboard,
+  type DiscoveryDirection, type DiscoveryNode, type DiscoveryStep, type DiscoveryStoryboard,
+  type StoryboardIssue, type StoryboardValidation } from "./discovery-storyboard.js";
+export { nextDiscovery, type DiscoveryActive, type DiscoveryEvent, type DiscoveryGuidance, type DiscoveryNext, type DiscoveryPaused, type DiscoveryState, type DiscoveryWaiting } from "./discovery-next.js";
+export { reduceElicitation, type ElicitationAction, type ElicitationResult, type ElicitationState } from "./elicitation.js";
+export { resolveQuestion, type CatalogResult, type DirectionQuestionInput, type QuestionId, type QuestionWording } from "./question-catalog.js";
 
 export {
   adapterPlugins,
@@ -70,6 +90,7 @@ export {
 export {
   classifyReadinessFailure,
   formatRepairSummary,
+  prepareRepairDecision,
   planRepair,
   repairActions,
   type FailureClassification,

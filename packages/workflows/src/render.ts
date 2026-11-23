@@ -8,7 +8,7 @@ import {
   type WorkflowAdapter,
 } from "./adapter.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
-import { SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
+import { PRESENTATION_BLUEPRINTS, SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
 
 /** A rendered skill file, or why it could not be rendered. */
 export type Rendered = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string };
@@ -104,7 +104,7 @@ const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): str
     : [
         "## Optional skills",
         "",
-        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Present the offer as grouped native multi-select questions (at most 4 options per group) with an **Other** option, or as a numbered list ending with **Other (type your own answer)** when the host lacks native controls. Run every skill they pick at the point it fits, or proceed directly if they decline.",
+        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Use the shared decision contract to select a channel that supports the complete multi-select question and custom answers. Group native multi-select questions at most 4 options per group when supported; otherwise use the contract's suitable canvas, numbered reply fallback, or resumable needs-input result. Run every skill they pick at the point it fits, or proceed directly if they decline.",
         "",
         ...(hasGroups ? groupedCatalogLines(qualify, offered) : listed(qualify, offered)),
       ]
@@ -158,6 +158,14 @@ const readiness = (
     ...bmadRuntimeStep(adapter, adapter.knowledgeStores.length === 0 ? 3 : 4),
     "",
     SHARED_INTERACTION_SECTION,
+    "",
+    PRESENTATION_BLUEPRINTS,
+    ...(adapter.workflow === "discovery" ? [
+      "",
+      "## Discovery directions",
+      "",
+      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Pass the saved project language when asking and supply localized question wording for languages without authored text, preserving the direction keys. Keep the returned state with the session; send explicit events, and use the returned direction rather than choosing a transition yourself. A needs-input result retains the question and continuation without waiting on stdin. Show the current revision before a review decision and invalidate it if the work changes. Pause or recover if the state is unavailable.",
+    ] : []),
   ].join("\n");
 
 const generated = (adapter: WorkflowAdapter<string>, operation: string): string =>

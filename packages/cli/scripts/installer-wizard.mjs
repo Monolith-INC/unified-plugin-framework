@@ -52,6 +52,10 @@ const single = (io, title, items, initial, next) =>
   select(io, { title, items, initial: [initial], mode: 'single' }, ([choice]) => next(choice));
 const checklist = (io, title, items, initial, next) => select(io, { title, items, initial, mode: 'checklist' }, next);
 const consent = (io, title, next) => single(io, title, [item('yes', 'Allow'), item('no', 'Do not allow')], 'no', answer => next(answer === 'yes'));
+const codexQuestionConsent = (io, selected, next) => selected
+  ? io.say('Codex question controls are experimental and require a trusted project; availability can vary by session.')
+    .then(() => consent(io, 'Enable Codex question controls?', next))
+  : next(false);
 
 const executable = path => stat(path).then(entry => entry.isFile() ? access(path, constants.X_OK).then(() => true) : false).catch(() => false);
 const hostsOnPath = async path => {
@@ -100,11 +104,11 @@ const details = async (io, project, settings, knowledge, options, { hosts, workf
   const missingHosts = hosts.filter(name => !detected.includes(name));
   return tracker(io, settings?.tracker, lookup, selected =>
     knowledgeChoices(io, knowledge, roots =>
-      complete(io, project, settings, {
+      codexQuestionConsent(io, hosts.includes('codex'), codexQuestions => complete(io, project, settings, {
         hosts, python, workflows, knowledge: roots, pluginRoots: [],
-        consent: { privatePython: options.privatePython === true, installHostClis: false, headlessDiscovery: true },
+        consent: { privatePython: options.privatePython === true, installHostClis: false, headlessDiscovery: true, codexQuestions },
         answers: { ...(settings ?? {}), language, artifactsPath, tracker: selected },
-      }, options, missingHosts)));
+      }, options, missingHosts))));
 };
 
 const inspectPlan = (project, plan) => {
@@ -139,6 +143,7 @@ const summary = (project, plan, version, report, _missingHosts) => {
     `Setup may back up an existing installer-owned .upf-tools/bin/agent-plugin launcher if it needs replacing.`,
     `Private Python: ${plan.consent.privatePython ? 'install the approved private runtime' : 'use the selected executable'}.`,
     `Headless knowledge discovery: ${plan.consent.headlessDiscovery ? 'allowed when a selected host CLI is signed in (falls back cleanly to project-bootstrap)' : 'disabled'}.`,
+    `Codex question controls: ${plan.consent.codexQuestions ? 'enable in project configuration when no choice exists' : 'leave project configuration unchanged'}.`,
     `Not changing: unrelated project settings${otherHosts.length > 0 ? ` and deselected hosts (${labels(otherHosts)})` : ''}.`,
   ].join('\n');
 };
@@ -207,5 +212,5 @@ const terminal = options => collectInstallation({
 /** Terminal boundary: cancellation and absent interactive input never imply acceptance. */
 export const interactiveInstallation = async options => process.platform !== 'linux'
   ? fail('unsupported-platform', 'Interactive setup currently runs on Linux.', 'Use the documented host payload path for this platform; existing configuration is preserved.')
-  : !process.stdin.isTTY ? fail('terminal-required', 'Interactive installation needs a terminal.',
+  : !process.stdin.isTTY ? fail('needs-input', 'Interactive installation needs a terminal.',
     'Run the installer in a terminal, or supply --input for automation.') : terminal(options);

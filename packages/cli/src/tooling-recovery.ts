@@ -59,6 +59,7 @@ const BY_CODE: ReadonlyMap<string, Recovery> = new Map<string, Recovery>([
   ["unsupported-runtime", final(stop("The knowledge runtime supports Linux and macOS. The rest of setup completed; use a supported machine for project knowledge."))],
   ["invalid-saved-plan", auto({ kind: "set-aside-and-ask" }, 1, stop("The saved setup plan could not be read and could not be set aside. Move .upf-tools/setup-plan.json away, then run the installer again."))],
   ["invalid-settings", final(stop("A project settings file could not be read. A copy was saved beside it; correct the file, then run the installer again."))],
+  ["invalid-codex-config", final({ class: "preserve", instruction: "The Codex configuration could not be safely updated and was left unchanged. Reconcile the file or path, then run the installer again." })],
   ["stale-lock", auto({ kind: "take-over-stale-lock" }, 1, stop(`Another installation still holds the lock. Wait for it to finish, then ${RERUN.toLowerCase()}`))],
   ["write-busy", auto({ kind: "retry" }, 2, stop(`A configuration file stayed busy. Close other setup tools, then ${RERUN.toLowerCase()}`))],
   ["write-denied", final(stop("The installer has no permission to write a setup file. Give your user write access to it, then run the installer again."))],

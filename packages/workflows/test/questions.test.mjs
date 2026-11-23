@@ -51,6 +51,24 @@ const confirmQuestion = Object.freeze({
   safeDefault: "decline",
 });
 
+test("SHARED_INTERACTION_SECTION names concrete host question tools and forbids unnumbered bullet menus", () => {
+  for (const tool of ["request_user_input", "AskUserQuestion", "AskQuestion", "ask_question"]) {
+    assert.ok(SHARED_INTERACTION_SECTION.includes(tool), `missing host tool ${tool}`);
+  }
+  assert.match(SHARED_INTERACTION_SECTION, /never unnumbered `-` bullets/i);
+  assert.match(SHARED_INTERACTION_SECTION, /Other \(type your own answer\)/);
+});
+
+test("question guidance yields needs-input when there is no reply channel", () => {
+  assert.match(SHARED_INTERACTION_SECTION, /no reply channel/i);
+  assert.match(SHARED_INTERACTION_SECTION, /needs-input/i);
+  assert.match(SHARED_INTERACTION_SECTION, /without (reading|waiting on) stdin/i);
+  assert.match(SHARED_INTERACTION_SECTION, /optional-only prompt cannot carry a required decision/i);
+  assert.match(SHARED_INTERACTION_SECTION, /stable option keys/i);
+  assert.match(SHARED_INTERACTION_SECTION, /preserve custom text literally/i);
+  assert.match(SHARED_INTERACTION_SECTION, /dismissal or ambiguous response is not consent/i);
+});
+
 test("single-choice renderers place recommended first, include Other, and provide numbered fallback", () => {
   const native = renderNativeQuestionGuidance(singleQuestion);
   assert.match(native, /native single-choice prompt/);
@@ -103,12 +121,12 @@ test("several-choice renderers group long lists for native UI and number every r
 test("confirm renderers default to decline and never treat closing or empty reply as yes", () => {
   const native = renderNativeQuestionGuidance(confirmQuestion);
   assert.match(native, /two-button confirmation/);
-  assert.match(native, /Do not apply \(safe default; closing or an empty reply means decline\)/);
+  assert.match(native, /Do not apply \(safe default; closing or an empty reply is not consent\)/);
 
   const fallback = renderNumberedFallback(confirmQuestion);
   assert.match(fallback, /1\. Apply setup plan/);
   assert.match(fallback, /2\. Do not apply \(default\)/);
-  assert.match(fallback, /An empty reply or closing the prompt selects "Do not apply"/);
+  assert.match(fallback, /An empty reply or closing the prompt is not an answer/);
 });
 
 test("wordingFindings satisfies the monoid laws (left identity, right identity, associativity)", () => {
@@ -193,6 +211,8 @@ test("every template-assembled skill and pass-through interactive skill carries 
     const result = renderSkill(readFileSync(path, "utf8"), adapter, operation, lock);
     assert.equal(result.ok, true, `${operation}: ${result.message}`);
     assert.ok(result.text.includes(SHARED_INTERACTION_SECTION), `${operation} includes SHARED_INTERACTION_SECTION`);
+    assert.match(result.text, /agent-plugin question prepare/);
+    assert.match(result.text, /agent-plugin question answer/);
     return operation;
   });
 
@@ -200,8 +220,14 @@ test("every template-assembled skill and pass-through interactive skill carries 
   assert.match(bootstrap, /## Presenting setup questions to the user/);
   assert.match(bootstrap, /Other \(type your own answer\)/);
   assert.match(bootstrap, /Closing the prompt or sending an empty reply never counts as yes/);
+  assert.match(bootstrap, /only when a reply channel is available/i);
+  assert.match(bootstrap, /needs-input/i);
+  assert.match(bootstrap, /agent-plugin question answer/);
 
   const repair = readFileSync(new URL("skills/repair-workflow/SKILL.md", framework), "utf8");
   assert.match(repair, /## Presenting questions to the user/);
   assert.match(repair, /Other \(type your own answer\)/);
+  assert.match(repair, /only when a reply channel is available/i);
+  assert.match(repair, /needs-input/i);
+  assert.match(repair, /agent-plugin question answer/);
 });
