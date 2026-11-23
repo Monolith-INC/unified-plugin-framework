@@ -146,11 +146,12 @@ def write_handle(handle, data):
     checked(kernel.FlushFileBuffers(handle))
 
 
-def rename_handle(handle, parent, name, replace):
+def rename_handle(handle, destination, replace):
+    name = str(destination)
     encoded_length = len(name.encode('utf-16-le'))
     class RenameInfo(ctypes.Structure):
         _fields_ = [("replace", DWORD), ("root", HANDLE), ("length", DWORD), ("name", wintypes.WCHAR * (encoded_length // 2 + 1))]
-    info = RenameInfo(int(replace), parent, encoded_length, name)
+    info = RenameInfo(int(replace), None, encoded_length, name)
     checked(kernel.SetFileInformationByHandle(handle, 3, ctypes.byref(info), ctypes.sizeof(info)))
 
 
@@ -251,7 +252,7 @@ def recover(stack, root, lock, info, expected_key):
         raise ValueError('changed-receipt')
     if kind == 'stage':
         parent, _ = open_handle(stack, directory, READ_ATTRIBUTES | ADD_FILE, SHARE_READ_WRITE, directory=True)
-        rename_handle(handle, parent, 'recovered-' + uuid4().hex, False)
+        rename_handle(handle, directory / ('recovered-' + uuid4().hex), False)
     else:
         delete_handle(handle)
 
@@ -293,7 +294,7 @@ def update(root, path, content, previous, preserve_mode=False):
                 delete_handle(handle)
                 raise
         try:
-            rename_handle(handle, parent, target.name, current is not None)
+            rename_handle(handle, directory / target.name, current is not None)
         except BaseException:
             delete_handle(handle)
             raise
@@ -317,7 +318,7 @@ def stage(root):
             with ExitStack() as inspection:
                 _, current = open_handle(inspection, directory / target.name, READ_ATTRIBUTES, SHARE_READ_WRITE | 0x4, directory=True)
                 if identity(current) == identity(info):
-                    rename_handle(handle, parent, 'recovered-' + uuid4().hex, False)
+                    rename_handle(handle, directory / ('recovered-' + uuid4().hex), False)
         except FileNotFoundError:
             pass
         write_handle(lock, b'')

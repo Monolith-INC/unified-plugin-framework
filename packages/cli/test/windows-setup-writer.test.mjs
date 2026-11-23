@@ -26,7 +26,8 @@ test('Windows writer preserves the reviewed snapshot and rejects a stale update'
     windowsWriter, root, path, 'model = "second"\n', 'model = "first"\n'], { encoding: 'utf8' });
   assert.equal(diagnostic.stdout.trim(), 'written', diagnostic.stderr);
   assert.equal((await writeText(root, path, 'model = "stale"\n', 'model = "first"\n', 'python', true)).error.code, 'modified-file');
-  assert.equal(await readFile(path, 'utf8'), 'model = "second"\n');
+  assert.equal((await writeText(root, path, 'model = "third"\n', 'model = "second"\n', 'python', true)).ok, true);
+  assert.equal(await readFile(path, 'utf8'), 'model = "third"\n');
   assert.equal(spawnSync('icacls', [path], { encoding: 'utf8' }).stdout, permissions.stdout);
 });
 
