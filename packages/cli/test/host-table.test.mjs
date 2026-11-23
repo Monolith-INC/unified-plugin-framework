@@ -17,7 +17,7 @@ const context=async(extra={})=>{
   const root=await mkdtemp(join(tmpdir(),'upf-hosts-'));
   const project=join(root,'project');
   await mkdir(join(project,'.upf-tools'),{recursive:true});
-  return {project,canonical:project,claudeState:join(root,'claude.json'),tools:join(project,'.upf-tools'),python:'python3.12',...extra};
+  return {project,canonical:project,claudeState:join(root,'claude.json'),tools:join(project,'.upf-tools'),python:process.platform==='win32'?'python':'python3.12',...extra};
 };
 
 test('Codex registration does not change project configuration without explicit opt-in',async()=>{
@@ -58,7 +58,7 @@ test('Codex opt-in preserves the existing configuration file permissions',async(
   await writeFile(file,'model = "test"\n');
   await chmod(file,0o640);
   assert.equal((await HOSTS.codex.register(ctx)).ok,true);
-  assert.equal((await stat(file)).mode & 0o777,0o640);
+  if(process.platform!=='win32') assert.equal((await stat(file)).mode & 0o777,0o640);
 });
 
 test('Codex opt-in preserves invalid configuration and rejects linked paths',async()=>{

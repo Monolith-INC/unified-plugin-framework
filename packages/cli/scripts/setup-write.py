@@ -1,7 +1,6 @@
 """Atomic installer file updates with an OS-owned lease."""
 
 import errno
-import fcntl
 from hashlib import sha256
 import json
 import os
@@ -9,8 +8,16 @@ from pathlib import Path
 import re
 import stat
 import sys
+import runpy
 from contextlib import ExitStack
 from uuid import uuid4
+
+if os.name == "nt":
+    windows = runpy.run_path(str(Path(__file__).with_name("setup-write-windows.py")))
+    print(windows["main"]())
+    sys.exit(0)
+
+import fcntl
 
 
 def parent_fd(stack: ExitStack, root: Path, parents: tuple[str, ...], create: bool = True) -> int:
