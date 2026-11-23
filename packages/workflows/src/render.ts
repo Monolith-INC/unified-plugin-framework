@@ -8,7 +8,7 @@ import {
   type WorkflowAdapter,
 } from "./adapter.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
-import { SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
+import { PRESENTATION_BLUEPRINTS, SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
 
 /** A rendered skill file, or why it could not be rendered. */
 export type Rendered = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly message: string };
@@ -158,6 +158,8 @@ const readiness = (
     ...bmadRuntimeStep(adapter, adapter.knowledgeStores.length === 0 ? 3 : 4),
     "",
     SHARED_INTERACTION_SECTION,
+    "",
+    PRESENTATION_BLUEPRINTS,
     ...(adapter.workflow === "discovery" ? [
       "",
       "## Discovery directions",

@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import { runInstallCommand } from "../dist/index.js";
+import { codexAdapter } from "@agent-plugins/adapter-codex";
+import { assemblePluginSource, buildVendorBundle } from "@agent-plugins/workflows";
 
 const repo = resolve(import.meta.dirname, "../../..");
 const framework = repo;
@@ -73,9 +75,35 @@ test("the framework plugin installs each host's assembled skills, naming the onb
               : skill.startsWith("track-") || skill.startsWith("implement-") ? /reviewed content excerpts/
                 : skill.startsWith("continuity-") ? /`session-/ : /`(?:monolithic-code-review-toolkit-review-|review-story-)/);
       assert.doesNotMatch(text, /\{\{/);
+      if (skill.startsWith("discover-")) {
+        assert.match(text, /## Reusable presentation blueprints/);
+        assert.match(text, /Artifact blueprint/);
+        assert.match(text, /Choice blueprint/);
+        assert.match(text, /Review blueprint/);
+        assert.match(text, /shown revision/);
+        assert.match(text, /Migration plan/);
+        assert.match(text, /Add export/);
+        assert.match(text, /Which format\?/);
+        assert.match(text, /literal custom answer/);
+        assert.match(text, /show r2 before accepting an approval for r2/);
+      }
       return skill;
     });
   }
+});
+
+test("blueprint guidance survives assembly and a release bundle", () => {
+  const stage = join(mkdtempSync(join(tmpdir(), "upf-blueprints-")), "assembled");
+  const assembly = assemblePluginSource(framework, stage);
+  assert.equal(assembly.ok, true);
+  const assembled = readFileSync(join(stage, "skills", "discover-quick", "SKILL.md"), "utf8");
+  assert.match(assembled, /## Reusable presentation blueprints/);
+  assert.doesNotMatch(assembled, /\{\{/);
+  const bundle = buildVendorBundle(framework, codexAdapter);
+  assert.equal(bundle.ok, true);
+  const skill = bundle.value.files.find((file) => file.path.endsWith("skills/discover-quick/SKILL.md"));
+  assert.ok(skill);
+  assert.match(new TextDecoder().decode(skill.content), /## Reusable presentation blueprints/);
 });
 
 test("a source install builds from the checkout as it is, so an edited template is installed as edited", async () => {
