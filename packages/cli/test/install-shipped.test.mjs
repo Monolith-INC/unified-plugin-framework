@@ -87,6 +87,7 @@ test("the framework plugin installs each host's assembled skills, naming the onb
         assert.match(text, /literal custom answer/);
         assert.match(text, /show r2 before accepting an approval for r2/);
       }
+      if (skill === "discover-thorough") assert.match(text, /shared decision contract to select a channel that supports the complete multi-select question and custom answers/);
       return skill;
     });
   }

@@ -104,7 +104,7 @@ const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): str
     : [
         "## Optional skills",
         "",
-        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Present the offer as grouped native multi-select questions (at most 4 options per group) with an **Other** option, or as a numbered list ending with **Other (type your own answer)** when the host lacks native controls. Run every skill they pick at the point it fits, or proceed directly if they decline.",
+        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Use the shared decision contract to select a channel that supports the complete multi-select question and custom answers. Group native multi-select questions at most 4 options per group when supported; otherwise use the contract's suitable canvas, numbered reply fallback, or resumable needs-input result. Run every skill they pick at the point it fits, or proceed directly if they decline.",
         "",
         ...(hasGroups ? groupedCatalogLines(qualify, offered) : listed(qualify, offered)),
       ]
