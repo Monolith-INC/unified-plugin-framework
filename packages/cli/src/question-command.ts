@@ -1,4 +1,4 @@
-import { normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type Question, type QuestionCapabilities, type QuestionResponse } from "@agent-plugins/workflows";
+import { nextDiscovery, normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type DiscoveryEvent, type DiscoveryState, type Question, type QuestionCapabilities, type QuestionResponse } from "@agent-plugins/workflows";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 const record = (value: unknown): value is RecordValue => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -21,6 +21,20 @@ const capabilities = (value: unknown): value is QuestionCapabilities => record(v
 const response = (value: unknown): value is QuestionResponse => record(value) && typeof value.instance === "string" && (
   value.channel === "dismissed" || value.channel === "text" && typeof value.value === "string"
   || (value.channel === "native" || value.channel === "canvas") && strings(value.keys) && optionalString(value.custom));
+const activeState = (value: RecordValue): boolean => typeof value.session === "string" && Number.isSafeInteger(value.occurrence)
+  && typeof value.node === "string" && optionalString(value.revision);
+const pending = (value: unknown): boolean => record(value) && channel(value.kind) && typeof value.instance === "string"
+  && question(value.question) && strings(value.displayedKeys) && strings(value.answerForms) && context(value.continuation)
+  && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
+const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
+  value.phase === "paused" ? record(value.previous) && value.previous.phase !== "paused" && discoveryState(value.previous)
+    : activeState(value) && (value.phase === "active" || value.phase === "waiting" && pending(value.pending)));
+const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
+  (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities)
+  || value.kind === "answer" && response(value.response) && optionalString(value.revision)
+  || value.kind === "advance" && optionalString(value.revision)
+  || value.kind === "review-revision" && typeof value.revision === "string"
+  || value.kind === "pause" || value.kind === "resume");
 
 type Input = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const parse = (text: string): Input => {
@@ -28,7 +42,7 @@ const parse = (text: string): Input => {
   catch { return { ok: false }; }
 };
 type Io = { readonly out: (line: string) => void; readonly err: (line: string) => void };
-const HELP = `Usage: agent-plugin question prepare|answer <json>
+const HELP = `Usage: agent-plugin question prepare|answer|next <json>
 
 Pass JSON as one argument with safe shell quoting; never interpolate user text into a shell command.
 
@@ -40,7 +54,16 @@ Capabilities contain native and canvas (null or {single, several, consent, custo
 answer accepts {"context": <continuation>, "response": ...}. Responses contain instance and channel:
 text uses value; native or canvas use keys and optional custom; dismissed has no answer fields.
 For needs-custom, set continuation.pendingCustomKeys to the returned keys before submitting the literal custom text.
-After one answer, set continuation.answered to true; resume needs-input by preparing again with current capabilities.`;
+After one answer, set continuation.answered to true; resume needs-input by preparing again with current capabilities.
+
+next accepts {"state": ..., "event": ...}. Start a discovery session with state
+{"session":"<unique session>","occurrence":0,"node":"context","phase":"active"}.
+Read without an event; send {"kind":"ask","capabilities":...} to prepare a decision.
+Keep the returned state and use pending.question, pending.answerForms and pending.continuation.
+For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
+{"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.
+Use advance for a single available direction, with revision when entering review;
+use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.`;
 const invalid = (io: Io): number => (io.err(JSON.stringify({ kind: "invalid-input", message: "Provide a valid question request as one JSON argument." })), 2);
 const output = (io: Io, value: unknown): number => (io.out(JSON.stringify(value)), 0);
 const executeRecord = (io: Io, operation: string | undefined, value: RecordValue): number => {
@@ -49,6 +72,8 @@ const executeRecord = (io: Io, operation: string | undefined, value: RecordValue
       return output(io, prepareQuestion(value.context, value.capabilities, value.required));
     case operation === "answer" && context(value.context) && response(value.response):
       return output(io, normalizeQuestionAnswer(value.context, value.response));
+    case operation === "next" && (value.state === undefined || discoveryState(value.state)) && (value.event === undefined || discoveryEvent(value.event)):
+      return output(io, nextDiscovery(value.state as DiscoveryState | undefined, value.event as DiscoveryEvent | undefined));
     default: return invalid(io);
   }
 };

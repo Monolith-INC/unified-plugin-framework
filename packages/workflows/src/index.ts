@@ -37,6 +37,7 @@ import { brainstormingDiscoveryAdapter } from "./discovery.js";
 export { DISCOVERY_STORYBOARD, resolveDiscoveryStep, validateDiscoveryStoryboard,
   type DiscoveryDirection, type DiscoveryNode, type DiscoveryStep, type DiscoveryStoryboard,
   type StoryboardIssue, type StoryboardValidation } from "./discovery-storyboard.js";
+export { nextDiscovery, type DiscoveryActive, type DiscoveryEvent, type DiscoveryGuidance, type DiscoveryNext, type DiscoveryPaused, type DiscoveryState, type DiscoveryWaiting } from "./discovery-next.js";
 
 export {
   adapterPlugins,

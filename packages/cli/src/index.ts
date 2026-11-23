@@ -45,7 +45,7 @@ Commands:
                                     Check candidate plugin versions against the adapter and pin them
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
-  question prepare|answer <json>     Prepare or normalize a host decision without storing state
+  question prepare|answer|next <json> Prepare decisions or resolve discovery without storing state
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;

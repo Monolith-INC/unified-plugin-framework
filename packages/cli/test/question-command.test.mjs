@@ -41,3 +41,17 @@ test('host callbacks retain displayed keys and literal custom answers', () => {
   assert.deepEqual(result, { kind: 'answer', instance: choice.instance, keys: ['b'], custom: '  Other text  ', consent: null });
   assert.equal(run('answer', { context: { ...continuation, answered: true }, response: { channel: 'text', instance: choice.instance, value: 'again' } }).output.kind, 'ignored');
 });
+
+test('discovery next resumes a closed-input decision through the command boundary', () => {
+  const state = { session: 'session', occurrence: 0, node: 'context', phase: 'active' };
+  const capabilities = { native: null, canvas: null, reply: false };
+  const waiting = run('next', { state, event: { kind: 'ask', capabilities } }).output;
+  assert.equal(waiting.kind, 'needs-input');
+  assert.equal(run('next', { state: waiting.state }).output.kind, 'needs-input');
+  const connected = run('next', { state: waiting.state, event: { kind: 'connect', capabilities: { ...capabilities, reply: true } } }).output;
+  const response = { channel: 'text', instance: connected.state.pending.instance, value: '1' };
+  const result = run('next', { state: connected.state, event: { kind: 'answer', response } }).output;
+  assert.equal(result.state.node, 'conversation');
+  assert.equal(result.guidance.node, 'conversation');
+  assert.notEqual(run('next', { state: { phase: 'waiting' } }).code, 0);
+});
