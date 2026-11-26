@@ -1,0 +1,155 @@
+diff --git a/packages/cli/src/host-specs.ts b/packages/cli/src/host-specs.ts
+index 68ddde1..f5bce12 100644
+--- a/packages/cli/src/host-specs.ts
++++ b/packages/cli/src/host-specs.ts
+@@ -125,3 +125,26 @@ export const rewriteSkillFrontmatterName = (content: string, targetName: string)
+     : block.replace(/^---(\r?\n)/u, `---$1name: ${targetName}$1`);
+   return `${updated}${content.slice(block.length)}`;
+ };
++
++const CODEX_USER_INPUT_KEY = /^\s*default_mode_request_user_input\s*=/mu;
++const FEATURES_HEADER = /^(\s*\[features\]\s*(?:#[^\n]*)?\r?\n?)/mu;
++
++/** Whether `.codex/config.toml` already sets `default_mode_request_user_input` (either true or an explicit user choice). */
++export const hasCodexUserInputFeature = (existing: string | null): boolean =>
++  existing !== null && CODEX_USER_INPUT_KEY.test(existing);
++
++/**
++ * Purely enable `default_mode_request_user_input = true` under `[features]` in `.codex/config.toml` while preserving
++ * all unrelated settings and respecting any explicit user value already configured.
++ */
++export const mergeCodexUserInputFeature = (existing: string | null): string => {
++  if (existing === null || existing.trim().length === 0) {
++    return "[features]\ndefault_mode_request_user_input = true\n";
++  }
++  if (hasCodexUserInputFeature(existing)) return existing;
++  if (FEATURES_HEADER.test(existing)) {
++    return existing.replace(FEATURES_HEADER, (header) =>
++      `${header.endsWith("\n") ? header : `${header}\n`}default_mode_request_user_input = true\n`);
++  }
++  return `${existing.endsWith("\n") ? existing : `${existing}\n`}\n[features]\ndefault_mode_request_user_input = true\n`;
++};
+diff --git a/packages/cli/src/host-table.ts b/packages/cli/src/host-table.ts
+index a477a45..594503b 100644
+--- a/packages/cli/src/host-table.ts
++++ b/packages/cli/src/host-table.ts
+@@ -1,7 +1,8 @@
++import { writeFile } from "node:fs/promises";
+ import { dirname, join } from "node:path";
+ import { fail, nodeProjectFiles, ok, type Result } from "@agent-plugins/project";
+ import type { HostName } from "./host-names.js";
+-import { hasValidSkillFrontmatter, HOST_SPECS, HOST_SPECS_FILE, hostSpecMatches, mergeHostSpecReceipt, type HostSpecContract } from "./host-specs.js";
++import { hasCodexUserInputFeature, hasValidSkillFrontmatter, HOST_SPECS, HOST_SPECS_FILE, hostSpecMatches, mergeCodexUserInputFeature, mergeHostSpecReceipt, type HostSpecContract } from "./host-specs.js";
+ import { skillNames } from "./plugin-reader.js";
+ import { directory, readText, safePath } from "./tooling-files.js";
+ import type { HostCli } from "./tooling-host-cli.js";
+@@ -105,16 +106,40 @@ const discoverLocalSkills = async (context: HostContext, skillsDir: string): Pro
+   return ok(checked.flatMap((entry) => entry.kind === "valid" ? [entry.skill] : []));
+ };
+ 
++const CODEX_CONFIG_FILE = ".codex/config.toml" as const;
++
++const ensureCodexConfig = async (context: HostContext): Promise<Result<string>> => {
++  const path = join(context.project, CODEX_CONFIG_FILE);
++  if (!await safePath(context.project, path)) {
++    return fail("symlink-escape", "The Codex configuration path escapes the project or follows a symbolic link.",
++      "Preserve the linked path and choose an unlinked location inside the project.");
++  }
++  const existing = await readText(path);
++  if (!existing.ok) return existing;
++  const next = mergeCodexUserInputFeature(existing.value);
++  if (existing.value === next) return ok(path);
++  const dir = await directory(context.project, dirname(path));
++  if (!dir.ok) return dir;
++  return writeFile(path, next, "utf8")
++    .then(() => ok(path))
++    .catch(() => fail("tooling-storage", "Could not write .codex/config.toml.", "Check file permissions and rerun setup."));
++};
++
+ const CODEX = Object.freeze<HostTooling>({
+   label: "Codex",
+-  changes: "Codex project skills (.agents/skills), hooks (.codex/hooks.json), and host spec receipt (.agent-plugins/host-specs.json)",
++  changes: "Codex project skills (.agents/skills), config (.codex/config.toml), hooks (.codex/hooks.json), and host spec receipt (.agent-plugins/host-specs.json)",
+   frameworkDir: "plugins",
+   manifest: ".codex-plugin/plugin.json",
+   bareSkills: HOST_SPECS.codex.skillsDir,
+   spec: HOST_SPECS.codex,
+   catalog: (_context, _plugins) => Promise.resolve(ok(HOST_SPECS_FILE)),
+-  register: (context) => registerSpec(context, "codex"),
+-  registered: (context) => specRegistered(context, "codex"),
++  register: (context) => registerSpec(context, "codex").then((saved) => saved.ok ? ensureCodexConfig(context).then((cfg) => cfg.ok ? saved : cfg) : saved),
++  registered: async (context) => {
++    const spec = await specRegistered(context, "codex");
++    if (!spec.ok || !spec.value) return spec;
++    const cfg = await readText(join(context.project, CODEX_CONFIG_FILE));
++    return cfg.ok ? ok(hasCodexUserInputFeature(cfg.value)) : cfg;
++  },
+   activate: (_context, plugin) => Promise.resolve(ok(plugin.name)),
+   discover: (context) => discoverLocalSkills(context, HOST_SPECS.codex.skillsDir),
+ });
+diff --git a/packages/cli/test/host-table.test.mjs b/packages/cli/test/host-table.test.mjs
+index aa3b82d..ef46dea 100644
+--- a/packages/cli/test/host-table.test.mjs
++++ b/packages/cli/test/host-table.test.mjs
+@@ -7,7 +7,7 @@ import {CLAUDE_SCHEMA_VERSION} from '@agent-plugins/adapter-claude';
+ import {CODEX_SCHEMA_VERSION} from '@agent-plugins/adapter-codex';
+ import {SUPPORTED_SCHEMA_VERSION} from '@agent-plugins/core';
+ import {HOST_NAMES} from '../dist/host-names.js';
+-import {HOST_SPECS_FILE, rewriteSkillFrontmatterName} from '../dist/host-specs.js';
++import {HOST_SPECS_FILE, mergeCodexUserInputFeature, rewriteSkillFrontmatterName} from '../dist/host-specs.js';
+ import {HOSTS} from '../dist/host-table.js';
+ import {parseBootstrap} from '../dist/tooling-input.js';
+ 
+@@ -42,6 +42,9 @@ test('spec-driven registration records pinned Agent Plugins and host schema vers
+   assert.equal(receipt.hosts.codex.skillsDir,'.agents/skills');
+   assert.equal(receipt.hosts.claude.vendorSchemaVersion,CLAUDE_SCHEMA_VERSION);
+   assert.equal(receipt.hosts.claude.skillsDir,'.claude/skills');
++  assert.match(await readFile(join(ctx.project,'.codex/config.toml'),'utf8'),/default_mode_request_user_input = true/);
++  assert.equal(mergeCodexUserInputFeature('model = "o3"\n[features]\nhooks = true\n'), 'model = "o3"\n[features]\ndefault_mode_request_user_input = true\nhooks = true\n');
++  assert.equal(mergeCodexUserInputFeature('[features]\ndefault_mode_request_user_input = false\n'), '[features]\ndefault_mode_request_user_input = false\n', 'respect explicit user choice');
+   assert.equal(await readFile(ctx.claudeState,'utf8').catch(()=>null),null,'global user state is never written');
+   assert.equal(await readFile(join(ctx.project,'.mcp.json'),'utf8').catch(()=>null),null,'no shared MCP file is written');
+ });
+diff --git a/packages/workflows/src/questions.ts b/packages/workflows/src/questions.ts
+index 3edfe41..cd8dd31 100644
+--- a/packages/workflows/src/questions.ts
++++ b/packages/workflows/src/questions.ts
+@@ -73,14 +73,14 @@ export const concatAll =
+ export const SHARED_INTERACTION_SECTION: string = [
+   "## Presenting questions to the user",
+   "",
+-  "For fixed-answer questions (single choice, multiple choice, or yes/no consent), use the host's native selection controls (buttons, multi-select checkboxes, or two-button confirmation) instead of asking the user to type a free-form reply.",
++  "For fixed-answer questions (single choice, multiple choice, or yes/no consent) — including whenever a delegated skill such as brainstorming presents concrete options to choose from — you MUST call the host's native structured-question tool (`request_user_input` on Codex, `AskUserQuestion` on Claude Code, `AskQuestion` on Cursor, `ask_question` on Antigravity) instead of writing bulleted prose options.",
+   "",
+-  "- **Single choice:** put the recommended option first and include an **Other** option so the user can type a custom answer.",
+-  "- **Multiple choice:** let the user select any combination and include an **Other** option. When a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group.",
++  "- **Single choice:** put the recommended option first and include an **Other** option (unless the host tool adds **Other** automatically) so the user can type a custom answer.",
++  "- **Multiple choice:** let the user select any combination and include an **Other** option. When a list has more than 4 options, split it into grouped multi-selection questions of at most 4 options per group (or ask one focused decision per tool call when a host supports single-choice pickers only).",
+   "- **Confirmation and consent:** show two clear choices with the safe decline option as the default. Closing the prompt or sending an empty reply never counts as yes.",
+   "- **Plain wording:** write every prompt and option in the project's saved language without ticket IDs, internal document paths, or unexplained abbreviations.",
+-  "- **Numbered fallback:** when the host lacks native selection controls, print a numbered list ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
+-  "- **Open questions:** keep free-form questions typed; do not force open answers into buttons.",
++  "- **Numbered fallback (never unnumbered `-` bullets):** when the host lacks a structured-question tool in the current mode, print a numbered list (`1.`, `2.`, ...) ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
++  "- **Open questions:** keep purely open-ended questions typed; do not force open answers into buttons, and do not append unnumbered option menus to open questions.",
+ ].join("\n");
+ 
+ const DEFAULT_GROUP = "Options";
+diff --git a/packages/workflows/test/questions.test.mjs b/packages/workflows/test/questions.test.mjs
+index 3502ba0..4931096 100644
+--- a/packages/workflows/test/questions.test.mjs
++++ b/packages/workflows/test/questions.test.mjs
+@@ -51,6 +51,14 @@ const confirmQuestion = Object.freeze({
+   safeDefault: "decline",
+ });
+ 
++test("SHARED_INTERACTION_SECTION names concrete host question tools and forbids unnumbered bullet menus", () => {
++  for (const tool of ["request_user_input", "AskUserQuestion", "AskQuestion", "ask_question"]) {
++    assert.ok(SHARED_INTERACTION_SECTION.includes(tool), `missing host tool ${tool}`);
++  }
++  assert.match(SHARED_INTERACTION_SECTION, /never unnumbered `-` bullets/i);
++  assert.match(SHARED_INTERACTION_SECTION, /Other \(type your own answer\)/);
++});
++
+ test("single-choice renderers place recommended first, include Other, and provide numbered fallback", () => {
+   const native = renderNativeQuestionGuidance(singleQuestion);
+   assert.match(native, /native single-choice prompt/);

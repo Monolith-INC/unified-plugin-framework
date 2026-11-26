@@ -1,0 +1,18 @@
+# AGE-204 acceptance review
+
+Candidate `9534763069d0e198ce82e0ed74d2592e4a924c47` on `feature/AGE-196-native-question-handoff`. The reviewed delivery scope is the native Codex terminal path, with existing fallbacks retained for Claude Code and Cursor.
+
+| Criterion | Result | Evidence |
+| --- | --- | --- |
+| AC01 · Automatic native handoff | Pass for Codex CLI | AGE-199 `677ef86` and AGE-202 `511e1c3` provide the adapter and live evidence. Review fix `9534763` routes the assembled skill through the registered tool. In the follow-up live run the human choice `choice:conversation` reached UPF and returned `ready` at `conversation`, occurrence 1. [Live evidence](age-202-live-handoff-evidence.md) |
+| AC02 · Preserve custom input and require an eligible answer | Pass in focused tests | AGE-198 `3e8b162` verifies the shared answer contract. The final Codex adapter suite covers literal custom text, invalid or dismissed input, duplicate delivery and a superseded revision. The automatic native route is for discovery directions, with the existing consent contract for protected actions. [Contract evidence](age-198-question-contract-evidence.md) |
+| AC03 · Keep decisions resumable | Pass in focused tests | AGE-200 `204f29e` and review fix `9534763` cover timeout, unavailable input, dismissal, disconnect, late response and successful retry within the same connection. An independent decision can complete while the first waits. Restart persistence is outside this evidence. [Recovery evidence](age-200-recovery-evidence.md) |
+| AC04 · Retrieve applicable recovery guidance | Pass in runtime probe | AGE-201 `18f1872` connects the recovery reason to its indexed knowledge unit. The runtime probe returned a resumable decision and its indexed guidance. [Knowledge evidence](age-201-knowledge-evidence.md) |
+| AC05 · Verify and document host boundaries | Pass for selected scope | AGE-197 `e912d65` records vendor sources, installed versions and observed capabilities. Codex CLI 0.171.0 completed the live path. Claude Code advertised form support and Cursor documents it. Live delivery remains open for both, and they retain existing fallbacks. [Host evidence](age-197-host-boundary-evidence.md) |
+| AC06 · Focused automated and live evidence | Pass for Codex CLI | AGE-202 and the follow-up test cover direct and assembled-skill entry paths. The final clarification of language-tag syntax passed the affected suites and all payload checks. [Staging evidence](age-203-staging-evidence.md) |
+
+The candidate README documents MCP registration, locale input, continuation, recovery and the existing fallbacks. The assembled-skill live run used an inert state and manually registered MCP server. The final candidate clarifies language-tag syntax after that run. The follow-up did not verify installation on a fresh host. The pending pull request review and merge remain part of parent closeout.
+
+## Pull request postflight
+
+[PR #45](https://github.com/Monolith-INC/unified-plugin-framework/pull/45) presents candidate `9534763069d0e198ce82e0ed74d2592e4a924c47` against `main`. The GitHub diff matches the reviewed branch and its 23 changed files. The review traced the PR to AC01–AC06 and checked the changed TypeScript boundaries, including transport capability negotiation, the response parser, recovery state and replay. It found no additional actionable issue. The configured SDK normalizes an empty elicitation capability to form support before the adapter checks it. The host review scope remains the observed Codex CLI path. [MCP elicitation specification](https://modelcontextprotocol.io/specification/2025-11-25/client/elicitation#capabilities)
