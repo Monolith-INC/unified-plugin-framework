@@ -16,14 +16,17 @@ export {
   chooseQuestionChannel,
   normalizeQuestionAnswer,
   prepareQuestion,
+  prepareRenderedQuestion,
   type ChannelCapability,
   type DecisionContext,
+  type NativeQuestionPort,
   type PreparedQuestion,
   type QuestionAnswer,
   type QuestionCapabilities,
   type QuestionChannel,
   type QuestionResponse,
 } from "./question-channel.js";
+export { questionRecoveryUnit, type QuestionInterruption, type QuestionRecoveryLookup, type QuestionRecoveryUnit } from "./question-recovery.js";
 
 export {
   brainstormingDiscoveryAdapter,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chooseQuestionChannel, normalizeQuestionAnswer, prepareQuestion } from '../dist/question-channel.js';
+import { chooseQuestionChannel, normalizeQuestionAnswer, prepareQuestion, prepareRenderedQuestion } from '../dist/question-channel.js';
+import { renderNumberedFallback } from '../dist/questions.js';
 
 const question = { kind: 'single', explanation: 'Choose', allowOther: true, options: [
   { key: 'first', label: 'First' }, { key: 'preferred', label: 'Preferred', recommended: true },
@@ -20,6 +21,30 @@ test('display numbers and native keys normalize to the same decision event', () 
   const native = normalizeQuestionAnswer({ ...context, channel: 'native' }, { channel: 'native', instance: context.instance, keys: ['preferred'] });
   assert.deepEqual(text, native);
   assert.deepEqual(text, { kind: 'answer', instance: context.instance, keys: ['preferred'], custom: null, consent: null });
+});
+
+test('new text preparations decode the order displayed by the numbered fallback', () => {
+  const capabilities = { native: null, canvas: null, reply: true };
+  const prepared = prepareRenderedQuestion({ ...context, displayedKeys: ['first', 'preferred'] }, capabilities, true);
+  assert.match(renderNumberedFallback(prepared.question), /1\. Preferred/);
+  assert.deepEqual(prepared.displayedKeys, ['preferred', 'first']);
+  assert.deepEqual(normalizeQuestionAnswer(prepared.continuation, {
+    channel: 'text', instance: context.instance, value: '1',
+  }).keys, ['preferred']);
+});
+
+test('new confirmations map the displayed first choice to the explicit approve ID', () => {
+  const question = { kind: 'confirm', explanation: 'Approve?', acceptLabel: 'Yes', declineLabel: 'No', safeDefault: 'decline' };
+  const capabilities = { native: null, canvas: null, reply: true };
+  const prepared = prepareRenderedQuestion({ ...context, question, displayedKeys: ['no', 'yes'], acceptKey: 'yes' }, capabilities, true);
+  assert.match(renderNumberedFallback(prepared.question), /1\. Yes/);
+  assert.deepEqual(prepared.displayedKeys, ['yes', 'no']);
+  assert.equal(normalizeQuestionAnswer(prepared.continuation, {
+    channel: 'text', instance: context.instance, value: '1',
+  }).consent, 'accepted');
+  assert.equal(normalizeQuestionAnswer(prepared.continuation, {
+    channel: 'text', instance: context.instance, value: 'Yes',
+  }).kind, 'invalid');
 });
 
 test('custom answers remain literal and invalid or duplicate callbacks never approve', () => {

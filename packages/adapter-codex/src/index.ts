@@ -1,4 +1,5 @@
 import type { Diagnostic, PluginMcpServer } from "@agent-plugins/core";
+export { serveCodexQuestions } from "./question-host.js";
 export { CODEX_TOOLING, codexToolingRegistration, mergeCodexMarketplace, type CodexToolingInput } from "./tooling.js";
 import {
   createJsonPayloadFile,

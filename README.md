@@ -109,6 +109,24 @@ The framework's [dependency lock](io.github.monolith-inc.upf/onboarded.lock.json
 
 Installed releases use bundled dependencies locally. Missing or changed bundled content is reported as an error rather than silently fetching a replacement. Each release also provides checksums and signed build provenance.
 
+### Native discovery answers in Codex
+
+For a Codex client that supports MCP form input, register an MCP server with the command
+`agent-plugin question serve-codex`. The discovery skill uses the registered
+`upf_discovery_question` tool when it needs a direction. The tool displays the question,
+applies the answer and returns the workflow's continuation. Save that state with the session.
+A form timeout after 60 seconds, dismissal or disconnection returns a replacement decision
+with a fresh answer identity. Pass `reply: false` if the caller cannot receive a text reply.
+
+Pass the saved project language as a BCP 47 tag in `language`, such as `en` or `pt-BR`. For languages other than English, supply
+the translated question and option labels in `wording`, keyed by the same direction IDs.
+For languages other than English or Portuguese, supply translated form labels in `controls`
+(`answer`, `other`, `customPrompt`, and `customAnswer`) to use the native form. Discovery
+uses the existing question path when the tool is unavailable, including on Claude Code and Cursor.
+
+The optional `--knowledge-launcher` flag reads the exact recovery guidance from the project's
+existing store. See [Native question recovery](docs/knowledge/question-recovery.md) for the units.
+
 ## Documentation
 
 - [Setup and recovery](docs/workflows/tooling-bootstrap.md)

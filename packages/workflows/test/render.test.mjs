@@ -74,7 +74,11 @@ test("rendered discovery skills require offering fitting BMad paths before start
   assert.match(result.text, /shared decision contract to select a channel that supports the complete multi-select question and custom answers/);
   assert.match(result.text, /otherwise use the contract's suitable canvas, numbered reply fallback, or resumable needs-input result/);
   assert.doesNotMatch(result.text, /ask one focused decision per tool call when a host supports single-choice pickers only/);
-  assert.match(result.text, /For discovery directions, use `agent-plugin question next <json>`/);
+  assert.match(result.text, /host exposes `upf_discovery_question`.*saved discovery state, project language/);
+  assert.match(result.text, /BCP 47 tag.*en or pt-BR/);
+  assert.match(result.text, /If wording is missing, supply it and retry with the same state/);
+  assert.match(result.text, /Use the returned state as the continuation/);
+  assert.match(result.text, /When the tool is unavailable, use `agent-plugin question next <json>`/);
   assert.match(result.text, /## Presenting questions to the user/);
   assert.match(result.text, /### Shape & Ideate/);
   assert.match(result.text, /bmad-forge-idea/);
