@@ -164,7 +164,11 @@ const readiness = (
       "",
       "## Discovery directions",
       "",
-      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Pass the saved project language when asking and supply localized question wording for languages without authored text, preserving the direction keys. Keep the returned state with the session; send explicit events, and use the returned direction rather than choosing a transition yourself. A needs-input result retains the question and continuation without waiting on stdin. Show the current revision before a review decision and invalidate it if the work changes. Pause or recover if the state is unavailable.",
+      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Show the current revision before a review decision and invalidate it if the work changes.",
+      "",
+      "When a step needs a direction and the host exposes `upf_discovery_question`, call it with the saved discovery state, project language as a BCP 47 tag (for example, en or pt-BR), and localized wording when needed. Supply translations for any form controls the tool requires for that language. Use the returned state as the continuation. The tool presents and applies the answer, so do not open a second picker or submit a second answer. If it returns a fallback decision, use its pending question and continue with `agent-plugin question next <json>`. If wording is missing, supply it and retry with the same state. Treat an ignored result as stale and keep the current session state.",
+      "",
+      "When the tool is unavailable, use `agent-plugin question next <json>` for both preparation and replies. Pass the saved language and localized wording, preserving the direction keys. Keep the returned state with the session. A needs-input result retains the question and continuation without waiting on stdin. Restore unavailable state through the workflow recovery guidance.",
     ] : []),
   ].join("\n");
 

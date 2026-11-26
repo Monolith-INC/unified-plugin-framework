@@ -111,14 +111,18 @@ Installed releases use bundled dependencies locally. Missing or changed bundled 
 
 ### Native discovery answers in Codex
 
-For a Codex app-server client that supports MCP form input, configure an MCP server command of
-`agent-plugin question serve-codex`. Call its `upf_discovery_question` tool with the current
-discovery `state` from `agent-plugin question next`. The tool displays the question, passes
-the answer to the workflow, and returns the resulting state. Keep the returned state with the
-session. If a form times out after 60 seconds, is dismissed, or loses its input channel, use
-the replacement decision returned by the tool. It preserves the workflow step with a fresh
-answer identity. Pass `reply: false` if the caller cannot receive a text reply. Claude Code and Cursor
-continue to use their existing question paths.
+For a Codex client that supports MCP form input, register an MCP server with the command
+`agent-plugin question serve-codex`. The discovery skill uses the registered
+`upf_discovery_question` tool when it needs a direction. The tool displays the question,
+applies the answer and returns the workflow's continuation. Save that state with the session.
+A form timeout after 60 seconds, dismissal or disconnection returns a replacement decision
+with a fresh answer identity. Pass `reply: false` if the caller cannot receive a text reply.
+
+Pass the saved project language as a BCP 47 tag in `language`, such as `en` or `pt-BR`. For languages other than English, supply
+the translated question and option labels in `wording`, keyed by the same direction IDs.
+For languages other than English or Portuguese, supply translated form labels in `controls`
+(`answer`, `other`, `customPrompt`, and `customAnswer`) to use the native form. Discovery
+uses the existing question path when the tool is unavailable, including on Claude Code and Cursor.
 
 The optional `--knowledge-launcher` flag reads the exact recovery guidance from the project's
 existing store. See [Native question recovery](docs/knowledge/question-recovery.md) for the units.

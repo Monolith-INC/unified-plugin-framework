@@ -1,11 +1,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema, ListToolsRequestSchema, type ElicitRequestFormParams, type ElicitResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   nextDiscovery, questionRecoveryUnit, type DiscoveryState, type DiscoveryWaiting, type NativeQuestionPort,
-  type QuestionInterruption, type QuestionRecoveryLookup, type QuestionResponse,
+  type DiscoveryNext, type QuestionInterruption, type QuestionRecoveryLookup, type QuestionResponse, type QuestionWording,
 } from '@agent-plugins/workflows';
 
 type Elicit = (form: ElicitRequestFormParams, signal: AbortSignal) => Promise<ElicitResult>;
@@ -17,33 +18,45 @@ const nativeCapabilities = {
 const defaultTimeoutMs = 60_000;
 const toolName = 'upf_discovery_question';
 const other = 'custom';
+type FormLabels = Readonly<{ answer: string; other: string; customPrompt: string; customAnswer: string }>;
+type Presentation = Readonly<{ language?: string; wording?: QuestionWording; controls?: FormLabels }>;
+const english: FormLabels = { answer: 'Answer', other: 'Other', customPrompt: 'Enter your answer.', customAnswer: 'Your answer' };
+const portuguese: FormLabels = { answer: 'Resposta', other: 'Outra opção', customPrompt: 'Digite sua resposta.', customAnswer: 'Sua resposta' };
+const formLabels = ({ language = 'en', controls }: Presentation): FormLabels | undefined => {
+  switch (language.trim().toLowerCase().split('-')[0]) {
+    case 'en': return controls ?? english;
+    case 'pt': return controls ?? portuguese;
+    default: return controls;
+  }
+};
+
 const optionId = (key: string): string => `choice:${key}`;
 const selected = (pending: Pending, keys: readonly string[], custom?: string): NativeResponse => ({
   instance: pending.instance, channel: 'native', keys, ...(custom === undefined ? {} : { custom }),
 });
 const dismissed = (pending: Pending): QuestionResponse => ({ instance: pending.instance, channel: 'dismissed' });
 
-const choiceForm = (pending: Pending, options: readonly { readonly key?: string; readonly label: string }[]): ElicitRequestFormParams => ({
+const choiceForm = (pending: Pending, labels: FormLabels, options: readonly { readonly key?: string; readonly label: string }[]): ElicitRequestFormParams => ({
   mode: 'form', message: pending.question.explanation,
   requestedSchema: {
     type: 'object',
     properties: {
       choice: {
-        type: 'string', title: 'Answer', oneOf: [
+        type: 'string', title: labels.answer, oneOf: [
           ...pending.displayedKeys.map((key) => ({ const: optionId(key), title: options.find((option) => option.key === key)?.label ?? key })),
-          { const: other, title: 'Other' },
+          { const: other, title: labels.other },
         ],
       },
     },
     required: ['choice'],
   },
 });
-const customForm: ElicitRequestFormParams = {
-  mode: 'form', message: 'Enter your answer.',
+const customForm = (labels: FormLabels): ElicitRequestFormParams => ({
+  mode: 'form', message: labels.customPrompt,
   requestedSchema: {
-    type: 'object', properties: { answer: { type: 'string', title: 'Your answer' } }, required: ['answer'],
+    type: 'object', properties: { answer: { type: 'string', title: labels.customAnswer } }, required: ['answer'],
   },
-};
+});
 const customAnswer = (pending: Pending, response: ElicitResult): QuestionResponse | null => {
   const answer = response.content?.['answer'];
   return response.action !== 'accept' ? dismissed(pending)
@@ -53,26 +66,27 @@ const choiceAnswer = (pending: Pending, response: ElicitResult): QuestionRespons
   const key = pending.displayedKeys.find((item) => optionId(item) === response.content?.['choice']);
   return response.action !== 'accept' ? dismissed(pending) : key === undefined ? null : selected(pending, [key]);
 };
-const askSingle = async (elicit: Elicit, pending: Pending, signal: AbortSignal): Promise<QuestionResponse | null> => {
+const askSingle = async (elicit: Elicit, pending: Pending, signal: AbortSignal, labels: FormLabels): Promise<QuestionResponse | null> => {
   switch (pending.question.kind) {
     case 'single': {
-      const reply = await elicit(choiceForm(pending, pending.question.options), signal);
+      const reply = await elicit(choiceForm(pending, labels, pending.question.options), signal);
       return reply.action === 'accept' && reply.content?.['choice'] === other && !signal.aborted
-        ? customAnswer(pending, await elicit(customForm, signal)) : choiceAnswer(pending, reply);
+        ? customAnswer(pending, await elicit(customForm(labels), signal)) : choiceAnswer(pending, reply);
     }
     default: return null;
   }
 };
 
 /** Codex receives the answer to the exact form requested by this server. */
-export const codexQuestionPort = (elicit: Elicit): NativeQuestionPort => ({
-  ask: (pending, signal) => () => askSingle(elicit, pending, signal).catch(() => null),
+export const codexQuestionPort = (elicit: Elicit, labels = english): NativeQuestionPort => ({
+  ask: (pending, signal) => () => askSingle(elicit, pending, signal, labels).catch(() => null),
 });
 
-const prepare = (state: DiscoveryState, available: boolean, reply: boolean) => {
+const prepare = (state: DiscoveryState, available: boolean, reply: boolean, presentation: Presentation) => {
   const capabilities = { native: available ? nativeCapabilities.native : null, canvas: null, reply };
   switch (state.phase) {
-    case 'active': return nextDiscovery(state, { kind: 'ask', capabilities });
+    case 'active': return nextDiscovery(state, { kind: 'ask', capabilities, ...(presentation.language === undefined ? {} : { language: presentation.language }),
+      ...(presentation.wording === undefined ? {} : { wording: presentation.wording }) });
     case 'waiting': return state.pending.kind === 'needs-input'
       ? nextDiscovery(state, { kind: 'connect', capabilities }) : nextDiscovery(state);
     case 'paused': return nextDiscovery(state);
@@ -88,6 +102,13 @@ const recover = (waiting: DiscoveryWaiting, reason: QuestionInterruption, reply:
   state: nextDiscovery(waiting, { kind: 'recover-input', instance: waiting.pending.instance, reply }).state,
 });
 type Recovery = ReturnType<typeof recover>;
+type DecisionState = Exclude<DiscoveryState, { readonly phase: 'paused' }>;
+type Identity = Pick<DecisionState, 'occurrence' | 'node' | 'revision'>;
+type Recorded = { readonly identity: Identity; readonly result?: DiscoveryNext | Recovery };
+type Active = { readonly occurrence: number; readonly controller: AbortController };
+const sameIdentity = (a: Identity, b: Identity): boolean =>
+  a.occurrence === b.occurrence && a.node === b.node && a.revision === b.revision;
+const ignored = (state: DecisionState) => ({ kind: 'ignored' as const, state });
 type Attempt = { readonly response: QuestionResponse | null } | { readonly interrupted: 'timeout' | 'disconnect' };
 
 const receive = (port: NativeQuestionPort, pending: Pending, caller: AbortSignal, timeoutMs: number): Promise<Attempt> => {
@@ -111,50 +132,80 @@ const receive = (port: NativeQuestionPort, pending: Pending, caller: AbortSignal
 /** One connection owns in-flight and consumed occurrences. A restart is a separate connection. */
 export const createCodexDiscoveryHandler = (port: NativeQuestionPort, timeoutMs = defaultTimeoutMs) => {
   // Mutable connection bookkeeping is confined to this I/O boundary. Reserve before awaiting the host.
-  const inFlight = new Set<string>();
-  const settled = new Map<string, { readonly occurrence: number; readonly node: string; readonly revision?: string; readonly recovery?: Recovery }>();
-  const ask = async (state: Exclude<DiscoveryState, { readonly phase: 'paused' }>, available: boolean, signal: AbortSignal, reply: boolean) => {
-    const previous = settled.get(state.session);
-    if (state.occurrence === previous?.occurrence && state.node === previous.node &&
-        state.revision === previous.revision && previous.recovery !== undefined) return previous.recovery;
-    if (inFlight.has(state.session) || state.occurrence <= (previous?.occurrence ?? -1)) return { kind: 'ignored', state };
-    const prepared = prepare(state, available, reply);
+  const inFlight = new Map<string, Active>();
+  const settled = new Map<string, Recorded>();
+  const ask = async (state: DecisionState, available: boolean, signal: AbortSignal, reply: boolean,
+    presentation: Presentation, nativePort: NativeQuestionPort) => {
+    const { session, occurrence, node, revision } = state;
+    const identity = { occurrence, node, ...(revision === undefined ? {} : { revision }) };
+    const current = inFlight.get(session);
+    const previous = settled.get(session);
+    if (occurrence <= (current?.occurrence ?? -1)) return ignored(state);
+    if (previous !== undefined && occurrence <= previous.identity.occurrence) {
+      if (!sameIdentity(identity, previous.identity)) return ignored(state);
+      if (previous.result !== undefined) return previous.result;
+    }
+    const prepared = prepare(state, available, reply, presentation);
+    if (prepared.kind === 'recovery' || prepared.kind === 'invalid-event') return prepared;
+    if (current !== undefined) {
+      inFlight.delete(session);
+      current.controller.abort();
+    }
+    settled.set(session, { identity });
+    const remember = <T extends DiscoveryNext | Recovery>(result: T): T => {
+      settled.set(session, { identity, result });
+      return result;
+    };
     if (prepared.kind !== 'waiting' || prepared.state.phase !== 'waiting' || prepared.state.pending.kind !== 'native') {
-      return !available && state.phase === 'active' && (prepared.kind === 'waiting' || prepared.kind === 'needs-input')
+      const result = !available && state.phase === 'active' && (prepared.kind === 'waiting' || prepared.kind === 'needs-input')
         ? { ...prepared, recoveryUnit: questionRecoveryUnit('unavailable') } : prepared;
+      return result;
     }
     const waiting = prepared.state;
-    const { session, occurrence, pending } = waiting;
-    const identity = { occurrence, node: waiting.node, ...(waiting.revision === undefined ? {} : { revision: waiting.revision }) };
-    const interrupted = (reason: QuestionInterruption): Recovery => {
-      const recovery = recover(waiting, reason, reply);
-      settled.set(session, { ...identity, recovery });
-      return recovery;
-    };
-    switch (true) {
-      case signal.aborted: return interrupted('disconnect');
-      case !available: return interrupted('unavailable');
-      default: {
-        inFlight.add(session);
-        return receive(port, pending, signal, timeoutMs).then((attempt) => {
-          if ('interrupted' in attempt) return interrupted(attempt.interrupted);
-          if (attempt.response === null) return interrupted('unavailable');
-          if (attempt.response.channel === 'dismissed') return interrupted('dismissed');
-          const result = continueDecision(waiting, attempt.response);
-          if (result.kind === 'ready' || result.kind === 'needs-clarification') settled.set(session, identity);
-          return result;
-        }).finally(() => inFlight.delete(session));
-      }
-    }
+    const interrupted = (reason: QuestionInterruption): Recovery => remember(recover(waiting, reason, reply));
+    if (signal.aborted) return interrupted('disconnect');
+    if (!available) return interrupted('unavailable');
+
+    const attempt = { occurrence, controller: new AbortController() };
+    inFlight.set(session, attempt);
+    const cancellation = AbortSignal.any([signal, attempt.controller.signal]);
+    return receive(nativePort, waiting.pending, cancellation, timeoutMs).then((event) => {
+      if (inFlight.get(session) !== attempt) return ignored(state);
+      if ('interrupted' in event) return interrupted(event.interrupted);
+      if (event.response === null) return interrupted('unavailable');
+      if (event.response.channel === 'dismissed') return interrupted('dismissed');
+      const result = continueDecision(waiting, event.response);
+      return result.kind === 'ready' || result.kind === 'needs-clarification' ? remember(result) : result;
+    }).finally(() => {
+      if (inFlight.get(session) === attempt) inFlight.delete(session);
+    });
   };
-  return async (state: DiscoveryState, available: boolean, signal: AbortSignal, reply = true) =>
-    state.phase === 'paused' ? nextDiscovery(state) : ask(state, available, signal, reply);
+  return async (state: DiscoveryState, available: boolean, signal: AbortSignal, reply = true,
+    presentation: Presentation = {}, nativePort = port) =>
+    state.phase === 'paused' ? nextDiscovery(state) : ask(state, available, signal, reply, presentation, nativePort);
 };
 
 const tool = {
   name: toolName, description: 'Ask a pending UPF discovery question and return the resulting workflow state.',
-  inputSchema: { type: 'object' as const, properties: { state: { type: 'object' }, reply: { type: 'boolean' } }, required: ['state'] },
+  inputSchema: {
+    type: 'object' as const, required: ['state'],
+    properties: {
+      state: { type: 'object' }, reply: { type: 'boolean' }, language: { type: 'string', description: 'Project language as a BCP 47 tag, for example en or pt-BR.' },
+      wording: {
+        type: 'object', required: ['explanation', 'labels'],
+        properties: { explanation: { type: 'string' }, labels: { type: 'object', additionalProperties: { type: 'string' } } },
+      },
+      controls: {
+        type: 'object', required: ['answer', 'other', 'customPrompt', 'customAnswer'],
+        properties: { answer: { type: 'string' }, other: { type: 'string' }, customPrompt: { type: 'string' }, customAnswer: { type: 'string' } },
+      },
+    },
+  },
 };
+const nonempty = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '';
+const formControls = (value: unknown): value is FormLabels => typeof value === 'object' && value !== null
+  && 'answer' in value && nonempty(value.answer) && 'other' in value && nonempty(value.other)
+  && 'customPrompt' in value && nonempty(value.customPrompt) && 'customAnswer' in value && nonempty(value.customAnswer);
 const content = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 
 type QuestionResult = Awaited<ReturnType<ReturnType<typeof createCodexDiscoveryHandler>>>;
@@ -165,18 +216,31 @@ const withKnowledge = async (result: QuestionResult, lookup?: QuestionRecoveryLo
 };
 
 /** Serve the Codex-specific transport on stdio. The CLI supplies the shared state decoder. */
-export const serveCodexQuestions = async (isDiscoveryState: (value: unknown) => value is DiscoveryState, lookup?: QuestionRecoveryLookup): Promise<number> => {
+export const serveCodexQuestions = async (isDiscoveryState: (value: unknown) => value is DiscoveryState,
+  isQuestionWording: (value: unknown) => value is QuestionWording, lookup?: QuestionRecoveryLookup,
+  transport: Transport = new StdioServerTransport()): Promise<number> => {
   const server = new Server({ name: 'upf-codex-questions', version: '0.1.0' }, { capabilities: { tools: {} } });
-  const handle = createCodexDiscoveryHandler(codexQuestionPort((form, signal) => server.elicitInput(form, { signal })));
+  const elicit: Elicit = (form, signal) => server.elicitInput(form, { signal });
+  const handle = createCodexDiscoveryHandler(codexQuestionPort(elicit));
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [tool] }));
   server.setRequestHandler(CallToolRequestSchema, async ({ params }, { signal }) => {
-    const state = params.arguments?.['state'];
-    const reply = params.arguments?.['reply'];
-    return params.name === toolName && isDiscoveryState(state) && (reply === undefined || typeof reply === 'boolean')
-      ? content(await withKnowledge(await handle(state, server.getClientCapabilities()?.elicitation?.form !== undefined, signal, reply), lookup))
-      : { ...content({ kind: 'invalid-input' }), isError: true };
+    const { state, reply, language, wording, controls } = params.arguments ?? {};
+    if (params.name !== toolName || !isDiscoveryState(state) || (reply !== undefined && typeof reply !== 'boolean')
+      || (language !== undefined && !nonempty(language)) || (wording !== undefined && !isQuestionWording(wording))
+      || (controls !== undefined && !formControls(controls))) {
+      return { ...content({ kind: 'invalid-input' }), isError: true };
+    }
+    const presentation = {
+      ...(language === undefined ? {} : { language }),
+      ...(wording === undefined ? {} : { wording }),
+      ...(controls === undefined ? {} : { controls }),
+    };
+    const labels = formLabels(presentation);
+    const available = labels !== undefined && server.getClientCapabilities()?.elicitation?.form !== undefined;
+    return content(await withKnowledge(await handle(state, available, signal, reply, presentation,
+      codexQuestionPort(elicit, labels)), lookup));
   });
   const closed = new Promise<number>((resolve) => { server.onclose = () => resolve(0); });
-  await server.connect(new StdioServerTransport());
+  await server.connect(transport);
   return closed;
 };

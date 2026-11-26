@@ -1,4 +1,4 @@
-import { nextDiscovery, normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type DiscoveryEvent, type DiscoveryState, type Question, type QuestionCapabilities, type QuestionResponse } from "@agent-plugins/workflows";
+import { nextDiscovery, normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type DiscoveryEvent, type DiscoveryState, type Question, type QuestionCapabilities, type QuestionResponse, type QuestionWording } from "@agent-plugins/workflows";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 const record = (value: unknown): value is RecordValue => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,14 +32,14 @@ const activeState = (value: RecordValue): boolean => typeof value.session === "s
 const pending = (value: unknown): boolean => record(value) && channel(value.kind) && typeof value.instance === "string"
   && question(value.question) && strings(value.displayedKeys) && strings(value.answerForms) && context(value.continuation)
   && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
-const wording = (value: unknown): boolean => value === undefined || record(value) && typeof value.explanation === "string"
+export const questionWording = (value: unknown): value is QuestionWording => record(value) && typeof value.explanation === "string"
   && record(value.labels) && Object.values(value.labels).every((item) => typeof item === "string");
 const facts = (value: unknown): boolean => record(value) && Object.entries(value).every(([key, item]) => ["clear", "discuss", "small", "design"].includes(key) && typeof item === "boolean");
 export const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
   value.phase === "paused" ? record(value.previous) && value.previous.phase !== "paused" && discoveryState(value.previous)
     : activeState(value) && (value.phase === "active" || value.phase === "waiting" && optionalString(value.clarification) && pending(value.pending)));
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
-  (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && wording(value.wording)
+  (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && (value.wording === undefined || questionWording(value.wording))
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
   || value.kind === "recover-input" && typeof value.instance === "string" && typeof value.reply === "boolean"
   || value.kind === "facts" && facts(value.facts) && optionalString(value.context)

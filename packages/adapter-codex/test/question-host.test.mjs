@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { codexQuestionPort, createCodexDiscoveryHandler } from '../dist/question-host.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { codexQuestionPort, createCodexDiscoveryHandler, serveCodexQuestions } from '../dist/question-host.js';
 
 const state = { session: 'discovery-session', occurrence: 0, node: 'context', phase: 'active' };
 const signal = new AbortController().signal;
@@ -19,8 +22,9 @@ test('a form response reaches the existing continuation once, including concurre
   const choices = requests[0].requestedSchema.properties.choice.oneOf;
   assert.ok(choices.some(({ const: id, title }) => id === 'choice:conversation' && title !== id));
   gate.resolve(answer('choice:conversation'));
-  assert.equal((await first).state.node, 'conversation');
-  assert.equal((await handle(state, true, signal)).kind, 'ignored');
+  const completed = await first;
+  assert.equal(completed.state.node, 'conversation');
+  assert.deepEqual(await handle(state, true, signal), completed);
   assert.equal(requests.length, 1);
 });
 
@@ -48,6 +52,8 @@ test('custom text is collected separately and stays literal even when it resembl
   assert.equal(result.kind, 'needs-clarification');
   assert.equal(result.custom, value);
   assert.equal(result.state.node, 'context');
+  assert.deepEqual(await handle(state, true, signal), result);
+  assert.equal(replies.length, 0);
 });
 
 test('an unavailable client uses the shared text fallback without sending a form', async () => {
@@ -103,4 +109,75 @@ test('a host error returns a usable text decision', async () => {
   assert.equal(result.reason, 'unavailable');
   assert.equal(result.recoveryUnit, '3-mechanics/question-unavailable');
   assert.equal(result.state.pending.kind, 'text');
+});
+
+test('a newer review revision replaces a form before its answer arrives', async () => {
+  const oldAnswer = Promise.withResolvers();
+  const oldStarted = Promise.withResolvers();
+  let firstForm = true;
+  const review = { ...state, node: 'review', revision: 'old' };
+  const handle = createCodexDiscoveryHandler(codexQuestionPort((_form, formSignal) => {
+    if (firstForm) {
+      firstForm = false;
+      oldStarted.resolve(formSignal);
+      return oldAnswer.promise;
+    }
+    return Promise.resolve(answer('choice:complete'));
+  }));
+  const oldCall = handle(review, true, signal);
+  const oldSignal = await oldStarted.promise;
+  const revised = { ...review, occurrence: 1, revision: 'new' };
+  const completed = await handle(revised, true, signal);
+  assert.equal(oldSignal.aborted, true);
+  oldAnswer.resolve(answer('choice:complete'));
+  assert.equal((await oldCall).kind, 'ignored');
+  assert.equal((await handle(review, true, signal)).kind, 'ignored');
+  assert.equal(completed.kind, 'ready');
+  assert.equal(completed.state.node, 'complete');
+  assert.deepEqual(await handle(revised, true, signal), completed);
+});
+
+test('the MCP tool carries localized discovery and custom form wording', async (t) => {
+  const client = new Client({ name: 'localized-discovery-test', version: '1.0.0' }, {
+    capabilities: { elicitation: { form: {} } },
+  });
+  const formMessages = [];
+  client.setRequestHandler(ElicitRequestSchema, ({ params }) => {
+    formMessages.push(params);
+    return params.requestedSchema.properties.choice
+      ? answer('custom') : { action: 'accept', content: { answer: '  Outra direção  ' } };
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = serveCodexQuestions(
+    (input) => input?.session === state.session,
+    (input) => typeof input?.explanation === 'string',
+    undefined, serverTransport,
+  );
+  t.after(async () => {
+    await client.close();
+    await server;
+  });
+  await client.connect(clientTransport);
+  const { tools } = await client.listTools();
+  const tool = tools.find(({ name }) => name === 'upf_discovery_question');
+  assert.ok(tool);
+  const result = await client.callTool({ name: tool.name, arguments: {
+    state, language: 'pt-BR', wording: {
+      explanation: 'Como quer seguir?',
+      labels: { execute: 'Prosseguir', conversation: 'Conversar' },
+    },
+  } });
+  assert.equal(formMessages[0].message, 'Como quer seguir?');
+  const choice = formMessages[0].requestedSchema.properties.choice;
+  assert.equal(choice.title, 'Resposta');
+  assert.deepEqual(choice.oneOf, [
+    { const: 'choice:conversation', title: 'Conversar' },
+    { const: 'choice:execute', title: 'Prosseguir' },
+    { const: 'custom', title: 'Outra opção' },
+  ]);
+  assert.equal(formMessages[1].message, 'Digite sua resposta.');
+  assert.equal(formMessages[1].requestedSchema.properties.answer.title, 'Sua resposta');
+  const continuation = JSON.parse(result.content[0].text);
+  assert.equal(continuation.kind, 'needs-clarification');
+  assert.equal(continuation.custom, '  Outra direção  ');
 });
