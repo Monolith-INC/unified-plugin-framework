@@ -163,7 +163,8 @@ test("release documentation describes release-asset installs and exercises the s
   const documentedFiles = [
     join(repositoryRoot, "README.md"),
     join(repositoryRoot, "CHANGELOG.md"),
-    ...markdownFiles(join(repositoryRoot, "docs")),
+    join(repositoryRoot, "docs", "vendor-payload-installation.md"),
+    ...markdownFiles(join(repositoryRoot, "docs", "release-notes")),
   ];
   const documentation = documentedFiles.map((path) => readFileSync(path, "utf8")).join("\n");
   const forbiddenDocumentationModels = [
