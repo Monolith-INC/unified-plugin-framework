@@ -41,6 +41,7 @@ export const discoveryState = (value: unknown): value is DiscoveryState => recor
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
   (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && wording(value.wording)
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
+  || value.kind === "recover-input" && typeof value.instance === "string" && typeof value.reply === "boolean"
   || value.kind === "facts" && facts(value.facts) && optionalString(value.context)
   || value.kind === "advance" && optionalString(value.revision)
   || value.kind === "review-revision" && typeof value.revision === "string"
@@ -75,6 +76,8 @@ Pass the project's saved language in the ask event. English uses the authored wo
 Keep the returned state and use pending.question, pending.answerForms and pending.continuation.
 For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
 {"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.
+If native input fails, send {"kind":"recover-input","instance":<pending instance>,"reply":true|false}.
+Use the returned replacement decision for text or unattended recovery; the old instance cannot answer it.
 Use advance for a single available direction, with revision when entering review;
 use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.
 After clarifying a custom answer, use retry to create a fresh decision before asking again.

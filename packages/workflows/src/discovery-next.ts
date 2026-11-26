@@ -9,6 +9,7 @@ export interface DiscoveryPaused { readonly phase: 'paused'; readonly previous: 
 export type DiscoveryState = DiscoveryActive | DiscoveryWaiting | DiscoveryPaused;
 export type DiscoveryEvent = { readonly kind: 'ask' | 'connect'; readonly capabilities: QuestionCapabilities; readonly language?: string; readonly wording?: QuestionWording }
   | { readonly kind: 'answer'; readonly response: QuestionResponse; readonly revision?: string }
+  | { readonly kind: 'recover-input'; readonly instance: string; readonly reply: boolean }
   | { readonly kind: 'facts'; readonly facts: Readonly<{ clear?: boolean; discuss?: boolean; small?: boolean; design?: boolean }>; readonly context?: string }
   | { readonly kind: 'advance'; readonly revision?: string }
   | { readonly kind: 'review-revision'; readonly revision: string }
@@ -62,6 +63,17 @@ const prepare = (state: DiscoveryActive, node: DiscoveryNode, event: Extract<Dis
   }
 };
 const unchanged = (state: DiscoveryState, node: DiscoveryNode, kind: 'ready' | 'needs-input' | 'needs-custom' | 'waiting' | 'paused' | 'invalid-event'): DiscoveryNext => ({ kind, state, guidance: guidance(node) });
+const recoverInput = (state: DiscoveryWaiting, node: DiscoveryNode, event: Extract<DiscoveryEvent, { kind: 'recover-input' }>): DiscoveryNext => {
+  const replacement = { ...state, occurrence: state.occurrence + 1 };
+  const pending = prepareRenderedQuestion({ ...state.pending.continuation, instance: instance(replacement) },
+    { native: null, canvas: null, reply: event.reply }, true);
+  switch (true) {
+    case state.pending.kind !== 'native' || event.instance !== state.pending.instance || !Number.isSafeInteger(replacement.occurrence):
+      return unchanged(state, node, 'invalid-event');
+    case pending.kind === 'invalid': return unchanged(state, node, 'invalid-event');
+    default: return unchanged({ ...replacement, pending }, node, pending.kind === 'needs-input' ? 'needs-input' : 'waiting');
+  }
+};
 const respond = (state: DiscoveryWaiting, node: DiscoveryNode, event: Extract<DiscoveryEvent, { kind: 'answer' }>): DiscoveryNext => {
   const answer = normalizeQuestionAnswer(state.pending.continuation, event.response);
   const target = answer.kind === 'answer' && answer.custom === null && answer.keys.length === 1 ? answer.keys[0] : undefined;
@@ -120,6 +132,7 @@ export const nextDiscovery = (state: DiscoveryState | undefined, event?: Discove
   if (state.phase === 'waiting') {
     if (event?.kind === 'retry') return nextDiscovery({ session: state.session, occurrence: state.occurrence + 1, node: state.node, phase: 'active', ...(state.revision === undefined ? {} : { revision: state.revision }) });
     if (state.clarification !== undefined) return event === undefined ? { kind: 'needs-clarification', state, guidance: guidance(result.node), custom: state.clarification } : unchanged(state, result.node, 'invalid-event');
+    if (event?.kind === 'recover-input') return recoverInput(state, result.node, event);
     if (event?.kind === 'answer') return respond(state, result.node, event);
     if (event?.kind === 'connect' && state.pending.kind === 'needs-input') {
       const pending = prepareRenderedQuestion(state.pending.continuation, event.capabilities, true);

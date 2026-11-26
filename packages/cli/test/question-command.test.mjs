@@ -56,6 +56,23 @@ test('discovery next resumes a closed-input decision through the command boundar
   assert.notEqual(run('next', { state: { phase: 'waiting' } }).code, 0);
 });
 
+test('replacing failed native input preserves the question and rejects its old answer', () => {
+  const state = { session: 'recovery', occurrence: 0, node: 'context', phase: 'active' };
+  const capabilities = { native: { single: true, several: false, consent: false, custom: true }, canvas: null, reply: true };
+  const waiting = run('next', { state, event: { kind: 'ask', capabilities } }).output.state;
+  const old = waiting.pending.instance;
+  const recovery = run('next', { state: waiting, event: { kind: 'recover-input', instance: old, reply: false } }).output;
+  assert.equal(recovery.kind, 'needs-input');
+  assert.notEqual(recovery.state.pending.instance, old);
+  assert.deepEqual(recovery.state.pending.question, waiting.pending.question);
+  const reconnected = run('next', { state: recovery.state, event: { kind: 'connect', capabilities } }).output;
+  const late = run('next', { state: reconnected.state, event: {
+    kind: 'answer', response: { channel: 'native', instance: old, keys: ['conversation'] },
+  } }).output;
+  assert.equal(late.kind, 'invalid-event');
+  assert.equal(late.state.node, 'context');
+});
+
 test('elicitation selections stay in the discovery continuation', () => {
   const state = { session: 's', occurrence: 3, node: 'elicitation', phase: 'active' };
   const action = (state, action) => run('next', { state, event: { kind: 'elicitation', session: 's', occurrence: 3, eventId: action.kind, action } }).output;

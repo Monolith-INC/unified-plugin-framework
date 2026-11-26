@@ -115,7 +115,9 @@ For a Codex app-server client that supports MCP form input, configure an MCP ser
 `agent-plugin question serve-codex`. Call its `upf_discovery_question` tool with the current
 discovery `state` from `agent-plugin question next`. The tool displays the question, passes
 the answer to the workflow, and returns the resulting state. Keep the returned state with the
-session. If form input is unavailable, use the shared text decision path. Claude Code and Cursor
+session. If a form times out after 60 seconds, is dismissed, or loses its input channel, use
+the replacement decision returned by the tool. It preserves the workflow step with a fresh
+answer identity. Pass `reply: false` if the caller cannot receive a text reply. Claude Code and Cursor
 continue to use their existing question paths.
 
 ## Documentation
