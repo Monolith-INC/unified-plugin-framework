@@ -1,7 +1,7 @@
 ---
 type: task-check-evidence
 story: AGE-196
-status: draft
+status: active
 ---
 
 # AGE-202 live Codex handoff
