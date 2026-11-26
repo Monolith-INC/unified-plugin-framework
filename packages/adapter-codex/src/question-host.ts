@@ -4,7 +4,8 @@ import {
   CallToolRequestSchema, ListToolsRequestSchema, type ElicitRequestFormParams, type ElicitResult,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
-  nextDiscovery, type DiscoveryState, type DiscoveryWaiting, type NativeQuestionPort, type QuestionResponse,
+  nextDiscovery, questionRecoveryUnit, type DiscoveryState, type DiscoveryWaiting, type NativeQuestionPort,
+  type QuestionInterruption, type QuestionRecoveryLookup, type QuestionResponse,
 } from '@agent-plugins/workflows';
 
 type Elicit = (form: ElicitRequestFormParams, signal: AbortSignal) => Promise<ElicitResult>;
@@ -80,10 +81,10 @@ const prepare = (state: DiscoveryState, available: boolean, reply: boolean) => {
 const continueDecision = (state: DiscoveryWaiting, response: QuestionResponse) =>
   nextDiscovery(state, { kind: 'answer', response, ...(state.revision === undefined ? {} : { revision: state.revision }) });
 
-type Interruption = 'timeout' | 'disconnect' | 'dismissed' | 'unavailable';
-const recover = (waiting: DiscoveryWaiting, reason: Interruption, reply: boolean) => ({
+const recover = (waiting: DiscoveryWaiting, reason: QuestionInterruption, reply: boolean) => ({
   kind: reason === 'dismissed' ? 'dismissed' as const : 'host-unavailable' as const,
   reason,
+  recoveryUnit: questionRecoveryUnit(reason),
   state: nextDiscovery(waiting, { kind: 'recover-input', instance: waiting.pending.instance, reply }).state,
 });
 type Recovery = ReturnType<typeof recover>;
@@ -118,11 +119,14 @@ export const createCodexDiscoveryHandler = (port: NativeQuestionPort, timeoutMs 
         state.revision === previous.revision && previous.recovery !== undefined) return previous.recovery;
     if (inFlight.has(state.session) || state.occurrence <= (previous?.occurrence ?? -1)) return { kind: 'ignored', state };
     const prepared = prepare(state, available, reply);
-    if (prepared.kind !== 'waiting' || prepared.state.phase !== 'waiting' || prepared.state.pending.kind !== 'native') return prepared;
+    if (prepared.kind !== 'waiting' || prepared.state.phase !== 'waiting' || prepared.state.pending.kind !== 'native') {
+      return !available && state.phase === 'active' && (prepared.kind === 'waiting' || prepared.kind === 'needs-input')
+        ? { ...prepared, recoveryUnit: questionRecoveryUnit('unavailable') } : prepared;
+    }
     const waiting = prepared.state;
     const { session, occurrence, pending } = waiting;
     const identity = { occurrence, node: waiting.node, ...(waiting.revision === undefined ? {} : { revision: waiting.revision }) };
-    const interrupted = (reason: Interruption): Recovery => {
+    const interrupted = (reason: QuestionInterruption): Recovery => {
       const recovery = recover(waiting, reason, reply);
       settled.set(session, { ...identity, recovery });
       return recovery;
@@ -153,8 +157,15 @@ const tool = {
 };
 const content = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] });
 
+type QuestionResult = Awaited<ReturnType<ReturnType<typeof createCodexDiscoveryHandler>>>;
+const withKnowledge = async (result: QuestionResult, lookup?: QuestionRecoveryLookup) => {
+  if (lookup === undefined || !('recoveryUnit' in result) || result.recoveryUnit === undefined) return result;
+  const guidance = await lookup(result.recoveryUnit)().catch(() => null);
+  return guidance === null ? result : { ...result, recoveryGuidance: guidance };
+};
+
 /** Serve the Codex-specific transport on stdio. The CLI supplies the shared state decoder. */
-export const serveCodexQuestions = async (isDiscoveryState: (value: unknown) => value is DiscoveryState): Promise<number> => {
+export const serveCodexQuestions = async (isDiscoveryState: (value: unknown) => value is DiscoveryState, lookup?: QuestionRecoveryLookup): Promise<number> => {
   const server = new Server({ name: 'upf-codex-questions', version: '0.1.0' }, { capabilities: { tools: {} } });
   const handle = createCodexDiscoveryHandler(codexQuestionPort((form, signal) => server.elicitInput(form, { signal })));
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: [tool] }));
@@ -162,7 +173,7 @@ export const serveCodexQuestions = async (isDiscoveryState: (value: unknown) => 
     const state = params.arguments?.['state'];
     const reply = params.arguments?.['reply'];
     return params.name === toolName && isDiscoveryState(state) && (reply === undefined || typeof reply === 'boolean')
-      ? content(await handle(state, server.getClientCapabilities()?.elicitation?.form !== undefined, signal, reply))
+      ? content(await withKnowledge(await handle(state, server.getClientCapabilities()?.elicitation?.form !== undefined, signal, reply), lookup))
       : { ...content({ kind: 'invalid-input' }), isError: true };
   });
   const closed = new Promise<number>((resolve) => { server.onclose = () => resolve(0); });

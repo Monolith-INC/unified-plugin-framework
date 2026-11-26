@@ -26,6 +26,7 @@ import { RELEASE_VERSION } from "./release-asset.js";
 import { nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
 import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
 import { discoveryState, runQuestion } from "./question-command.js";
+import { questionKnowledge, recoveryLauncher } from "./question-knowledge.js";
 import { serveCodexQuestions } from "@agent-plugins/adapter-codex";
 
 const USAGE = `Usage: agent-plugin <command> [options]
@@ -47,7 +48,8 @@ Commands:
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
   question prepare|answer|next <json> Prepare decisions or resolve discovery without storing state
-  question serve-codex                Serve native discovery questions to a Codex MCP client
+  question serve-codex [--knowledge-launcher <absolute-path>]
+                                    Serve native questions with optional Project Knowledge reads
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -79,8 +81,15 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
   const [command, ...rest] = argv;
 
   switch (command) {
-    case "question":
-      return rest.length === 1 && rest[0] === "serve-codex" ? serveCodexQuestions(discoveryState) : runQuestion(io, rest);
+    case "question": {
+      const launcher = recoveryLauncher(rest);
+      switch (true) {
+        case rest[0] !== "serve-codex": return runQuestion(io, rest);
+        case rest.length === 1: return serveCodexQuestions(discoveryState);
+        case launcher === null: return printError(io, "Use an absolute --knowledge-launcher path.", 2);
+        default: return serveCodexQuestions(discoveryState, questionKnowledge(launcher, io.cwd(), process.execPath)); // fp-allow: no-ambient-effect -- CLI process boundary
+      }
+    }
     case "project":
       return runProject(rest, io);
     case "validate":

@@ -120,6 +120,9 @@ the replacement decision returned by the tool. It preserves the workflow step wi
 answer identity. Pass `reply: false` if the caller cannot receive a text reply. Claude Code and Cursor
 continue to use their existing question paths.
 
+The optional `--knowledge-launcher` flag reads the exact recovery guidance from the project's
+existing store. See [Native question recovery](docs/knowledge/question-recovery.md) for the units.
+
 ## Documentation
 
 - [Setup and recovery](docs/workflows/tooling-bootstrap.md)

@@ -55,6 +55,7 @@ test('an unavailable client uses the shared text fallback without sending a form
   const result = await handle(state, false, signal);
   assert.equal(result.kind, 'waiting');
   assert.equal(result.state.pending.kind, 'text');
+  assert.equal(result.recoveryUnit, '3-mechanics/question-unavailable');
 });
 
 test('a late reply after cancellation does not advance or consume the decision', async () => {
@@ -90,6 +91,7 @@ test('a stalled native form times out without blocking a different decision', as
   assert.equal((await handle({ ...state, session: 'independent' }, true, signal)).state.node, 'conversation');
   const result = await waiting;
   assert.equal(result.reason, 'timeout');
+  assert.equal(result.recoveryUnit, '3-mechanics/question-timeout');
   assert.equal(result.state.pending.kind, 'needs-input');
   gate.resolve({ channel: 'native', instance: JSON.stringify([state.session, 0, null]), keys: ['conversation'] });
   assert.deepEqual(await handle(state, true, signal), result);
@@ -99,5 +101,6 @@ test('a host error returns a usable text decision', async () => {
   const handle = createCodexDiscoveryHandler(codexQuestionPort(async () => { throw new Error('fixture'); }));
   const result = await handle(state, true, signal);
   assert.equal(result.reason, 'unavailable');
+  assert.equal(result.recoveryUnit, '3-mechanics/question-unavailable');
   assert.equal(result.state.pending.kind, 'text');
 });
