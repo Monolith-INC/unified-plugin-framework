@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@agent-plugins/compiler": "workspace:*",
-    "@agent-plugins/core": "workspace:*"
+    "@agent-plugins/core": "workspace:*",
+    "@agent-plugins/workflows": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2"
   },
-  "devDependencies": { "@agent-plugins/testing": "workspace:*", "@agent-plugins/workflows": "workspace:*" }
+  "devDependencies": { "@agent-plugins/testing": "workspace:*" }
 }

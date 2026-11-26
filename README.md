@@ -109,6 +109,15 @@ The framework's [dependency lock](io.github.monolith-inc.upf/onboarded.lock.json
 
 Installed releases use bundled dependencies locally. Missing or changed bundled content is reported as an error rather than silently fetching a replacement. Each release also provides checksums and signed build provenance.
 
+### Native discovery answers in Codex
+
+For a Codex app-server client that supports MCP form input, configure an MCP server command of
+`agent-plugin question serve-codex`. Call its `upf_discovery_question` tool with the current
+discovery `state` from `agent-plugin question next`. The tool displays the question, passes
+the answer to the workflow, and returns the resulting state. Keep the returned state with the
+session. If form input is unavailable, use the shared text decision path. Claude Code and Cursor
+continue to use their existing question paths.
+
 ## Documentation
 
 - [Setup and recovery](docs/workflows/tooling-bootstrap.md)

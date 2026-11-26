@@ -25,7 +25,8 @@ import { bundleResolver, type BundleSource, type ResolvedBundle } from "./bundle
 import { RELEASE_VERSION } from "./release-asset.js";
 import { nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
 import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
-import { runQuestion } from "./question-command.js";
+import { discoveryState, runQuestion } from "./question-command.js";
+import { serveCodexQuestions } from "@agent-plugins/adapter-codex";
 
 const USAGE = `Usage: agent-plugin <command> [options]
 
@@ -46,6 +47,7 @@ Commands:
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
   question prepare|answer|next <json> Prepare decisions or resolve discovery without storing state
+  question serve-codex                Serve native discovery questions to a Codex MCP client
 `;
 
 const CREATE_USAGE = `Usage: agent-plugin create <plugin-name> [--path <dir>]`;
@@ -78,7 +80,7 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
 
   switch (command) {
     case "question":
-      return runQuestion(io, rest);
+      return rest.length === 1 && rest[0] === "serve-codex" ? serveCodexQuestions(discoveryState) : runQuestion(io, rest);
     case "project":
       return runProject(rest, io);
     case "validate":

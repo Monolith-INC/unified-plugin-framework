@@ -35,7 +35,7 @@ const pending = (value: unknown): boolean => record(value) && channel(value.kind
 const wording = (value: unknown): boolean => value === undefined || record(value) && typeof value.explanation === "string"
   && record(value.labels) && Object.values(value.labels).every((item) => typeof item === "string");
 const facts = (value: unknown): boolean => record(value) && Object.entries(value).every(([key, item]) => ["clear", "discuss", "small", "design"].includes(key) && typeof item === "boolean");
-const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
+export const discoveryState = (value: unknown): value is DiscoveryState => record(value) && (
   value.phase === "paused" ? record(value.previous) && value.previous.phase !== "paused" && discoveryState(value.previous)
     : activeState(value) && (value.phase === "active" || value.phase === "waiting" && optionalString(value.clarification) && pending(value.pending)));
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (

@@ -19,6 +19,7 @@ export {
   prepareRenderedQuestion,
   type ChannelCapability,
   type DecisionContext,
+  type NativeQuestionPort,
   type PreparedQuestion,
   type QuestionAnswer,
   type QuestionCapabilities,

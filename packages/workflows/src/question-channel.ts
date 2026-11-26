@@ -79,6 +79,12 @@ export type QuestionResponse =
   | { readonly channel: 'text'; readonly value: string; readonly instance: string }
   | { readonly channel: 'native' | 'canvas'; readonly keys: readonly string[]; readonly custom?: string; readonly instance: string }
   | { readonly channel: 'dismissed'; readonly instance: string };
+
+/** A host receives the prepared decision and returns a neutral response or reports no available input. */
+export interface NativeQuestionPort {
+  readonly ask: (pending: Extract<PreparedQuestion, { readonly continuation: DecisionContext }>, signal: AbortSignal) =>
+    () => Promise<QuestionResponse | null>;
+}
 export type QuestionAnswer =
   | { readonly kind: 'answer'; readonly instance: string; readonly keys: readonly string[]; readonly custom: string | null; readonly consent: 'accepted' | 'declined' | null }
   | { readonly kind: 'needs-custom'; readonly instance: string; readonly keys: readonly string[] }
