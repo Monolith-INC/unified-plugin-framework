@@ -251,18 +251,51 @@ export const configureReview = async (project: string, input: BootstrapInput): P
   return safe ? configureReviewFile(project, input, path) : setupFailure("Review configuration follows a link outside the accepted project path; preserve it and reconcile its location.");
 };
 export const reviewBindingsValid = (value: unknown): value is Readonly<Record<string, unknown>> => object(value)
+  && (value.version === undefined || value.version === 1 || value.version === 2)
   && object(value.scm) && bindingText(value.scm.provider)
-  && capabilitiesDeclared(value.scm, ["get_pull_request", "get_pull_request_diff"])
-  && capabilitiesDeclared(value.tracker, ["fetch_work_item", "fetch_parent", "list_linked_artifacts"]);
+  && capabilitiesDeclared(value.scm, ["get_pull_request", "get_pull_request_diff"], scmEffects, value.version === 2)
+  && capabilitiesDeclared(value.tracker, ["fetch_work_item", "fetch_parent", "list_linked_artifacts"], trackerEffects, value.version === 2);
 const bindingText = (value: unknown): boolean => typeof value === "string" && value.trim().length > 0;
-const capabilitiesDeclared = (section: unknown, required: readonly string[]): boolean => object(section)
+const scmEffects: Readonly<Record<string, string>> = {
+  get_pull_request: "scm.pull_request.read", get_pull_request_diff: "scm.pull_request.read",
+  list_review_threads: "scm.review_thread.read", list_conversation_comments: "scm.comment.read",
+  post_inline_comment: "scm.comment.create", post_summary_comment: "scm.comment.create",
+  reply_to_review_thread: "scm.review_thread.reply",
+};
+const trackerEffects: Readonly<Record<string, string>> = {
+  fetch_work_item: "tracker.work_item.read", fetch_parent: "tracker.work_item.read",
+  list_linked_artifacts: "tracker.artifact.read",
+};
+const capabilitiesDeclared = (section: unknown, required: readonly string[], effects: Readonly<Record<string, string>>, v2: boolean): boolean => object(section)
   && object(section.capabilities)
   && (section.unsupported === undefined || (Array.isArray(section.unsupported) && section.unsupported.every((item: unknown) => bindingText(item))))
+  && (!v2 || (Object.entries(section.capabilities).every(([key, value]) => {
+    const effect = Object.hasOwn(effects, key) ? effects[key] : undefined;
+    return effect !== undefined && v2Binding(value, key, effect);
+  })
+    && (section.unsupported === undefined || (section.unsupported as unknown[]).every((key) => typeof key === "string" && Object.hasOwn(effects, key) && !Object.hasOwn(section.capabilities as object, key)))))
   && required.every((key) => {
     const capabilities = section.capabilities as Readonly<Record<string, unknown>>;
     const unsupported = Array.isArray(section.unsupported) && section.unsupported.includes(key);
-    return Object.hasOwn(capabilities, key) ? !unsupported && usableBinding(capabilities[key]) : unsupported;
+    return Object.hasOwn(capabilities, key) ? !unsupported && (v2 || usableBinding(capabilities[key])) : unsupported;
   });
+const identifier = (value: unknown): boolean => typeof value === "string" && /^[A-Za-z][A-Za-z0-9_.-]*$/.test(value);
+const v2Binding = (value: unknown, capability: string, effect: string): boolean => {
+  const write = ["post_inline_comment", "post_summary_comment", "reply_to_review_thread"].includes(capability);
+  return object(value) && value.access === (write ? "write" : "read") && value.effect === effect && v2BindingKind(value, write);
+};
+const v2BindingKind = (value: Readonly<Record<string, unknown>>, write: boolean): boolean => {
+  const fields = (names: readonly string[]): boolean => Object.keys(value).length === names.length && names.every((name) => Object.hasOwn(value, name));
+  switch (value.kind) {
+    case "mcp_tool": return fields(["kind", "server", "tool", "access", "effect"]) && identifier(value.server) && identifier(value.tool);
+    case "command": return fields(["kind", "program", "args", "access", "effect"]) && identifier(value.program)
+      && Array.isArray(value.args) && value.args.length > 0 && value.args.every((arg: unknown) => typeof arg === "string" && arg.length > 0
+        && [...arg.matchAll(/\{[^}]+\}/g)].every(([placeholder]) => /^\{(workspace|work_item_id|pull_request_id|owner|repo|body_file|body|path|line)\}$/.test(placeholder)));
+    case "path": return !write && fields(["kind", "path", "access", "effect"]) && typeof value.path === "string"
+      && value.path.length > 0 && !value.path.startsWith("/") && !value.path.split("/").includes("..");
+    default: return false;
+  }
+};
 const usableBinding = (value: unknown): boolean => {
   switch (typeof value) {
     case "string": return bindingText(value);

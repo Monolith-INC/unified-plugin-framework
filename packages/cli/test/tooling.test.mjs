@@ -94,6 +94,43 @@ test('review readiness accepts unsupported capabilities and rejects ambiguous or
   assert.equal(reviewBindingsValid({...full,tracker:{...full.tracker,capabilities:{...full.tracker.capabilities,fetch_parent:null},unsupported:['fetch_parent']}}),false);
 });
 
+test('v2 review bindings enforce the toolkit contract for supported and optional capabilities',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-review-v2-'));
+  await mkdir(join(project,'.monolithic-code-review'));
+  const file=join(project,'.monolithic-code-review','sources.json');
+  const binding={kind:'path',path:'backlog/{work_item_id}.md',access:'read',effect:'tracker.work_item.read'};
+  const sources={version:2,scm:{provider:'example',capabilities:{get_pull_request:{kind:'command',program:'gh',args:['pr','view','{pull_request_id}'],access:'read',effect:'scm.pull_request.read'}},unsupported:['get_pull_request_diff','post_inline_comment']},tracker:{capabilities:{fetch_work_item:binding},unsupported:['fetch_parent','list_linked_artifacts']},knowledge:{root:'knowledge'}};
+  assert.equal(reviewBindingsValid(sources),true);
+  assert.equal(reviewBindingsValid({...sources,version:3}),false);
+  assert.equal(reviewBindingsValid({...sources,version:'2'}),false);
+  const legacy={...sources,version:1,scm:{...sources.scm,capabilities:{get_pull_request:'gh pr view'}}};
+  assert.equal(reviewBindingsValid(legacy),true);
+  const {version,...unversioned}=legacy;
+  assert.equal(reviewBindingsValid(unversioned),true);
+  assert.equal(reviewBindingsValid({...sources,scm:{...sources.scm,capabilities:{...sources.scm.capabilities,post_inline_comment:{kind:'mcp_tool',server:'github',tool:'comment',access:'write',effect:'scm.comment.create'}}}}),false);
+  const invalid=[
+    {...binding,access:undefined}, {...binding,effect:'tracker.artifact.read'}, {...binding,kind:'other'},
+    {...binding,path:'../outside'}, {...binding,extra:true},
+    {kind:'mcp_tool',server:'bad server',tool:'get',access:'read',effect:'tracker.work_item.read'},
+    {kind:'command',program:'tool',args:['{unknown}'],access:'read',effect:'tracker.work_item.read'},
+    {kind:'command',program:'tool',args:[],access:'read',effect:'tracker.work_item.read'},
+  ];
+  for(const value of invalid){
+    const candidate={...sources,tracker:{...sources.tracker,capabilities:{fetch_work_item:value}}};
+    assert.equal(reviewBindingsValid(candidate),false,JSON.stringify(value));
+    await writeFile(file,JSON.stringify(candidate));
+    assert.equal((await configureReview(project,choices)).error.code,'review-setup-needed');
+    assert.equal((await nodeToolingIO(project,choices,{claudeState:join(project,'.claude.json')}).inspect('review')()).value.status,'missing');
+  }
+  for(const unsupported of [['get_pull_request_diff','typo'],['get_pull_request_diff','fetch_parent']])
+    assert.equal(reviewBindingsValid({...sources,scm:{...sources.scm,unsupported}}),false);
+  assert.equal(reviewBindingsValid({...sources,scm:{...sources.scm,capabilities:{...sources.scm.capabilities,post_summary_comment:{kind:'path',path:'comment',access:'write',effect:'scm.comment.create'}}}}),false);
+  assert.equal(reviewBindingsValid({...sources,tracker:{...sources.tracker,capabilities:{...sources.tracker.capabilities,unknown:binding}}}),false);
+  await writeFile(file,JSON.stringify(sources));
+  assert.equal((await configureReview(project,choices)).ok,true);
+  assert.equal((await nodeToolingIO(project,choices,{claudeState:join(project,'.claude.json')}).inspect('review')()).value.status,'ready');
+});
+
 test('review setup accepts unsupported capabilities through configuration and readiness checks',async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-review-unsupported-'));
   await mkdir(join(project,'.monolithic-code-review'));
