@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Review setup accepts PR and tracker capabilities explicitly marked unsupported, allowing the installer handoff to finish without inventing provider bindings.
+
 - Replaced host-CLI plugin installation (`codex plugin add`, `codex app-server`, `claude plugin marketplace add`, `claude plugin install`) with deterministic, spec-driven project-local materialization (`.agents/skills`, `.codex/hooks.json`, `.claude/skills`, `.claude/settings.local.json`) recorded in `.agent-plugins/host-specs.json` so installs succeed offline, without LLM quota, without global `~/.codex` / `~/.claude` mutation, and without host CLIs on `PATH`; added `pnpm specs:verify` (PR CI) and `pnpm specs:check-upstream` (scheduled drift check).
 - Enforced Agent Plugins v1.0.0 manifest-first rejection in `loadPluginRoot`, pre-assembled release distribution `skills/` with stamped `plugin.json` version so `.upf-tools/distributions/<version>/` has zero raw `{{...}}` templates, and standardized project-local skill naming to collision-free kebab-case identifiers.
 - Interactive setup checklist now toggles `All` on/off with `Space`, and headless knowledge discovery defaults to enabled without prompting (and host CLI installation prompt is removed).
