@@ -78,6 +78,33 @@ test('review setup refuses incomplete bindings and preserves linked external con
   assert.equal(await readFile(path,'utf8'),'{}');
 });
 
+test('review readiness accepts unsupported capabilities and rejects ambiguous or missing declarations',()=>{
+  const scmKeys=['get_pull_request','get_pull_request_diff'];
+  const trackerKeys=['fetch_work_item','fetch_parent','list_linked_artifacts'];
+  const binding={kind:'path',path:'backlog/{work_item_id}*.md'};
+  const section=keys=>({capabilities:Object.fromEntries(keys.map(key=>[key,binding]))});
+  const full={scm:{provider:'example',...section(scmKeys)},tracker:section(trackerKeys)};
+  const unsupported={scm:{provider:'none',capabilities:{},unsupported:scmKeys},tracker:{capabilities:{},unsupported:trackerKeys}};
+  assert.equal(reviewBindingsValid(full),true);
+  assert.equal(reviewBindingsValid(unsupported),true);
+  assert.equal(reviewBindingsValid({...full,scm:{...full.scm,capabilities:{get_pull_request:binding},unsupported:['get_pull_request_diff']}}),true);
+  assert.equal(reviewBindingsValid({...unsupported,tracker:{...unsupported.tracker,unsupported:trackerKeys.slice(1)}}),false);
+  assert.equal(reviewBindingsValid({...full,scm:{...full.scm,unsupported:['get_pull_request']}}),false);
+  assert.equal(reviewBindingsValid({...full,tracker:{...full.tracker,unsupported:'fetch_parent'}}),false);
+  assert.equal(reviewBindingsValid({...full,tracker:{...full.tracker,capabilities:{...full.tracker.capabilities,fetch_parent:null},unsupported:['fetch_parent']}}),false);
+});
+
+test('review setup accepts unsupported capabilities through configuration and readiness checks',async()=>{
+  const project=await mkdtemp(join(tmpdir(),'upf-review-unsupported-'));
+  await mkdir(join(project,'.monolithic-code-review'));
+  const file=join(project,'.monolithic-code-review','sources.json');
+  const sources={version:2,scm:{provider:'none',capabilities:{},unsupported:['get_pull_request','get_pull_request_diff']},tracker:{capabilities:{},unsupported:['fetch_work_item','fetch_parent','list_linked_artifacts']},knowledge:{root:'knowledge'}};
+  await writeFile(file,JSON.stringify(sources));
+  assert.equal((await configureReview(project,choices)).ok,true);
+  assert.equal((await nodeToolingIO(project,choices,{claudeState:join(project,'.claude.json')}).inspect('review')()).value.status,'ready');
+  assert.deepEqual(JSON.parse(await readFile(file,'utf8')).scm.unsupported,sources.scm.unsupported);
+});
+
 test('interrupted staging cannot leave the final wrapper partial and retry can publish it',{ skip: process.platform === 'win32' }, async()=>{
   const project=await mkdtemp(join(tmpdir(),'upf-stage-'));
   const source=join(project,'source');

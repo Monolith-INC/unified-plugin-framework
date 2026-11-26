@@ -251,11 +251,18 @@ export const configureReview = async (project: string, input: BootstrapInput): P
   return safe ? configureReviewFile(project, input, path) : setupFailure("Review configuration follows a link outside the accepted project path; preserve it and reconcile its location.");
 };
 export const reviewBindingsValid = (value: unknown): value is Readonly<Record<string, unknown>> => object(value)
-  && object(value.scm) && typeof value.scm.provider === "string" && object(value.scm.capabilities)
-  && ["get_pull_request", "get_pull_request_diff"].every((key) => object(value.scm) && object(value.scm.capabilities) && usableBinding(value.scm.capabilities[key]))
-  && object(value.tracker) && object(value.tracker.capabilities)
-  && ["fetch_work_item", "fetch_parent", "list_linked_artifacts"].every((key) => object(value.tracker) && object(value.tracker.capabilities) && usableBinding(value.tracker.capabilities[key]));
+  && object(value.scm) && bindingText(value.scm.provider)
+  && capabilitiesDeclared(value.scm, ["get_pull_request", "get_pull_request_diff"])
+  && capabilitiesDeclared(value.tracker, ["fetch_work_item", "fetch_parent", "list_linked_artifacts"]);
 const bindingText = (value: unknown): boolean => typeof value === "string" && value.trim().length > 0;
+const capabilitiesDeclared = (section: unknown, required: readonly string[]): boolean => object(section)
+  && object(section.capabilities)
+  && (section.unsupported === undefined || (Array.isArray(section.unsupported) && section.unsupported.every((item: unknown) => bindingText(item))))
+  && required.every((key) => {
+    const capabilities = section.capabilities as Readonly<Record<string, unknown>>;
+    const unsupported = Array.isArray(section.unsupported) && section.unsupported.includes(key);
+    return Object.hasOwn(capabilities, key) ? !unsupported && usableBinding(capabilities[key]) : unsupported;
+  });
 const usableBinding = (value: unknown): boolean => {
   switch (typeof value) {
     case "string": return bindingText(value);
