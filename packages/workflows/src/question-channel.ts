@@ -1,4 +1,4 @@
-import type { Question } from './questions.js';
+import { groupOptions, orderRecommendedFirst, type Question, type QuestionOption } from './questions.js';
 
 export interface ChannelCapability {
   readonly single: boolean;
@@ -45,14 +45,36 @@ const validContext = (context: DecisionContext): boolean => {
     && (context.question.kind !== 'confirm' || context.acceptKey !== undefined && context.displayedKeys.length === 2 && context.displayedKeys.includes(context.acceptKey));
 };
 
-/** Prepare one decision channel while retaining its question for unattended continuation. */
-export const prepareQuestion = (context: DecisionContext, capabilities: QuestionCapabilities, required: boolean): PreparedQuestion => {
-  const valid = validContext(context) && !context.answered;
-  const channel = chooseQuestionChannel(context.question, capabilities, required);
-  return valid ? { kind: channel, instance: context.instance,
-    question: context.question, displayedKeys: context.displayedKeys, answerForms: forms(context), continuation: { ...context, channel } }
-    : { kind: 'invalid', instance: context.instance };
+const displayOptions = (question: Exclude<Question, { readonly kind: 'confirm' }>, channel: QuestionChannel): readonly QuestionOption[] => {
+  const ordered = orderRecommendedFirst(question.options);
+  return channel === 'native' && question.kind === 'several'
+    ? groupOptions(ordered).flatMap((group) => group.options)
+    : ordered;
 };
+
+const displayKeys = (context: DecisionContext, channel: QuestionChannel): readonly string[] =>
+  context.question.kind === 'confirm'
+    ? context.displayedKeys.filter((key) => key === context.acceptKey)
+      .concat(context.displayedKeys.filter((key) => key !== context.acceptKey))
+    : displayOptions(context.question, channel).flatMap((option) => option.key === undefined ? [] : [option.key]);
+
+const withChannel = (context: DecisionContext, channel: QuestionChannel, displayedKeys: readonly string[]): PreparedQuestion => {
+  return { kind: channel, instance: context.instance, question: context.question,
+    displayedKeys, answerForms: forms(context), continuation: { ...context, displayedKeys, channel } };
+};
+
+const prepare = (order: (context: DecisionContext, channel: QuestionChannel) => readonly string[]) =>
+  (context: DecisionContext, capabilities: QuestionCapabilities, required: boolean): PreparedQuestion => {
+    const channel = chooseQuestionChannel(context.question, capabilities, required);
+    return validContext(context) && !context.answered ? withChannel(context, channel, order(context, channel))
+      : { kind: 'invalid', instance: context.instance };
+  };
+
+/** Prepare a decision whose presentation order is supplied by the caller. */
+export const prepareQuestion = prepare((context) => context.displayedKeys);
+
+/** Prepare a decision presented using the shared question guidance. */
+export const prepareRenderedQuestion = prepare(displayKeys);
 export type QuestionResponse =
   | { readonly channel: 'text'; readonly value: string; readonly instance: string }
   | { readonly channel: 'native' | 'canvas'; readonly keys: readonly string[]; readonly custom?: string; readonly instance: string }

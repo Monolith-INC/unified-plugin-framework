@@ -142,7 +142,7 @@ export const groupOptions = (
   );
 };
 
-const orderRecommendedFirst = (options: readonly QuestionOption[]): readonly QuestionOption[] => [
+export const orderRecommendedFirst = (options: readonly QuestionOption[]): readonly QuestionOption[] => [
   ...options.filter((option) => option.recommended === true),
   ...options.filter((option) => option.recommended !== true),
 ];

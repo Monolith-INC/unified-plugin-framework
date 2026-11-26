@@ -16,6 +16,7 @@ export {
   chooseQuestionChannel,
   normalizeQuestionAnswer,
   prepareQuestion,
+  prepareRenderedQuestion,
   type ChannelCapability,
   type DecisionContext,
   type PreparedQuestion,
