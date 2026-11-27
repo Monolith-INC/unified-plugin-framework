@@ -20,6 +20,7 @@ import {
 import type { Diagnostic } from "@agent-plugins/core";
 import { installVendorBundle } from "@agent-plugins/installer";
 
+import { runBmadDesignHandoff } from "./bmad-design-handoff.js";
 import { NODE_ADAPTER_CHECK_IO, runAdapterCheck } from "./adapter-check.js";
 import { bundleResolver, type BundleSource, type ResolvedBundle } from "./bundle-source.js";
 import { RELEASE_VERSION } from "./release-asset.js";
@@ -47,6 +48,8 @@ Commands:
                                     Check candidate plugin versions against the adapter and pin them
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
+  design-handoff provider|record|inspect|select|finish
+                                    Save and resume a BMAD visual design handoff
   question prepare|answer|next <json> Prepare decisions or resolve discovery without storing state
   question serve-codex [--knowledge-launcher <absolute-path>]
                                     Serve native questions with optional Project Knowledge reads
@@ -90,6 +93,8 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
         default: return serveCodexQuestions(discoveryState, questionWording, questionKnowledge(launcher, io.cwd(), process.execPath)); // fp-allow: no-ambient-effect -- CLI process boundary
       }
     }
+    case "design-handoff":
+      return runBmadDesignHandoff(rest, io);
     case "project":
       return runProject(rest, io);
     case "validate":
@@ -424,4 +429,4 @@ function toRealPath(path: string): string {
 }
 
 // Edge: the program's one effectful invocation, when this module is run as the CLI.
-if (isCliEntrypoint(process.argv[1], import.meta.url)) process.exit(await run(process.argv.slice(2))); // fp-allow: no-ambient-effect
+if (isCliEntrypoint(process.argv[1], import.meta.url)) process.exitCode = await run(process.argv.slice(2)); // fp-allow: no-ambient-effect

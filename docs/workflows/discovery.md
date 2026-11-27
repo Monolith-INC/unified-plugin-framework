@@ -28,6 +28,19 @@ Every mode also offers, once at the start, the optional skills of the catalog th
 
 The catalog adds `bmad-brainstorming`, `bmad-spec` and `bmad-ux` to these. BMad Method installs its skills without a plugin prefix, so the adapter lists it in `bareSkillPlugins` and the skills name them bare. The framework declares `superpowers` `^7.0.0` and `bmad-method` `^6.12.0`; the lock pins `7.0.0` and `6.12.0`.
 
+## Visual design handoff
+
+Use `bmad-design-handoff` in a BMAD UX workspace to explore a screen with Product Design when the active host can run it. BMAD's configured visual tools are the fallback. The handoff saves the displayed choices in the workspace, so the user can return in a new chat, pick the same option number, and import that exact mockup. Both design documents link to it.
+
+To offer the framework skill from BMAD's own handoff menu, add `"skill:bmad-design-handoff"` to `workflow.design_handoffs` in the project's `_bmad/custom/bmad-ux.toml`. If that key already exists, append to its list. Otherwise add the following under the existing `[workflow]` table or create the table if needed.
+
+```toml
+[workflow]
+design_handoffs = ["skill:bmad-design-handoff"]
+```
+
+BMAD merges this list with its built-in handoff targets. Users can also invoke the framework skill directly.
+
 ## Readiness and recovery
 
 Both plugins are required, including for the catalog: readiness is never partial. The steps and recoveries are those of every workflow (see the [code review workflow](code-review.md#readiness-and-recovery)): declared, installed inside the declared range and matching the lock, every mapped and catalog skill present, and the project knowledge store configured.
