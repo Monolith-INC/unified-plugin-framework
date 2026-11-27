@@ -202,10 +202,13 @@ const finish = async (workspace: string, stored: Stored, supplied: unknown, pyth
   const writing: Handoff = { ...state, status: "writing", decisions: { design: input.design, experience: input.experience } };
   const journal = state.status === "selected" ? await save(workspace, writing, stored, python) : ok(STATE);
   if (!journal.ok) return journal;
-  const results = await Promise.all([design.value, experience.value].map(({ absolute, before, after }) =>
-    before === after ? ok(absolute) : writeText(workspace, absolute, after, before, python, true)));
-  const failed = results.find((result) => !result.ok);
-  if (failed !== undefined) return failed;
+  const writeDocument = ({ absolute, before, after }: typeof design.value) =>
+    before === after ? Promise.resolve(ok(absolute)) : writeText(workspace, absolute, after, before, python, true);
+  // The Windows writer leases the directory for each replacement.
+  const writtenDesign = await writeDocument(design.value);
+  if (!writtenDesign.ok) return writtenDesign;
+  const writtenExperience = await writeDocument(experience.value);
+  if (!writtenExperience.ok) return writtenExperience;
   const next: Handoff = { ...writing, status: "finished" };
   const saved = state.status === "finished" ? ok(STATE) : await save(workspace, next,
     state.status === "writing" ? stored : { state: writing, raw: JSON.stringify(writing, null, 2) + "\n" }, python);
