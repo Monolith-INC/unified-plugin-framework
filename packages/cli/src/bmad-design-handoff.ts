@@ -40,6 +40,7 @@ const workingPath = (option: Choice, number: number): string => `${STORAGE}/desi
 const importPath = (option: Choice): string => `imports/design-choice-${option.digest}${option.extension}`;
 const key = (state: Options): string => JSON.stringify({ provider: state.provider, choices: state.choices });
 const missing = (error: unknown): boolean => object(error) && error.code === "ENOENT";
+const copyMode = (mode: number): number => 0o600 | (mode & 0o066);
 
 const checkPath = async (workspace: string, path: string): Promise<string> => {
   const absolute = join(workspace, path);
@@ -74,21 +75,22 @@ const summary = (state: Handoff): object => ({
 
 const readSource = async (path: string) => {
   const extension = extname(path).toLowerCase();
-  if (!EXTENSIONS.has(extension) || !(await lstat(path)).isFile()) throw new Error("Use a regular image, HTML or Excalidraw mockup file.");
+  const stat = await lstat(path);
+  if (!EXTENSIONS.has(extension) || !stat.isFile()) throw new Error("Use a regular image, HTML or Excalidraw mockup file.");
   const bytes = await readFile(path);
   if (bytes.length === 0) throw new Error("A mockup file is empty.");
-  return { option: { extension, digest: sha256(bytes) }, bytes };
+  return { option: { extension, digest: sha256(bytes) }, bytes, mode: copyMode(stat.mode) };
 };
 
 /** Publish complete bytes without replacing a file another process may already be using. */
-const publish = async (workspace: string, path: string, bytes: Buffer): Promise<void> => {
+const publish = async (workspace: string, path: string, bytes: Buffer, mode: number): Promise<void> => {
   const target = await checkPath(workspace, path);
   const previous = await readFile(target).catch((error: unknown) => missing(error) ? null : Promise.reject(error));
   if (previous?.equals(bytes)) return;
   if (previous !== null) throw new Error(`Saved mockup changed: ${path}.`);
   const staging = `${target}.${randomUUID()}.tmp`;
   try {
-    await writeFile(staging, bytes, { flag: "wx" });
+    await writeFile(staging, bytes, { flag: "wx", mode });
     await link(staging, target).catch(async (error: unknown) => {
       if (!(object(error) && error.code === "EEXIST" && (await readFile(await checkPath(workspace, path))).equals(bytes))) throw error;
     });
@@ -109,17 +111,18 @@ const record = async (workspace: string, input: unknown, previous: Stored | null
   if (previous !== null && key(previous.state) !== key(next)) return problem("This workspace already has a different saved set of mockups.");
   const working = await directory(workspace, join(workspace, STORAGE));
   if (!working.ok) return working;
-  await Promise.all(files.map(({ option, bytes }, index) => publish(workspace, workingPath(option, index + 1), bytes)));
+  await Promise.all(files.map(({ option, bytes, mode }, index) => publish(workspace, workingPath(option, index + 1), bytes, mode)));
   const saved = previous === null ? await save(workspace, next, null, python) : ok(STATE);
   return saved.ok ? ok(summary(previous?.state ?? next)) : saved;
 };
 
-const verifiedMock = async (workspace: string, path: string, option: Choice): Promise<Buffer> => {
+const verifiedMock = async (workspace: string, path: string, option: Choice) => {
   const absolute = await checkPath(workspace, path);
-  if (!(await lstat(absolute)).isFile()) throw new Error(`Saved mockup is not a regular file: ${path}.`);
+  const stat = await lstat(absolute);
+  if (!stat.isFile()) throw new Error(`Saved mockup is not a regular file: ${path}.`);
   const bytes = await readFile(absolute);
   if (sha256(bytes) !== option.digest) throw new Error(`Saved mockup changed: ${path}.`);
-  return bytes;
+  return { bytes, mode: copyMode(stat.mode) };
 };
 
 const select = async (workspace: string, stored: Stored, number: number, python: string): Promise<Result<object>> => {
@@ -128,44 +131,50 @@ const select = async (workspace: string, stored: Stored, number: number, python:
   if (option === undefined || (state.status !== "awaiting-choice" && state.number !== number)) {
     return problem("Choose a displayed option, or retry the option already chosen.");
   }
-  const bytes = await verifiedMock(workspace, workingPath(option, number), option);
+  const { bytes, mode } = await verifiedMock(workspace, workingPath(option, number), option);
   const imports = await directory(workspace, join(workspace, "imports"));
   if (!imports.ok) return imports;
   const next: Handoff = state.status === "awaiting-choice" ? { ...state, status: "selected", number } : state;
   const saved = state.status === "awaiting-choice" ? await save(workspace, next, stored, python) : ok(STATE);
   if (!saved.ok) return saved;
-  await publish(workspace, importPath(option), bytes);
+  await publish(workspace, importPath(option), bytes, mode);
   return ok(summary(next));
 };
 
 type Heading = { readonly index: number; readonly level: number; readonly title: string };
-type Outline = { readonly fence: string; readonly headings: readonly Heading[] };
-const scanHeading = ({ fence, headings }: Outline, line: string, index: number): Outline => {
+type Outline = { readonly fence: string; readonly comment: boolean; readonly headings: readonly Heading[] };
+const EMPTY_OUTLINE: Outline = { fence: "", comment: false, headings: [] };
+const scanHeading = (outline: Outline, line: string, index: number): Outline => {
+  const { fence, comment, headings } = outline;
   const delimiter = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
   switch (true) {
     case fence !== "" && delimiter !== null && (delimiter[1] ?? "").startsWith(fence) && (delimiter[2] ?? "").trim() === "":
-      return { fence: "", headings };
-    case fence !== "": return { fence, headings };
-    case delimiter !== null: return { fence: delimiter?.[1] ?? "", headings };
+      return { ...outline, fence: "" };
+    case fence !== "": return outline;
+    case comment || /^ {0,3}<!--/.test(line): return { ...outline, comment: !line.includes("-->") };
+    case delimiter !== null: return { ...outline, fence: delimiter?.[1] ?? "" };
     default: {
       const heading = /^ {0,3}(#{1,2})[ \t]+(.+?)\s*#*\s*$/.exec(line);
-      return heading === null ? { fence, headings } : {
-        fence, headings: [...headings, { index, level: (heading[1] ?? "").length, title: heading[2] ?? "" }],
+      return heading === null ? outline : {
+        ...outline, headings: [...headings, { index, level: (heading[1] ?? "").length, title: heading[2] ?? "" }],
       };
     }
   }
 };
 
 const appendDecision = (source: string, heading: string, path: string, notes: string): Result<string> => {
+  const normalized = notes.trim();
+  const draft = normalized.split(/\r?\n/).reduce(scanHeading, EMPTY_OUTLINE);
+  if (draft.fence !== "" || draft.comment) return problem("Close unfinished Markdown blocks in the handoff notes.");
   const newline = source.includes("\r\n") ? "\r\n" : "\n";
-  const block = [BEGIN, notes.trim().replace(/\r?\n/g, newline), "", `[Selected mockup](${path})`, END].join(newline);
+  const block = [BEGIN, normalized.replace(/\r?\n/g, newline), "", `[Selected mockup](${path})`, END].join(newline);
   if (source.includes(block)) return ok(source);
   if (source.includes(BEGIN) || source.includes(END)) return problem("The handoff notes already in this document differ from the saved decisions.");
   const lines = source.split(/\r?\n/);
   const frontmatterEnd = lines[0] === "---" ? lines.indexOf("---", 1) : -1;
-  const { headings, fence } = lines.reduce<Outline>((outline, line, index) =>
-    index <= frontmatterEnd ? outline : scanHeading(outline, line, index), { fence: "", headings: [] });
-  if (fence !== "") return problem("Close the unfinished Markdown code fence before inserting handoff notes.");
+  const { headings, fence, comment } = lines.reduce<Outline>((outline, line, index) =>
+    index <= frontmatterEnd ? outline : scanHeading(outline, line, index), EMPTY_OUTLINE);
+  if (fence !== "" || comment) return problem("Close unfinished Markdown blocks before inserting handoff notes.");
   const section = headings.find(({ level, title }) => level === 2 && title === heading);
   const next = section === undefined
     ? headings.find(({ level, title }) => level === 2 && heading === "Layout & Spacing" && DESIGN_AFTER_LAYOUT.includes(title))
@@ -213,10 +222,14 @@ const finish = async (workspace: string, stored: Stored, supplied: unknown, pyth
   return saved.ok ? ok(summary(next)) : saved;
 };
 
-const run = async (cwd: string, python: string, [operation, target, input]: readonly string[]): Promise<Result<object>> => {
+const run = async (cwd: string, python: string, [operation, target, input, ...extra]: readonly string[]): Promise<Result<object>> => {
   if (target === undefined) return problem("Use record|inspect|select|finish with a BMAD workspace.");
   if (operation !== "record" && operation !== "inspect" && operation !== "select" && operation !== "finish") {
     return problem("Unknown handoff operation.");
+  }
+  if (extra.length > 0 || (operation === "inspect" && input !== undefined)
+    || ((operation === "record" || operation === "select") && input === undefined)) {
+    return problem("Supply only the workspace and the input required by the handoff operation.");
   }
   const workspace = resolve(cwd, target);
   const current = await load(workspace);

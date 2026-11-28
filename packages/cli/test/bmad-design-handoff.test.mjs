@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +52,8 @@ test("new processes resume the displayed third option and update both BMAD docum
   const resumed = response(["inspect", run]);
   assert.deepEqual(resumed, recorded);
   assert.deepEqual(resumed.options.map(({ number }) => number), [1, 2, 3]);
+  assert.equal(command(["select", run, "1", "2"]).status, 1);
+  assert.deepEqual(response(["inspect", run]), recorded);
   const selected = response(["select", run, "3"]);
   assert.equal(readFileSync(join(run, selected.path), "utf8"), "bear");
   const decisions = input(run, "decisions", { design: "Place the amber action above the book.", experience: "Tap to show the code. [ASSUMPTION] Reveal it in place." });
@@ -79,10 +81,11 @@ test("new processes resume the displayed third option and update both BMAD docum
 test("BMAD HTML imports and links with recovery for changed files", (context) => {
   const { run, design, experience } = fixture(context);
   const mock = join(run, "bmad.html");
-  writeFileSync(mock, "<p>Show pickup code</p>");
+  writeFileSync(mock, "<p>Show pickup code</p>", { mode: 0o600 });
   const args = ["record", run, input(run, "options", { provider: "bmad", paths: [mock] })];
   const { options: [option] } = response(args);
   const saved = join(run, option.path);
+  if (process.platform !== "win32") assert.equal(statSync(saved).mode & 0o777, 0o600);
   writeFileSync(saved, "changed");
   assert.notEqual(command(["select", run, "1"]).status, 0);
   assert.doesNotMatch(readFileSync(design, "utf8"), /imports\//);
@@ -90,6 +93,7 @@ test("BMAD HTML imports and links with recovery for changed files", (context) =>
   assert.notEqual(command(["select", run, "1"]).status, 0);
   response(args);
   const selection = response(["select", run, "1"]);
+  if (process.platform !== "win32") assert.equal(statSync(join(run, selection.path)).mode & 0o777, 0o600);
   assert.equal(readFileSync(join(run, selection.path), "utf8"), "<p>Show pickup code</p>");
   const finish = ["finish", run, input(run, "decisions", { design: "Use a single main button.", experience: "Reveal the pickup code." })];
   response(finish);
@@ -105,4 +109,27 @@ test("keeps BMAD section order and ignores headings inside code samples", (conte
   response(["select", run, "1"]);
   response(["finish", run, input(run, "decisions", { design: "Group details below the action.", experience: "Tap to reveal." })]);
   assert.match(readFileSync(design, "utf8"), /```markdown\n## Layout & Spacing\n```\n\n## Layout & Spacing[\s\S]+Group details[\s\S]+## Components/);
+});
+
+test("validates notes before writing and inserts the link outside existing comments", (context) => {
+  const { run, design, experience } = fixture(context);
+  const comment = "<!--\n## Components\nPrivate draft.\n-->";
+  const originalDesign = `## Layout & Spacing\n\n${comment}\n\n## Components\n\nExisting component.\n`;
+  const originalExperience = readFileSync(experience, "utf8");
+  writeFileSync(design, originalDesign);
+  const path = join(run, "mock.html");
+  writeFileSync(path, "<p>Hold details</p>");
+  response(["record", run, input(run, "options", { provider: "bmad", paths: [path] })]);
+  response(["select", run, "1"]);
+  ["~~~markdown\nDraft", "<!--\nDraft"].forEach((notes) => {
+    const candidate = input(run, "unfinished", { design: notes, experience: "Show pickup details." });
+    assert.equal(command(["finish", run, candidate]).status, 1);
+    assert.equal(readFileSync(design, "utf8"), originalDesign);
+    assert.equal(readFileSync(experience, "utf8"), originalExperience);
+    assert.equal(response(["inspect", run]).status, "selected");
+  });
+  const result = response(["finish", run, input(run, "decisions", { design: "Group details below the action.", experience: "Show pickup details." })]);
+  const body = readFileSync(design, "utf8");
+  assert.ok(body.includes(comment));
+  assert.ok(body.indexOf(comment) < body.indexOf(result.path) && body.indexOf(result.path) < body.lastIndexOf("## Components"));
 });
