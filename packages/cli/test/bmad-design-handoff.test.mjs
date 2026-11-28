@@ -29,9 +29,17 @@ const input = (run, name, value) => {
   return path;
 };
 
-test("selects Product Design only when the installed skill and image generation are callable", () => {
-  assert.equal(response(["provider", "ready"]).provider, "product-design");
-  assert.equal(response(["provider", "unavailable"]).provider, "bmad");
+test("rejects experimental routing and recording without changing the workspace", (context) => {
+  const { run } = fixture(context);
+  const mock = join(run, "mock.html");
+  writeFileSync(mock, "<p>Pickup details</p>");
+  const route = command(["provider", "ready"]);
+  assert.equal(route.status, 1);
+  assert.match(route.stderr, /Unknown handoff operation/);
+  const record = command(["record", run, input(run, "options", { provider: "product-design", paths: [mock] })]);
+  assert.equal(record.status, 1);
+  assert.match(record.stderr, /Supply provider/);
+  assert.deepEqual(response(["inspect", run]), { status: "empty" });
 });
 
 test("new processes resume the displayed third option and update both BMAD documents once", (context) => {
@@ -39,7 +47,7 @@ test("new processes resume the displayed third option and update both BMAD docum
   const names = ["owl", "fox", "bear"];
   const paths = names.map((name) => join(run, name + ".png"));
   paths.forEach((path, index) => writeFileSync(path, names[index]));
-  const recorded = response(["record", run, input(run, "options", { provider: "product-design", paths })]);
+  const recorded = response(["record", run, input(run, "options", { provider: "bmad", paths })]);
   paths.forEach((path) => rmSync(path));
   const resumed = response(["inspect", run]);
   assert.deepEqual(resumed, recorded);
@@ -68,12 +76,11 @@ test("new processes resume the displayed third option and update both BMAD docum
   assert.notEqual(command(["select", run, "1"]).status, 0);
 });
 
-test("BMAD's HTML fallback imports and links the same way, with recovery for changed files", (context) => {
+test("BMAD HTML imports and links with recovery for changed files", (context) => {
   const { run, design, experience } = fixture(context);
   const mock = join(run, "bmad.html");
   writeFileSync(mock, "<p>Show pickup code</p>");
-  const { provider } = response(["provider", "unavailable"]);
-  const args = ["record", run, input(run, "options", { provider, paths: [mock] })];
+  const args = ["record", run, input(run, "options", { provider: "bmad", paths: [mock] })];
   const { options: [option] } = response(args);
   const saved = join(run, option.path);
   writeFileSync(saved, "changed");

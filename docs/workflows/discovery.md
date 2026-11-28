@@ -30,7 +30,7 @@ The catalog adds `bmad-brainstorming`, `bmad-spec` and `bmad-ux` to these. BMad 
 
 ## Visual design handoff
 
-Use `bmad-design-handoff` in a BMAD UX workspace to explore a screen with Product Design when the active host can run it. BMAD's configured visual tools are the fallback. The handoff saves the displayed choices in the workspace, so the user can return in a new chat, pick the same option number, and import that exact mockup. Both design documents link to it.
+Use `bmad-design-handoff` in a BMAD UX workspace to explore a screen with BMAD's configured visual tools. The handoff saves the displayed choices in the workspace, so the user can return in a new chat, pick the same option number, and import that exact mockup. Both design documents link to it.
 
 To offer the framework skill from BMAD's own handoff menu, add `"skill:bmad-design-handoff"` to `workflow.design_handoffs` in the project's `_bmad/custom/bmad-ux.toml`. If that key already exists, append to its list. Otherwise add the following under the existing `[workflow]` table or create the table if needed.
 

@@ -48,7 +48,7 @@ Commands:
                                     Check candidate plugin versions against the adapter and pin them
   project describe|status|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
-  design-handoff provider|record|inspect|select|finish
+  design-handoff record|inspect|select|finish
                                     Save and resume a BMAD visual design handoff
   question prepare|answer|next <json> Prepare decisions or resolve discovery without storing state
   question serve-codex [--knowledge-launcher <absolute-path>]

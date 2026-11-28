@@ -1,6 +1,6 @@
 ---
 name: bmad-design-handoff
-description: Send a BMAD design brief to Product Design or BMAD visual tools, then resume with the mockup the user picks and capture the result in both BMAD design documents.
+description: Use BMAD's configured visual tools to generate mockups, then resume with the user's selection and capture the result in both BMAD design documents.
 ---
 
 # BMAD design handoff
@@ -15,12 +15,9 @@ Run `agent-plugin design-handoff inspect <workspace>` first.
 
 ## Collect mockups
 
-For an empty handoff, check that the active chat exposes the Product Design ideation skill and callable image generation. A package on disk alone is insufficient. Run `agent-plugin design-handoff provider ready` when both are available, or `agent-plugin design-handoff provider unavailable` otherwise.
+For an empty handoff, read the active BMAD UX customization and use its configured creative tools for the brief. Use a visual tool suitable for the choice, such as its design directions or wireframe. Preview the resulting artifact before showing it.
 
-- For `product-design`, pass the BMAD brief and available visual references to Product Design. Follow its brief and ideation steps. If access or generation fails before options are saved, explain the issue and offer BMAD's visual tools.
-- For `bmad`, read the active BMAD UX customization and use its configured creative tools for the brief. Use a visual tool suitable for the choice, such as its design directions or wireframe. Preview the resulting artifact before showing it.
-
-Prepare an input file with `{"provider":"product-design","paths":["<absolute mockup file>", "..."]}` (or `"bmad"`). Order the paths by how the mockups were shown, independent of generation order. Each path must identify a durable, standalone mockup. For an HTML mockup with companion files, save a screenshot or export it as standalone HTML before recording it. If a displayed option cannot be matched to a file, ask for the original image or a clear selection before advancing.
+Prepare an input file with `{"provider":"bmad","paths":["<absolute mockup file>", "..."]}`. Order the paths by how the mockups were shown, independent of generation order. Each path must identify a durable, standalone mockup. For an HTML mockup with companion files, save a screenshot or export it as standalone HTML before recording it. If a displayed option cannot be matched to a file, ask for the original image or a clear selection before advancing.
 
 Run `agent-plugin design-handoff record <workspace> <options.json>` before asking the user to choose. Use its numbered options for the choice. Stop for the user's selection. The saved alternatives live in `.upf-design-handoff/` and are separate from the artifacts BMAD distills. When a BMAD renderer writes alternatives to `.working/`, keep those alternatives out of finalization, and pass only the chosen import as the mockup reference.
 

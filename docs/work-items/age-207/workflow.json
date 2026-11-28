@@ -1,0 +1,32 @@
+{
+  "feature": "AGE-208",
+  "story": "AGE-207",
+  "adr": "docs/work-items/age-207/adr.md",
+  "specs": [
+    "docs/work-items/age-207/spec.md"
+  ],
+  "plan": "docs/work-items/2026-11-27-bmad-product-design-handoff.md",
+  "tasks": [
+    {
+      "id": "AGE-209",
+      "requirements": [
+        "FR-001",
+        "FR-006"
+      ]
+    },
+    {
+      "id": "AGE-210",
+      "requirements": [
+        "FR-002",
+        "FR-003"
+      ]
+    },
+    {
+      "id": "AGE-211",
+      "requirements": [
+        "FR-004",
+        "FR-005"
+      ]
+    }
+  ]
+}

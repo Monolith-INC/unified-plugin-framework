@@ -6,9 +6,8 @@ import { fail, object, ok, parseJson, type Result } from "@agent-plugins/project
 import { directory, readText, safePath, writeText } from "./tooling-files.js";
 import type { CliIo } from "./index.js";
 
-type Provider = "product-design" | "bmad";
 type Choice = { readonly digest: string; readonly extension: string };
-type Options = { readonly provider: Provider; readonly choices: readonly Choice[] };
+type Options = { readonly provider: "bmad"; readonly choices: readonly Choice[] };
 type Decisions = { readonly design: string; readonly experience: string };
 type Handoff = Options & (
   | { readonly status: "awaiting-choice" }
@@ -25,7 +24,6 @@ const END = "<!-- upf-design-handoff:end -->";
 const EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp", ".svg", ".html", ".excalidraw"]);
 const problem = (message: string): Result<never> =>
   fail("invalid-request", message, "Keep the BMAD workspace and restore the original mockup or retry the same handoff.");
-const provider = (value: unknown): value is Provider => value === "product-design" || value === "bmad";
 const nonblank = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
 const decisionText = (value: unknown): value is string => nonblank(value) && !value.includes(BEGIN) && !value.includes(END);
 const decisions = (value: unknown): value is Decisions => object(value) && decisionText(value.design) && decisionText(value.experience);
@@ -33,7 +31,7 @@ const choice = (value: unknown): value is Choice => object(value) && typeof valu
   && typeof value.extension === "string" && EXTENSIONS.has(value.extension);
 const validNumber = (number: unknown, count: number): number is number =>
   typeof number === "number" && Number.isInteger(number) && number > 0 && number <= count;
-const state = (value: unknown): value is Handoff => object(value) && provider(value.provider) && Array.isArray(value.choices)
+const state = (value: unknown): value is Handoff => object(value) && value.provider === "bmad" && Array.isArray(value.choices)
   && value.choices.length > 0 && value.choices.every(choice) && (value.status === "awaiting-choice"
     || validNumber(value.number, value.choices.length) && (value.status === "selected"
       || (value.status === "writing" || value.status === "finished") && decisions(value.decisions)));
@@ -100,14 +98,14 @@ const publish = async (workspace: string, path: string, bytes: Buffer): Promise<
 };
 
 const record = async (workspace: string, input: unknown, previous: Stored | null, python: string): Promise<Result<object>> => {
-  if (!object(input) || !provider(input.provider) || !Array.isArray(input.paths) || input.paths.length === 0 || !input.paths.every(nonblank)) {
-    return problem("Supply a provider and mockup paths in display order.");
+  if (!object(input) || input.provider !== "bmad" || !Array.isArray(input.paths) || input.paths.length === 0 || !input.paths.every(nonblank)) {
+    return problem('Supply provider "bmad" and mockup paths in display order.');
   }
   const documents = await Promise.all(["DESIGN.md", "EXPERIENCE.md"].map(async (file) =>
     lstat(await checkPath(workspace, file)).then((entry) => entry.isFile(), (error: unknown) => missing(error) ? false : Promise.reject(error))));
   if (!documents.every(Boolean)) return problem("Use a BMAD workspace with both design documents.");
   const files = await Promise.all(input.paths.map((path) => readSource(resolve(workspace, path))));
-  const next: Handoff = { status: "awaiting-choice", provider: input.provider, choices: files.map(({ option }) => option) };
+  const next: Handoff = { status: "awaiting-choice", provider: "bmad", choices: files.map(({ option }) => option) };
   if (previous !== null && key(previous.state) !== key(next)) return problem("This workspace already has a different saved set of mockups.");
   const working = await directory(workspace, join(workspace, STORAGE));
   if (!working.ok) return working;
@@ -216,10 +214,10 @@ const finish = async (workspace: string, stored: Stored, supplied: unknown, pyth
 };
 
 const run = async (cwd: string, python: string, [operation, target, input]: readonly string[]): Promise<Result<object>> => {
-  if (operation === "provider" && (target === "ready" || target === "unavailable")) {
-    return ok({ provider: target === "ready" ? "product-design" : "bmad" });
+  if (target === undefined) return problem("Use record|inspect|select|finish with a BMAD workspace.");
+  if (operation !== "record" && operation !== "inspect" && operation !== "select" && operation !== "finish") {
+    return problem("Unknown handoff operation.");
   }
-  if (target === undefined) return problem("Use provider ready|unavailable, or record|inspect|select|finish with a BMAD workspace.");
   const workspace = resolve(cwd, target);
   const current = await load(workspace);
   if (!current.ok) return current;
