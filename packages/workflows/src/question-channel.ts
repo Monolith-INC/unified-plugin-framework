@@ -66,7 +66,10 @@ const withChannel = (context: DecisionContext, channel: QuestionChannel, display
 const prepare = (order: (context: DecisionContext, channel: QuestionChannel) => readonly string[]) =>
   (context: DecisionContext, capabilities: QuestionCapabilities, required: boolean): PreparedQuestion => {
     const channel = chooseQuestionChannel(context.question, capabilities, required);
-    return validContext(context) && !context.answered ? withChannel(context, channel, order(context, channel))
+    const allowNone = context.allowNone ?? (context.question.kind === 'several' ? context.question.allowNone : undefined) ?? !required;
+    const decision = context.question.kind === 'several'
+      ? { ...context, allowNone, question: { ...context.question, allowNone } } : context;
+    return validContext(decision) && !decision.answered ? withChannel(decision, channel, order(decision, channel))
       : { kind: 'invalid', instance: context.instance };
   };
 

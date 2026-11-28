@@ -90,7 +90,7 @@ test("the framework plugin installs each host's assembled skills, naming the onb
         assert.match(text, /show r2 before accepting an approval for r2/);
         assert.match(text, /host exposes `upf_discovery_question`.*saved discovery state/);
         assert.match(text, /Use the returned state as the continuation/);
-        assert.match(text, /When the tool is unavailable, use `agent-plugin question next <json>`/);
+        assert.match(text, /When the tool is unavailable, use `node \.upf-tools\/bin\/agent-plugin question next <json>`/);
         assert.doesNotMatch(text, /ask one focused decision per tool call when a host supports single-choice pickers only/);
       }
       if (skill === "discover-thorough") assert.match(text, /shared decision contract to select a channel that supports the complete multi-select question and custom answers/);

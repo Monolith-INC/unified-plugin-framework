@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { run as runCli } from '../dist/index.js';
 
-const run = (operation, input) => {
+const quickWork = { mode: 'discover-quick', selected: [], results: [{ step: 'brainstorming', status: 'completed', evidence: 'The user selected a date without a time.' }] };
+const material = '[Due dates design](docs/due-dates.md)';
+const run = (operation, input, root = '.') => {
   const lines = [];
-  const io = { out: (line) => lines.push(line), err: (line) => lines.push(line), cwd: () => '.', claudeState: () => '' };
+  const io = { out: (line) => lines.push(line), err: (line) => lines.push(line), cwd: () => root, claudeState: () => '' };
   const code = runCli(['question', operation, JSON.stringify(input)], io);
   return { code, output: JSON.parse(lines[0]) };
 };
@@ -89,15 +94,15 @@ test('discovery question uses saved-language wording without changing answer key
   const capabilities = { native: null, canvas: null, reply: true };
   const event = { kind: 'ask', capabilities, language: 'pt-br' };
   assert.equal(run('next', { state, event }).output.kind, 'recovery');
-  const wording = { explanation: 'Como continuar?', labels: { conversation: 'Conversar', execute: 'Prosseguir' } };
+  const wording = { explanation: 'Como continuar?', labels: { conversation: 'Conversar', design: 'Prosseguir' } };
   const result = run('next', { state, event: { ...event, wording } }).output;
   assert.equal(result.state.pending.question.explanation, wording.explanation);
-  assert.deepEqual(result.state.pending.displayedKeys, ['conversation', 'execute']);
+  assert.deepEqual(result.state.pending.displayedKeys, ['conversation', 'design']);
   assert.equal(result.state.pending.question.options[0].label, 'Conversar');
 });
 
 test('restored review rejects a pending decision from an older revision', () => {
-  const state = { session: 's', occurrence: 1, node: 'review', phase: 'active', revision: 'r1' };
+  const state = { session: 's', occurrence: 1, node: 'review', phase: 'active', revision: 'r1', material, work: quickWork };
   const capabilities = { native: null, canvas: null, reply: true };
   const pending = run('next', { state, event: { kind: 'ask', capabilities } }).output.state;
   const response = { channel: 'text', instance: pending.pending.instance, value: '2' };
@@ -127,7 +132,94 @@ test('explicit facts resolve one direction and reject conflicting facts', () => 
   const state = { session: 's', occurrence: 0, node: 'context', phase: 'active' };
   const event = { kind: 'facts', facts: { clear: true, discuss: false }, context: 'Fix a typo' };
   const result = run('next', { state, event }).output;
-  assert.equal(result.state.node, 'execute');
+  assert.equal(result.state.node, 'design');
   assert.equal(result.guidance.context, 'Fix a typo');
   assert.equal(run('next', { state, event: { ...event, facts: { clear: true, discuss: true } } }).output.kind, 'recovery');
+});
+
+test('optional multi-selection accepts none from each prepared channel and required choices remain pending', () => {
+  const question = { kind: 'several', explanation: 'Choose passes', options: [{ key: 'forge', label: 'Forge' }], allowOther: true };
+  const context = { instance: 'catalog', question, answered: false, channel: 'needs-input', displayedKeys: ['forge'] };
+  const capable = { single: true, several: true, consent: false, custom: true };
+  for (const kind of ['text', 'native', 'canvas']) {
+    const capabilities = { native: null, canvas: null, reply: true, ...(kind === 'text' ? {} : { [kind]: capable }) };
+    const response = { channel: kind, instance: 'catalog', ...(kind === 'text' ? { value: 'none' } : { keys: [] }) };
+    for (const required of [false, true]) {
+      const prepared = run('prepare', { context, required, capabilities }).output;
+      assert.equal(prepared.answerForms.includes('none'), !required);
+      assert.equal(run('answer', { context: prepared.continuation, response }).output.kind, required ? 'invalid' : 'answer');
+    }
+  }
+});
+
+test('DAY-002 selected skills, design presentation, and approval survive CLI round trips', (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'upf-forge-question-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const step = (state, event) => run('next', { state, event }, root).output;
+  const initial = { session: 'day-002', occurrence: 0, node: 'context', phase: 'active' };
+  const select = { kind: 'select-skills', mode: 'discover-quick', selected: ['bmad-forge-idea', 'bmad-review:adversarial+edge-case-hunter'] };
+  const selected = step(initial, select).state;
+  const design = step(selected, { kind: 'facts', facts: { clear: true, discuss: false } }).state;
+  assert.equal(design.node, 'design');
+  const show = { kind: 'advance', revision: 'r1', material };
+  assert.match(step(design, show).instruction, /brainstorming/);
+  const record = (state, result) => step(state, { kind: 'skill-result', ...result }).state;
+  const lead = record(design, quickWork.results[0]);
+  assert.match(step(lead, show).instruction, /bmad-forge-idea/);
+  assert.notEqual(run('next', { state: design, event: { kind: 'skill-result', step: 'brainstorming', evidence: 'Not run' } }, root).code, 0);
+  const forge = { kind: 'skill-result', step: 'bmad-forge-idea', status: 'completed', sessionRecord: 'forge-dates/.memlog.md', evidence: 'Hardened: the date uses the local calendar.' };
+  const missing = step(lead, forge);
+  assert.equal(missing.kind, 'recovery');
+  assert.equal(missing.state.work.results.find((result) => result.step === forge.step).status, 'failed');
+  assert.equal(step(missing.state, show).instruction, missing.instruction);
+  const session = join(root, 'forge-dates');
+  mkdirSync(session);
+  const memlog = join(session, '.memlog.md');
+  const report = join(session, 'forge-report.html');
+  const writeMemlog = (status) => writeFileSync(memlog, `---
+status: ${status}
+---
+
+- (decision) use the local calendar
+`);
+  writeMemlog('in-progress');
+  writeFileSync(report, '<!doctype html><html><body>HARDENED</body></html>');
+  assert.equal(step(missing.state, forge).kind, 'recovery');
+  writeMemlog('complete');
+  symlinkSync(session, join(root, 'alias'), 'dir');
+  assert.equal(step(missing.state, { ...forge, sessionRecord: 'alias/.memlog.md' }).kind, 'recovery');
+  const forged = step(missing.state, forge).state;
+  assert.equal(step(forged, { kind: 'advance', revision: 'r1' }).kind, 'recovery');
+  const review = step(forged, show).state;
+  const ask = { kind: 'ask', capabilities: { native: null, canvas: null, reply: true } };
+  const lensEvidence = (lens) => ({ kind: 'skill-result', step: 'bmad-review:' + lens, status: 'completed', evidence: 'Returned findings in review.md', revision: 'r1', material });
+  const lens = (state, lens) => step(state, lensEvidence(lens)).state;
+  assert.match(step(review, ask).instruction, /adversarial/);
+  const partial = lens(review, 'edge-case-hunter');
+  assert.match(step(partial, ask).instruction, /adversarial/);
+  const failedLens = step(partial, { kind: 'skill-result', step: 'bmad-review:adversarial', revision: 'r1', material,
+    status: 'failed', evidence: 'The reviewer returned no result.', recovery: 'Restore the adversarial lens and rerun it.' });
+  assert.equal(failedLens.kind, 'recovery');
+  assert.equal(step(failedLens.state, ask).instruction, failedLens.instruction);
+  const reviewed = lens(failedLens.state, 'adversarial');
+  const waiting = step(reviewed, ask).state;
+  assert.ok(waiting.pending.question.explanation.startsWith(material));
+  assert.ok(waiting.pending.question.explanation.includes('r1'));
+  const revised = step(waiting, { kind: 'review-revision', revision: 'r2', material: 'Changed design' }).state;
+  assert.match(step(revised, ask).instruction, /adversarial/);
+  const reusingRevision = step(waiting, { kind: 'review-revision', revision: 'r1', material: 'Different design, same label' }).state;
+  const staleLens = step(reusingRevision, lensEvidence('adversarial'));
+  assert.equal(staleLens.kind, 'recovery');
+  assert.match(step(staleLens.state, ask).instruction, /adversarial/);
+  assert.match(step({ ...reusingRevision, work: reviewed.work }, ask).instruction, /adversarial/);
+  const current = (state, lens) => step(state, { ...lensEvidence(lens), material: reusingRevision.material }).state;
+  assert.equal(step(current(current(reusingRevision, 'adversarial'), 'edge-case-hunter'), ask).kind, 'waiting');
+  const complete = step(waiting, { kind: 'answer', revision: 'r1', response: { channel: 'text', instance: waiting.pending.instance, value: '2' } });
+  assert.equal(complete.state.node, 'complete');
+  assert.equal(complete.state.approvedInstance, waiting.pending.instance);
+  writeMemlog('in-progress');
+  assert.equal(step(waiting, { kind: 'answer', revision: 'r1', response: { channel: 'text', instance: waiting.pending.instance, value: '2' } }).kind, 'recovery');
+  assert.equal(step(complete.state).kind, 'recovery');
+  assert.equal(step({ ...initial, node: 'execute' }).kind, 'recovery');
+  assert.equal(step({ ...initial, node: 'complete' }).kind, 'recovery');
 });

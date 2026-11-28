@@ -78,7 +78,7 @@ test("rendered discovery skills require offering fitting BMad paths before start
   assert.match(result.text, /BCP 47 tag.*en or pt-BR/);
   assert.match(result.text, /If wording is missing, supply it and retry with the same state/);
   assert.match(result.text, /Use the returned state as the continuation/);
-  assert.match(result.text, /When the tool is unavailable, use `agent-plugin question next <json>`/);
+  assert.match(result.text, /When the tool is unavailable, use `node \.upf-tools\/bin\/agent-plugin question next <json>`/);
   assert.match(result.text, /## Presenting questions to the user/);
   assert.match(result.text, /### Shape & Ideate/);
   assert.match(result.text, /bmad-forge-idea/);

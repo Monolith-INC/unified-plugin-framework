@@ -11,4 +11,4 @@ A native prompt can fail without answering the workflow's question. Keep the wor
 
 Index these units in the configured Project Knowledge store through `maks curate`, using this document as the source. Fetch an existing unit before updating it and pass its current version. For a new unit use `--if-version new`. Use the exact IDs above so the runtime can request only the applicable guidance.
 
-In a bootstrapped project, pass the absolute path to the existing trusted `.upf-tools/bin/maks` launcher as `--knowledge-launcher` when registering `agent-plugin question serve-codex`. The adapter returns a recovery unit ID and, when available, its current guidance. If the launcher or unit is unavailable, the replacement decision is still usable.
+In a bootstrapped project, pass the absolute path to the existing trusted `.upf-tools/bin/maks` launcher as `--knowledge-launcher` when registering `node .upf-tools/bin/agent-plugin question serve-codex` from the project root. The adapter returns a recovery unit ID and, when available, its current guidance. If the launcher or unit is unavailable, the replacement decision is still usable.

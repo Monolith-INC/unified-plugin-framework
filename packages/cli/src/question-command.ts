@@ -1,4 +1,6 @@
-import { nextDiscovery, normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type DiscoveryEvent, type DiscoveryState, type Question, type QuestionCapabilities, type QuestionResponse, type QuestionWording } from "@agent-plugins/workflows";
+import { isDiscoveryWork, isSelection, isSkillEvidence, nextDiscovery, normalizeQuestionAnswer, prepareQuestion, type DecisionContext, type DiscoveryEvent, type DiscoveryState, type Question, type QuestionCapabilities, type QuestionResponse, type QuestionWording } from "@agent-plugins/workflows";
+
+import { FORGE_RECORD_RECOVERY, hasCompletedForgeRecord } from "./question-forge-record.js";
 
 type RecordValue = Readonly<Record<string, unknown>>;
 const record = (value: unknown): value is RecordValue => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -11,7 +13,7 @@ const option = (value: unknown): boolean => record(value) && typeof value.label 
 const question = (value: unknown): value is Question => record(value) && typeof value.explanation === "string" && (
   value.kind === "confirm"
     ? typeof value.acceptLabel === "string" && typeof value.declineLabel === "string" && value.safeDefault === "decline"
-    : (value.kind === "single" || value.kind === "several") && value.allowOther === true && Array.isArray(value.options)
+    : (value.kind === "single" || value.kind === "several" && optionalBoolean(value.allowNone)) && value.allowOther === true && Array.isArray(value.options)
       && value.options.length > 0 && value.options.every(option));
 const context = (value: unknown): value is DecisionContext => record(value) && typeof value.instance === "string"
   && question(value.question) && strings(value.displayedKeys) && typeof value.answered === "boolean" && channel(value.channel)
@@ -28,7 +30,7 @@ const elicitationAction = (value: unknown): boolean => record(value) && (
   (value.kind === "offer" || value.kind === "choose") && strings(value.methods)
   || value.kind === "review" || value.kind === "apply" || value.kind === "reject" || value.kind === "proceed");
 const activeState = (value: RecordValue): boolean => typeof value.session === "string" && Number.isSafeInteger(value.occurrence)
-  && typeof value.node === "string" && optionalString(value.revision) && elicitationState(value.elicitation) && optionalStrings(value.elicitationEvents);
+  && (value.work === undefined || isDiscoveryWork(value.work)) && typeof value.node === "string" && optionalString(value.revision) && optionalString(value.material) && optionalString(value.approvedInstance) && elicitationState(value.elicitation) && optionalStrings(value.elicitationEvents);
 const pending = (value: unknown): boolean => record(value) && channel(value.kind) && typeof value.instance === "string"
   && question(value.question) && strings(value.displayedKeys) && strings(value.answerForms) && context(value.continuation)
   && value.instance === value.continuation.instance && value.kind === value.continuation.channel;
@@ -40,26 +42,45 @@ export const discoveryState = (value: unknown): value is DiscoveryState => recor
     : activeState(value) && (value.phase === "active" || value.phase === "waiting" && optionalString(value.clarification) && pending(value.pending)));
 const discoveryEvent = (value: unknown): value is DiscoveryEvent => record(value) && (
   (value.kind === "ask" || value.kind === "connect") && capabilities(value.capabilities) && optionalString(value.language) && (value.wording === undefined || questionWording(value.wording))
+  || value.kind === "select-skills" && isSelection(value)
+  || value.kind === "skill-result" && isSkillEvidence(value)
   || value.kind === "answer" && response(value.response) && optionalString(value.revision)
   || value.kind === "recover-input" && typeof value.instance === "string" && typeof value.reply === "boolean"
   || value.kind === "facts" && facts(value.facts) && optionalString(value.context)
-  || value.kind === "advance" && optionalString(value.revision)
-  || value.kind === "review-revision" && typeof value.revision === "string"
+  || value.kind === "advance" && optionalString(value.revision) && optionalString(value.material)
+  || value.kind === "review-revision" && typeof value.revision === "string" && typeof value.material === "string"
   || value.kind === "elicitation" && typeof value.session === "string" && Number.isSafeInteger(value.occurrence) && typeof value.eventId === "string" && elicitationAction(value.action)
   || value.kind === "pause" || value.kind === "resume" || value.kind === "retry");
+
+type SkillResult = Extract<DiscoveryEvent, { kind: "skill-result" }>;
+const verifiedResult = (root: string, result: Omit<SkillResult, "kind">): boolean =>
+  result.step !== "bmad-forge-idea" || result.status !== "completed" || hasCompletedForgeRecord(root, result.sessionRecord);
+const verifiedState = (root: string, state: DiscoveryState): boolean =>
+  state.phase === "paused" ? verifiedState(root, state.previous)
+    : state.work?.results.every((result) => verifiedResult(root, result)) ?? true;
+export const discoveryStateFor = (root: string) => (value: unknown): value is DiscoveryState =>
+  discoveryState(value) && verifiedState(root, value);
+const verifiedEvent = (root: string, event: DiscoveryEvent | undefined): DiscoveryEvent | undefined =>
+  event?.kind === "skill-result" && !verifiedResult(root, event)
+    ? { ...event, status: "failed", evidence: "The Forge completion artifacts could not be verified.", recovery: FORGE_RECORD_RECOVERY }
+    : event;
+const nextFromDisk = (root: string, state: DiscoveryState | undefined, event: DiscoveryEvent | undefined) =>
+  state !== undefined && !verifiedState(root, state) ? { kind: "recovery", state, instruction: FORGE_RECORD_RECOVERY }
+    : nextDiscovery(state, verifiedEvent(root, event));
 
 type Input = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const parse = (text: string): Input => {
   try { return { ok: true, value: JSON.parse(text) as unknown }; }
   catch { return { ok: false }; }
 };
-type Io = { readonly out: (line: string) => void; readonly err: (line: string) => void };
+type Io = { readonly out: (line: string) => void; readonly err: (line: string) => void; readonly cwd: () => string };
 const HELP = `Usage: agent-plugin question prepare|answer|next <json>
 
 Pass JSON as one argument with safe shell quoting; never interpolate user text into a shell command.
 
 prepare accepts {"context": ..., "capabilities": ..., "required": true|false}.
 The context contains instance, question, displayedKeys, answered, and channel (use "needs-input" initially).
+For optional multi-select, pass required: false to allow none (text "none" or an empty native selection).
 Choice questions use kind "single" or "several", explanation, options with key and label, and allowOther: true.
 Confirmations use kind "confirm", explanation, acceptLabel, declineLabel, safeDefault: "decline", and context.acceptKey.
 Capabilities contain native and canvas (null or {single, several, consent, custom, optionalOnly?} booleans) and reply (boolean).
@@ -70,6 +91,11 @@ After one answer, set continuation.answered to true; resume needs-input by prepa
 
 next accepts {"state": ..., "event": ...}. Start a discovery session with state
 {"session":"<unique session>","occurrence":0,"node":"context","phase":"active"}.
+Record the operation and normalized optional catalog keys with {"kind":"select-skills","mode":"discover-quick","selected":[]}.
+For each executed skill send {"kind":"skill-result","step":<skill key>,"status":"completed","evidence":<observed outcome or artifact>}.
+On failure send status "failed", the observed failure as evidence, and the next action as recovery.
+Completed Forge requires sessionRecord, the project-local .memlog.md with status complete and its adjacent forge-report.html.
+Record each selected review lens separately with the exact revision and material it reviewed and its findings or explicit empty result. Keep revision and material from the state given to the lens so a late result cannot apply to a changed design.
 Read without an event; send {"kind":"ask","capabilities":...} to prepare a decision.
 Explicit facts can resolve context ({clear, discuss}) and sizing ({small, design}) when exactly one direction applies. Include relevant context in the event; missing or conflicting facts return recovery.
 Pass the project's saved language in the ask event. English uses the authored wording; for another language, supply wording {explanation, labels: {<direction key>: <localized label>}} without changing the stable direction keys.
@@ -78,8 +104,8 @@ For needs-input, reconnect with {"kind":"connect","capabilities":...}; then send
 {"kind":"answer","response":...,"revision":...} with the matching decision instance and reviewed revision.
 If native input fails, send {"kind":"recover-input","instance":<pending instance>,"reply":true|false}.
 Use the returned replacement decision for text or unattended recovery; the old instance cannot answer it.
-Use advance for a single available direction, with revision when entering review;
-use review-revision to invalidate an obsolete review, and pause/resume to suspend or restore.
+Use advance for a single available direction. Before entering review, show the saved design in chat and pass material (design content or an accessible link) and revision with advance;
+use review-revision with the new revision and material to invalidate an obsolete review, and pause/resume to suspend or restore.
 After clarifying a custom answer, use retry to create a fresh decision before asking again.
 At elicitation, send {"kind":"elicitation","session":...,"occurrence":...,"eventId":...,"action":...}, using a fresh event ID for each new action and the same ID for a retry.
 Actions are offer or choose with methods (stable method IDs), review, apply, reject, and proceed.
@@ -93,7 +119,7 @@ const executeRecord = (io: Io, operation: string | undefined, value: RecordValue
     case operation === "answer" && context(value.context) && response(value.response):
       return output(io, normalizeQuestionAnswer(value.context, value.response));
     case operation === "next" && (value.state === undefined || discoveryState(value.state)) && (value.event === undefined || discoveryEvent(value.event)):
-      return output(io, nextDiscovery(value.state as DiscoveryState | undefined, value.event as DiscoveryEvent | undefined));
+      return output(io, nextFromDisk(io.cwd(), value.state as DiscoveryState | undefined, value.event as DiscoveryEvent | undefined));
     default: return invalid(io);
   }
 };

@@ -5,6 +5,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { codexQuestionPort, createCodexDiscoveryHandler, serveCodexQuestions } from '../dist/question-host.js';
 
+const quickWork = { mode: 'discover-quick', selected: [], results: [{ step: 'brainstorming', status: 'completed', evidence: 'The user selected a date without a time.' }] };
+const material = '[Due dates design](docs/due-dates.md)';
 const state = { session: 'discovery-session', occurrence: 0, node: 'context', phase: 'active' };
 const signal = new AbortController().signal;
 const answer = (choice) => ({ action: 'accept', content: { choice } });
@@ -115,7 +117,7 @@ test('a newer review revision replaces a form before its answer arrives', async 
   const oldAnswer = Promise.withResolvers();
   const oldStarted = Promise.withResolvers();
   let firstForm = true;
-  const review = { ...state, node: 'review', revision: 'old' };
+  const review = { ...state, node: 'review', revision: 'old', material, work: quickWork };
   const handle = createCodexDiscoveryHandler(codexQuestionPort((_form, formSignal) => {
     if (firstForm) {
       firstForm = false;
@@ -135,6 +137,8 @@ test('a newer review revision replaces a form before its answer arrives', async 
   assert.equal(completed.kind, 'ready');
   assert.equal(completed.state.node, 'complete');
   assert.deepEqual(await handle(revised, true, signal), completed);
+  assert.equal((await handle({ ...revised, work: { ...revised.work, results: [] } }, true, signal)).kind, 'recovery');
+  assert.equal((await handle({ ...revised, material: 'A different design' }, true, signal)).kind, 'ignored');
 });
 
 test('the MCP tool carries localized discovery and custom form wording', async (t) => {
@@ -164,7 +168,7 @@ test('the MCP tool carries localized discovery and custom form wording', async (
   const result = await client.callTool({ name: tool.name, arguments: {
     state, language: 'pt-BR', wording: {
       explanation: 'Como quer seguir?',
-      labels: { execute: 'Prosseguir', conversation: 'Conversar' },
+      labels: { design: 'Prosseguir', conversation: 'Conversar' },
     },
   } });
   assert.equal(formMessages[0].message, 'Como quer seguir?');
@@ -172,7 +176,7 @@ test('the MCP tool carries localized discovery and custom form wording', async (
   assert.equal(choice.title, 'Resposta');
   assert.deepEqual(choice.oneOf, [
     { const: 'choice:conversation', title: 'Conversar' },
-    { const: 'choice:execute', title: 'Prosseguir' },
+    { const: 'choice:design', title: 'Prosseguir' },
     { const: 'custom', title: 'Outra opção' },
   ]);
   assert.equal(formMessages[1].message, 'Digite sua resposta.');
@@ -180,4 +184,22 @@ test('the MCP tool carries localized discovery and custom form wording', async (
   const continuation = JSON.parse(result.content[0].text);
   assert.equal(continuation.kind, 'needs-clarification');
   assert.equal(continuation.custom, '  Outra direção  ');
+});
+
+test('a changed revision invalidates the open approval while review evidence is missing', async () => {
+  const handleStarted = Promise.withResolvers();
+  const oldReply = Promise.withResolvers();
+  const work = { ...quickWork, selected: ['bmad-review:verification-gap'], results: [...quickWork.results,
+    { step: 'bmad-review:verification-gap', status: 'completed', evidence: 'No gaps found', revision: 'r1', material }] };
+  const review = { ...state, node: 'review', revision: 'r1', work, material };
+  const handle = createCodexDiscoveryHandler(codexQuestionPort((form) => {
+    handleStarted.resolve(form);
+    return oldReply.promise;
+  }));
+  const pending = handle(review, true, signal);
+  assert.ok((await handleStarted.promise).message.startsWith(material));
+  const changed = { ...review, occurrence: 1, revision: 'r2', material: 'New due date design' };
+  assert.equal((await handle(changed, true, signal)).kind, 'recovery');
+  oldReply.resolve(answer('choice:complete'));
+  assert.equal((await pending).kind, 'ignored');
 });

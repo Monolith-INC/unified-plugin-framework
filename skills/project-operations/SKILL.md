@@ -7,9 +7,9 @@ description: Perform a project work-item operation through its configured adapte
 
 Use the project's language for communication, documentation and other prose. Carry the user's original request through the operation. The project selects its adapter; the workflow does not choose a destination or call a provider's native tools.
 
-Write the neutral request to a JSON file and run `agent-plugin project request --input <file> --project <project-directory>`. The supported operations are:
+Write the neutral request to a JSON file and run `node .upf-tools/bin/agent-plugin project request --input <file> --project <project-directory>`. The supported operations are:
 
-The framework CLI must be available alongside the installed skills. In a source checkout, the equivalent command is `pnpm --dir <framework-checkout> agent-plugin project ...` after its documented install/build. Use the known installation path. If neither runtime is available, preserve the request and tell the user to provide the framework CLI; project bootstrap cannot repair a missing executable. Do not download or install anything silently.
+Run the installed launcher from the project root. In a source checkout, the equivalent command is `pnpm --dir <framework-checkout> agent-plugin project ...` after its documented install/build. Use the known installation path. If neither runtime is available, preserve the request and tell the user to provide the framework CLI; project bootstrap cannot repair a missing executable. Do not download or install anything silently.
 
 | Operation | Inputs |
 | --- | --- |

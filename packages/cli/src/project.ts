@@ -3,10 +3,12 @@ import { resolve } from "node:path";
 import { fail, flatMap, nodeProjectIO, ok, operate, parseJson, parseRequest, setup, type ProjectIO, type Request, type Result } from "@agent-plugins/project";
 import type { CliIo } from "./index.js";
 import { runTooling } from "./tooling-command.js";
+import { skillSource } from "./skill-source.js";
+import { isHostName } from "./host-names.js";
 import { readLastInstallLog } from "./install-log.js";
 import { handoffReady, handoffStateRoot, isTaskKind, manageHandoffs, type HandoffAction } from "./tooling-handoffs.js";
 
-const USAGE = "agent-plugin project describe | status | handoffs | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
+const USAGE = "agent-plugin project describe | status | skill-source <codex|claude> <absolute SKILL.md path> | handoffs | request --input <request.json> | setup --input <answers.json> [--resume <request.json>] [--project <directory>]";
 const option = (args: readonly string[], name: string): string | undefined => args[args.indexOf(name) + 1];
 const argument = (args: readonly string[], name: string): string | undefined => args.includes(name) ? option(args, name) : undefined;
 
@@ -53,8 +55,16 @@ const validArgs = (args: readonly string[]): boolean => args.slice(1).length % 2
   && (args[0] === "setup" || !args.includes("--resume")) && (args[0] !== "describe" || !args.includes("--input"));
 
 export const runProject = (args: readonly string[], io: CliIo): Promise<number> => args[0] === "bootstrap" ? runTooling(args.slice(1), io)
+  : args[0] === "skill-source" ? runSkillSource(args.slice(1), io)
   : args[0] === "handoffs" ? runHandoff(args.slice(1), io)
   : validArgs(args) ? runAction(args, io) : Promise.resolve(respond(io, fail("usage", USAGE, "Correct the option names and provide one value for each option.")));
+
+const runSkillSource = async (args: readonly string[], io: CliIo): Promise<number> => {
+  const [host, selected] = args;
+  return args.length === 2 && isHostName(host) && selected !== undefined
+    ? respond(io, await skillSource(io.cwd(), host, selected))
+    : respond(io, fail("usage", USAGE, "Provide the host and the absolute path of the selected SKILL.md from the project root."));
+};
 
 const handoffAction = (args: readonly string[]): HandoffAction | null => {
   const task = argument(args, "--task");

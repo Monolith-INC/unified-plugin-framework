@@ -13,8 +13,8 @@ Use the project's saved language for all messages. Never discard in-progress dra
 
 Before involving the user, diagnose the failure using read-only checks only:
 
-- Run `agent-plugin adapter-check <workflow> --project <project-directory>` (using the installed project CLI) to identify the exact failing readiness step and recovery detail.
-- Run `agent-plugin project describe --project <project-directory>` and `agent-plugin project handoffs --project <project-directory>` to inspect saved settings and pending handoffs.
+- Run `node .upf-tools/bin/agent-plugin adapter-check <workflow> --project <project-directory>` (from the project root) to identify the exact failing readiness step and recovery detail.
+- Run `node .upf-tools/bin/agent-plugin project describe --project <project-directory>` and `node .upf-tools/bin/agent-plugin project handoffs --project <project-directory>` to inspect saved settings and pending handoffs.
 - Inspect the error message, lock file, or configuration files in read-only mode.
 
 Never modify user files, rewrite configuration or lock files, reinstall plugins, or run destructive commands without the user's explicit confirmation.
@@ -30,7 +30,7 @@ For fixed-answer questions during diagnosis or repair, use the host's native sel
 - **Numbered fallback:** when the native control cannot carry the complete decision, use a suitable interactive canvas or a numbered list only when a reply channel is available. End choice lists with **Other (type your own answer)**, state the expected reply format, and re-ask if the reply does not match. Keep open-ended questions typed.
 - **No reply channel:** yield `needs-input` with the pending decision, question, permitted answers and continuation; do not read stdin or apply the fix. Resume only on a matching explicit answer.
 - **Decision safety:** use one answer channel per decision, associate responses with the current decision instance and stable option keys, decode numbers in displayed order, preserve custom text, and ignore stale or repeated callbacks. Dismissal, ambiguity and a default are not consent.
-- **Shared decision contract:** call `agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.
+- **Shared decision contract:** work from the project root. If the local launcher is missing, report its path and restore it through setup. Call `node .upf-tools/bin/agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`node .upf-tools/bin/agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `node .upf-tools/bin/agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.
 
 ## Scenario 1: Concrete fix available
 
