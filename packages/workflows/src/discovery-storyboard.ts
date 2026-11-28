@@ -21,15 +21,14 @@ const node = (id: string, directions: readonly (readonly [string, string])[]): D
 export const DISCOVERY_STORYBOARD: DiscoveryStoryboard = Object.freeze({
   entry: "context",
   nodes: Object.freeze([
-    node("context", [["Discuss the request", "conversation"], ["Proceed with a clear request", "execute"]]),
+    node("context", [["Discuss the request", "conversation"], ["Draft the design", "design"]]),
     node("conversation", [["Explore a decision", "elicitation"], ["Play back understanding", "playback"], ["Size the work", "sizing"]]),
     node("elicitation", [["Review the result", "after-elicitation"]]),
     node("after-elicitation", [["Continue the conversation", "conversation"], ["Play back understanding", "playback"]]),
     node("playback", [["Continue the conversation", "conversation"], ["Size the work", "sizing"]]),
-    node("sizing", [["Proceed with a small change", "execute"], ["Write a design", "design"]]),
+    node("sizing", [["Write a design", "design"]]),
     node("design", [["Review the design", "review"]]),
-    node("review", [["Revise the design", "design"], ["Finish discovery", "complete"]]),
-    node("execute", []),
+    node("review", [["Revise the design", "design"], ["Approve this design", "complete"]]),
     node("complete", []),
   ]),
 });

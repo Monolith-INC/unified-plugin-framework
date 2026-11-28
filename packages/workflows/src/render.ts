@@ -7,6 +7,7 @@ import {
   type PluginSkillRef,
   type WorkflowAdapter,
 } from "./adapter.js";
+import { discoveryLayerKey } from "./discovery.js";
 import { LOCK_FILE, pinFor, type OnboardedLock, type PluginPin } from "./lock.js";
 import { PRESENTATION_BLUEPRINTS, SHARED_INTERACTION_SECTION, groupOptions } from "./questions.js";
 
@@ -43,10 +44,14 @@ const DISCOVERY_FACILITATION_RULES: readonly string[] = Object.freeze([
   "",
   "### Session framing and facilitation",
   "",
+  "- **Identify the active skill:** from the project root run `node .upf-tools/bin/agent-plugin project skill-source <codex|claude> <absolute SKILL.md path the host opened>` on those hosts. On a different-source or modified result, report the selected and expected paths and versions; open the verified project skill before continuing. If your host does not expose the selected path, report that the invocation source is unknown.",
   "- **Frame the workflow first:** before asking any question, briefly state the active discovery mode, the stages this session will follow, and the written design artifact it will produce.",
   "- **Ground before asking:** read the user's starting idea file and the shared project knowledge store first, then summarize what is already known and what decisions remain open in 2–4 concise bullets before offering optional skills or launching research.",
   "- **One focused question at a time:** never bundle multiple broad questions into one message or ask the user to frame the whole problem from scratch. Ask one concrete, decision-driving question per turn; when clear directions exist, propose 2–4 concrete options using native selection controls with **Other**.",
   "- **Never silently downgrade a selected skill:** if a required layer or user-selected optional skill cannot activate because its project runtime or prerequisites are missing, run its recovery step or hand over to `repair-workflow` — never silently substitute an ad-hoc web search or shallow summary.",
+  "- **Resume the selected work:** use the normalized optional choices to send a select-skills event with this mode and the selected catalog keys. Start the installed lead skill immediately, follow its conversation, and record its observed decisions with a skill-result event with status completed. If a step fails, use status failed and record the observed problem and the specific recovery. Use the same discovery state after each answer and each delegated pass.",
+  "- **Forge Idea:** when selected, activate the installed skill, resume or initialize its session, append decisions as it runs, and follow its exit steps. Record its outcome and report with skill-result, step bmad-forge-idea, and sessionRecord containing the project-local completed .memlog.md path. The CLI checks it and the adjacent forge-report.html. If initialization fails, disclose the failure and record the in-chat session as the skill directs, then record the persistence failure with its recovery.",
+  "- **Review:** stage the saved design and invoke each requested lens using the installed skill. Read each returned result. Send a skill-result for each lens with the exact revision and material sent to that lens and its findings or explicit empty result. If a lens is unavailable, record status failed with its recovery. Report completion only for steps with an observed result.",
   "- **Show stage progress:** as each stage completes, briefly recap the settled decisions and name the next stage until the user approves the written design file.",
 ]);
 
@@ -81,11 +86,11 @@ const sameEntry = (x: PluginSkillRef) => (y: PluginSkillRef): boolean =>
 const offeredCatalog = (adapter: WorkflowAdapter<string>, served: readonly PluginSkillRef[]): readonly PluginSkillRef[] =>
   adapter.catalog.filter((entry) => !served.some(sameEntry(entry)));
 
-const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[]): readonly string[] => {
+const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[], discovery: boolean): readonly string[] => {
   const groups = groupOptions(
     offered.map((ref) => ({
       label: qualify(ref),
-      ...(ref.use === undefined ? {} : { description: ref.use }),
+      ...(ref.use === undefined ? {} : { description: discovery ? `${ref.use} (selection key: \`${discoveryLayerKey(ref)}\`)` : ref.use }),
       ...(ref.group === undefined ? {} : { group: ref.group }),
     })),
   );
@@ -97,16 +102,16 @@ const groupedCatalogLines = (qualify: Qualify, offered: readonly PluginSkillRef[
   ]);
 };
 
-const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[]): string => {
+const catalogBlock = (qualify: Qualify, offered: readonly PluginSkillRef[], discovery: boolean): string => {
   const hasGroups = offered.some((ref) => ref.group !== undefined);
   return offered.length === 0
     ? ""
     : [
         "## Optional skills",
         "",
-        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Use the shared decision contract to select a channel that supports the complete multi-select question and custom answers. Group native multi-select questions at most 4 options per group when supported; otherwise use the contract's suitable canvas, numbered reply fallback, or resumable needs-input result. Run every skill they pick at the point it fits, or proceed directly if they decline.",
+        "Before starting the lead workflow, offer the user the fitting paths from this list (for example: harden the idea, develop it further, check gaps, or research open questions) and wait for their choice. Honor paths the user already selected. Prepare an optional choice with `required: false`; show the specific channel limitation if using a fallback. Use the shared decision contract to select a channel that supports the complete multi-select question and custom answers. Group native multi-select questions at most 4 options per group when supported; otherwise use the contract's suitable canvas, numbered reply fallback, or resumable needs-input result. Run every skill they pick at the point it fits, or proceed directly if they decline.",
         "",
-        ...(hasGroups ? groupedCatalogLines(qualify, offered) : listed(qualify, offered)),
+        ...(hasGroups ? groupedCatalogLines(qualify, offered, discovery) : listed(qualify, offered)),
       ]
         .join("\n")
         .trimEnd();
@@ -164,11 +169,11 @@ const readiness = (
       "",
       "## Discovery directions",
       "",
-      "Use `agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `agent-plugin question --help` for the state and events. Show the current revision before a review decision and invalidate it if the work changes.",
+      "Use `node .upf-tools/bin/agent-plugin question next <json>` to resolve the current discovery step and its guidance. Run `node .upf-tools/bin/agent-plugin question --help` for the state and events. Before opening an approval control, send the saved design content or a usable link and its revision in a user-visible message. Pass the same material and revision when entering review. After an edit, show the changed design, invalidate the earlier question, and rerun the requested lenses on that revision.",
       "",
-      "When a step needs a direction and the host exposes `upf_discovery_question`, call it with the saved discovery state, project language as a BCP 47 tag (for example, en or pt-BR), and localized wording when needed. Supply translations for any form controls the tool requires for that language. Use the returned state as the continuation. The tool presents and applies the answer, so do not open a second picker or submit a second answer. If it returns a fallback decision, use its pending question and continue with `agent-plugin question next <json>`. If wording is missing, supply it and retry with the same state. Treat an ignored result as stale and keep the current session state.",
+      "When a step needs a direction and the host exposes `upf_discovery_question`, call it with the saved discovery state, project language as a BCP 47 tag (for example, en or pt-BR), and localized wording when needed. Supply translations for any form controls the tool requires for that language. Use the returned state as the continuation. The tool presents and applies the answer, so do not open a second picker or submit a second answer. If it returns a fallback decision, use its pending question and continue with `node .upf-tools/bin/agent-plugin question next <json>`. If wording is missing, supply it and retry with the same state. Treat an ignored result as stale and keep the current session state.",
       "",
-      "When the tool is unavailable, use `agent-plugin question next <json>` for both preparation and replies. Pass the saved language and localized wording, preserving the direction keys. Keep the returned state with the session. A needs-input result retains the question and continuation without waiting on stdin. Restore unavailable state through the workflow recovery guidance.",
+      "When the tool is unavailable, use `node .upf-tools/bin/agent-plugin question next <json>` for both preparation and replies. Pass the saved language and localized wording, preserving the direction keys. Keep the returned state with the session. A needs-input result retains the question and continuation without waiting on stdin. Restore unavailable state through the workflow recovery guidance.",
     ] : []),
   ].join("\n");
 
@@ -190,7 +195,7 @@ const sections = ({ adapter, operation, served, offered, pins }: Inputs): Readon
     ["generated", generated(adapter, operation)],
     ["readiness", readiness(adapter, qualify, checkedSkills(served, offered), pins)],
     ["delegate", delegate(adapter, qualify, served)],
-    ["catalog", catalogBlock(qualify, offered)],
+    ["catalog", catalogBlock(qualify, offered, adapter.workflow === "discovery")],
     ...(adapter.protocol === undefined ? [] : [["protocol", adapter.protocol] as const]),
   ]);
 };

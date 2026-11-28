@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { nextDiscovery } from '../dist/discovery-next.js';
 
+const quickWork = { mode: 'discover-quick', selected: [], results: [{ step: 'brainstorming', status: 'completed', evidence: 'The user selected a date without a time.' }] };
+const material = '[Due dates design](docs/due-dates.md)';
 const initial = { session: 'session-1', occurrence: 0, node: 'context', phase: 'active' };
 const next = (state, event) => nextDiscovery(state, event);
 const closed = { native: null, canvas: null, reply: false };
@@ -26,7 +28,7 @@ test('explicit decisions use the storyboard and a fresh occurrence on each visit
 });
 
 test('invalid answers, pause and obsolete approvals preserve pending work', () => {
-  const review = { session: 's', occurrence: 3, node: 'review', phase: 'active', revision: 'r1' };
+  const review = { session: 's', occurrence: 3, node: 'review', phase: 'active', revision: 'r1', material, work: quickWork };
   const pending = connect(next(review, ask).state);
   const instance = pending.pending.instance;
   assert.deepEqual(next(pending, answer(instance, '2', 'r2')).state, pending);
@@ -48,16 +50,29 @@ test('missing, invalid and conflicting inputs return recoverable results', () =>
 });
 
 test('single directions advance only on an event and changed reviews invalidate prior answers', () => {
-  const design = { ...initial, node: 'design' };
+  const design = { ...initial, node: 'design', work: quickWork };
   assert.deepEqual(next(design).state, design);
   assert.equal(next(design, { kind: 'advance' }).kind, 'recovery');
-  const review = next(design, { kind: 'advance', revision: 'old' }).state;
+  const review = next(design, { kind: 'advance', revision: 'old', material }).state;
   const pending = connect(next(review, ask).state);
-  const changed = next(pending, { kind: 'review-revision', revision: 'new' }).state;
+  const changed = next(pending, { kind: 'review-revision', revision: 'new', material }).state;
   assert.equal(changed.occurrence, review.occurrence + 1);
   const replacement = connect(next(changed, ask).state);
   assert.deepEqual(next(replacement, answer(pending.pending.instance, '2', 'old')).state, replacement);
   assert.equal(next(replacement, answer(replacement.pending.instance, '2', 'new')).state.node, 'complete');
+});
+
+test('changing design material invalidates approval even if its revision label is reused', () => {
+  const review = { ...initial, node: 'review', revision: 'r1', material, work: quickWork };
+  const seen = connect(next(review, ask).state);
+  const changed = next(seen, { kind: 'review-revision', revision: 'r1', material: 'A different design' }).state;
+  assert.equal(changed.material, 'A different design');
+  const replacement = connect(next(changed, ask).state);
+  assert.notEqual(replacement.pending.instance, seen.pending.instance);
+  assert.deepEqual(next(replacement, answer(seen.pending.instance, '2', 'r1')).state, replacement);
+  const approved = next(replacement, answer(replacement.pending.instance, '2', 'r1')).state;
+  assert.equal(approved.node, 'complete');
+  assert.equal(next({ ...approved, material }).kind, 'recovery');
 });
 
 test('custom answers remain available without choosing a workflow path', () => {
@@ -78,7 +93,7 @@ test('custom answers remain available without choosing a workflow path', () => {
 });
 
 test('restored pending decisions must match the session, revision, and displayed options', () => {
-  const review = { session: 's', occurrence: 3, node: 'review', phase: 'active', revision: 'r1' };
+  const review = { session: 's', occurrence: 3, node: 'review', phase: 'active', revision: 'r1', material, work: quickWork };
   const waiting = connect(next(review, ask).state);
   const wrongRevision = { ...waiting, revision: 'r2' };
   assert.equal(next(wrongRevision, answer(waiting.pending.instance, '2', 'r2')).kind, 'recovery');
@@ -92,15 +107,15 @@ test('restored pending decisions must match the session, revision, and displayed
 });
 
 test('a single-direction transition to review cannot skip the revision precondition', () => {
-  const design = { ...initial, node: 'design' };
+  const design = { ...initial, node: 'design', work: quickWork };
   assert.equal(next(design, ask).kind, 'invalid-event');
   assert.equal(next(design, { kind: 'advance' }).kind, 'recovery');
-  assert.equal(next(design, { kind: 'advance', revision: 'r1' }).state.revision, 'r1');
+  assert.equal(next(design, { kind: 'advance', revision: 'r1', material }).state.revision, 'r1');
 });
 
 test('explicit facts select one valid direction and conflicting facts recover', () => {
   const clear = next(initial, { kind: 'facts', facts: { clear: true, discuss: false }, context: 'Fix a typo' });
-  assert.equal(clear.state.node, 'execute');
+  assert.equal(clear.state.node, 'design');
   assert.equal(clear.guidance.context, 'Fix a typo');
   assert.equal(next(initial, { kind: 'facts', facts: { clear: true, discuss: true } }).kind, 'recovery');
   assert.equal(next(initial, { kind: 'facts', facts: {} }).kind, 'recovery');

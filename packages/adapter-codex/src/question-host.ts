@@ -103,11 +103,11 @@ const recover = (waiting: DiscoveryWaiting, reason: QuestionInterruption, reply:
 });
 type Recovery = ReturnType<typeof recover>;
 type DecisionState = Exclude<DiscoveryState, { readonly phase: 'paused' }>;
-type Identity = Pick<DecisionState, 'occurrence' | 'node' | 'revision'>;
+type Identity = Pick<DecisionState, 'occurrence' | 'node' | 'revision' | 'material'>;
 type Recorded = { readonly identity: Identity; readonly result?: DiscoveryNext | Recovery };
 type Active = { readonly occurrence: number; readonly controller: AbortController };
 const sameIdentity = (a: Identity, b: Identity): boolean =>
-  a.occurrence === b.occurrence && a.node === b.node && a.revision === b.revision;
+  a.occurrence === b.occurrence && a.node === b.node && a.revision === b.revision && a.material === b.material;
 const ignored = (state: DecisionState) => ({ kind: 'ignored' as const, state });
 type Attempt = { readonly response: QuestionResponse | null } | { readonly interrupted: 'timeout' | 'disconnect' };
 
@@ -136,22 +136,26 @@ export const createCodexDiscoveryHandler = (port: NativeQuestionPort, timeoutMs 
   const settled = new Map<string, Recorded>();
   const ask = async (state: DecisionState, available: boolean, signal: AbortSignal, reply: boolean,
     presentation: Presentation, nativePort: NativeQuestionPort) => {
-    const { session, occurrence, node, revision } = state;
-    const identity = { occurrence, node, ...(revision === undefined ? {} : { revision }) };
+    const { session, occurrence, node, revision, material } = state;
+    const identity = { occurrence, node, ...(revision === undefined ? {} : { revision }),
+      ...(material === undefined ? {} : { material }) };
     const current = inFlight.get(session);
     const previous = settled.get(session);
     if (occurrence <= (current?.occurrence ?? -1)) return ignored(state);
     if (previous !== undefined && occurrence <= previous.identity.occurrence) {
       if (!sameIdentity(identity, previous.identity)) return ignored(state);
-      if (previous.result !== undefined) return previous.result;
+      if (previous.result !== undefined) {
+        const currentDecision = prepare(state, available, reply, presentation);
+        return currentDecision.kind === 'recovery' || currentDecision.kind === 'invalid-event' ? currentDecision : previous.result;
+      }
     }
     const prepared = prepare(state, available, reply, presentation);
-    if (prepared.kind === 'recovery' || prepared.kind === 'invalid-event') return prepared;
     if (current !== undefined) {
       inFlight.delete(session);
       current.controller.abort();
     }
     settled.set(session, { identity });
+    if (prepared.kind === 'recovery' || prepared.kind === 'invalid-event') return prepared;
     const remember = <T extends DiscoveryNext | Recovery>(result: T): T => {
       settled.set(session, { identity, result });
       return result;

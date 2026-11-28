@@ -108,3 +108,16 @@ export const brainstormingDiscoveryAdapter: DiscoveryAdapter = Object.freeze({
   knowledgeStores: Object.freeze([]),
   supportSkills: BMAD_SUPPORT,
 });
+
+/** Question option and execution keys distinguish the two review passes in the catalog. */
+export const discoveryLayerKey = (ref: PluginSkillRef): string =>
+  ref === LENSES ? 'bmad-review:adversarial+edge-case-hunter'
+    : ref === EVIDENCE ? 'bmad-review:verification-gap' : ref.skill;
+
+/** The comprehensive mode chooses a product brief or full requirements according to the scope. */
+export const requiredDiscoveryChecks = (mode: DiscoveryOperation): readonly (readonly string[])[] => {
+  const served = brainstormingDiscoveryAdapter.fulfil[mode];
+  const documents = served.filter((ref) => ref === BRIEF || ref === PRD).map(discoveryLayerKey);
+  return [...served.filter((ref) => ref !== BRIEF && ref !== PRD).map((ref) => [discoveryLayerKey(ref)]),
+    ...(documents.length === 0 ? [] : [documents])];
+};

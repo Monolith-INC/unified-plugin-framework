@@ -9,6 +9,7 @@ import {sourcesFor, verifySource} from '../dist/dependency-sources.js';
 import {fetchSources, GIT_FETCHER} from '../dist/dependency-fetch.js';
 import {NODE_PLUGIN_FACTS_IO} from '../dist/plugin-reader.js';
 import {distributionFiles} from '../dist/distribution.js';
+import {copyReleaseDocuments} from './release-documentation.mjs';
 import {command, sequence} from '../dist/tooling-process.js';
 
 const repository=resolve(import.meta.dirname,'../../..');
@@ -39,8 +40,9 @@ const copyContents=async(root,scratch,sources)=>{
  const assembledDir=join(scratch,'assembled-plugin');
  const assembled=assemblePluginSource(repository,assembledDir);
  if(!assembled.ok) return fail('distribution-assembly',assembled.problems.join('; '),'Fix plugin assembly errors before publishing.');
- await Promise.all(['io.github.monolith-inc.upf','packages/cli/scripts/setup-write.py','packages/cli/scripts/setup-write-windows.py','README.md','CHANGELOG.md','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs','docs/workflows/tooling-bootstrap.md','docs/vendor-payload-installation.md'].map(path=>
+ await Promise.all(['io.github.monolith-inc.upf','packages/cli/scripts/setup-write.py','packages/cli/scripts/setup-write-windows.py','LICENSE','NOTICE','scripts/install-release.mjs','scripts/install.sh','packages/cli/scripts/installer-wizard.mjs','packages/cli/scripts/install-report.mjs','packages/cli/scripts/installer-picker.mjs'].map(path=>
   cp(join(repository,path),join(root,path),{recursive:true,filter:path=>!['node_modules','.venv','__pycache__','build','dist'].some(part=>path.split(/[\\/]/).includes(part))})));
+ await copyReleaseDocuments(repository,root);
  await cp(join(assembledDir,'skills'),join(root,'skills'),{recursive:true});
  const manifest=JSON.parse(await readFile(join(assembledDir,'plugin.json'),'utf8'));
  await writeFile(join(root,'plugin.json'),`${JSON.stringify({...manifest,version},null,2)}\n`);

@@ -1,0 +1,40 @@
+{
+  "feature": "AGE-212",
+  "story": "AGE-213",
+  "adr": "docs/work-items/day-002/adr.md",
+  "specs": [
+    "docs/work-items/day-002/spec.md"
+  ],
+  "plan": "docs/work-items/day-002/story-plan.md",
+  "tasks": [
+    {
+      "id": "AGE-214",
+      "requirements": [
+        "FR-001",
+        "FR-002",
+        "FR-003",
+        "FR-004",
+        "FR-005",
+        "FR-006",
+        "FR-007"
+      ]
+    },
+    {
+      "id": "AGE-215",
+      "requirements": [
+        "FR-002",
+        "FR-003",
+        "FR-004",
+        "FR-006"
+      ]
+    },
+    {
+      "id": "AGE-216",
+      "requirements": [
+        "FR-001",
+        "FR-005",
+        "FR-007"
+      ]
+    }
+  ]
+}

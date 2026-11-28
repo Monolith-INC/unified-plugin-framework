@@ -152,7 +152,7 @@ const inspectDiscovery = async (project: string, input: BootstrapInput, environm
           ? `Materialized dependency skill(s) differ from the pinned staged source: ${formatDrift(drifted)}.`
           : "A materialized dependency skill differs from the pinned staged source.",
         "Preserve any edited skill, reconcile the active copy with its pinned source and repeat verification; names or ownership markers alone are insufficient.")
-    : ready("Spec-driven host verification confirmed host spec receipt and all framework, knowledge, and workflow dependency skills.");
+    : ready("Verified the host specification receipt and installed project skill files. To identify the copy used by a host session, run project skill-source with its observed SKILL.md path.");
 };
 const requiredSkills = (project: string, input: BootstrapInput): readonly string[] => {
   const bindings = pluginBindings(project, input);

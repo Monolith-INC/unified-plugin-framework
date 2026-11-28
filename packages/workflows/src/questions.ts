@@ -20,6 +20,7 @@ export interface SingleQuestion {
 /** Multi-choice question presented as native checkboxes (grouped when long) or a numbered list with "Other". */
 export interface SeveralQuestion {
   readonly kind: "several";
+  readonly allowNone?: boolean;
   readonly explanation: string;
   readonly options: NonEmpty<QuestionOption>;
   readonly allowOther: true;
@@ -83,7 +84,7 @@ export const SHARED_INTERACTION_SECTION: string = [
   "- **Numbered fallback (never unnumbered `-` bullets):** when the host lacks a suitable structured-question tool but a reply channel exists, print a numbered list (`1.`, `2.`, ...) ending with **Other (type your own answer)**, state the expected reply format (for example, one number or comma-separated numbers), and re-ask cleanly if the reply does not match.",
   "- **No reply channel:** yield a needs-input result with the pending question, permitted answers and continuation context, without reading stdin or performing the protected action. Resume only when an explicit matching answer arrives.",
   "- **One decision, one answer channel:** use a native control only if it can carry the full answer, custom text and required consent; an optional-only prompt cannot carry a required decision. Otherwise use a suitable interactive canvas or numbered text when replies are available. Associate each response with the current decision instance and stable option keys, decode numbers against the displayed order, preserve custom text literally, and ignore stale or repeated callbacks. A dismissal or ambiguous response is not consent. Keep the decision pending and use the available recovery path.",
-  "- **Shared decision contract:** for general questions, call `agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.",
+  "- **Shared decision contract:** work from the project root. If the local launcher is missing, report its path and restore it through setup. For general questions, call `node .upf-tools/bin/agent-plugin question prepare <json>` with the question, decision instance, displayed option keys and observed host capabilities (`node .upf-tools/bin/agent-plugin question --help` describes the inputs). Present only the returned channel. Pass its continuation and each matching host response to `node .upf-tools/bin/agent-plugin question answer <json>`; use the returned event, not the raw response. Retain the continuation while waiting and mark it answered after one answer. For `needs-custom`, put the returned keys in `continuation.pendingCustomKeys` and ask for the literal text.",
   "- **Open questions:** keep purely open-ended questions typed; do not force open answers into buttons, and do not append unnumbered option menus to open questions.",
 ].join("\n");
 
@@ -221,7 +222,7 @@ export const renderNumberedFallback = (question: Question): string => {
         ...rows,
         `${otherIndex}. Other (type your own answer)`,
         "",
-        `Reply with comma-separated numbers (for example, 1, 3), "none", or type your own answer. If the reply does not match, re-ask once with the valid format.`,
+        `Reply with comma-separated numbers (for example, 1, 3)${question.allowNone === true ? ', "none",' : ''} or type your own answer. If the reply does not match, re-ask once with the valid format.`,
       ].join("\n");
     }
     case "confirm":

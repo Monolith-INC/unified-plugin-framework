@@ -76,17 +76,23 @@ For a pinned release, set `UPF_VERSION` in the environment before running the in
 
 ## Work with your agent
 
-Ask your agent to use the appropriate installed skill. For example:
+Ask your agent to use the installed project skill. For example:
 
-> Use `unified-plugin-framework:discover-thorough` to turn this proposal into a design we can approve.
+> Use `discover-thorough` to turn this proposal into a design we can approve.
 
-> Use `unified-plugin-framework:track-from-design` to organize the approved design into work items and implementation tasks.
+> Use `track-from-design` to organize the approved design into work items and implementation tasks.
 
-> Use `unified-plugin-framework:implement-work` to continue the approved plan, then `unified-plugin-framework:implement-verify` to check the result.
+> Use `implement-work` to continue the approved plan, then `implement-verify` to check the result.
 
-> Use `unified-plugin-framework:review-story` to review this story against its requirements and our recorded project decisions.
+> Use `review-story` to review this story against its requirements and our recorded project decisions.
 
-> Use `unified-plugin-framework:continuity-checkpoint` to save the current progress and unfinished work.
+> Use `continuity-checkpoint` to save the current progress and unfinished work.
+
+Setup verifies the project skill files. To identify the copy used in a particular Codex or Claude session, get the absolute `SKILL.md` path the host opened and run the following command from the project root. The result includes the selected and expected file paths, their versions when available, and whether the selected content matches the release. For a different source, open the reported project path to resume.
+
+```sh
+node .upf-tools/bin/agent-plugin project skill-source codex "/absolute/path/to/selected/SKILL.md"
+```
 
 The workflows use your project's saved tracker, language and document locations. Missing choices are handled through `project-bootstrap`, and severe or unrecoverable workflow failures hand over to `repair-workflow` so you get one concise explanation, a consent-gated fix (or exact manual next step), and a clean resume path. Fixed-answer prompts use your host's native selection controls (buttons, grouped multi-select, and safe two-button confirmations with an **Other** option) and fall back to numbered lists when native controls are unavailable; open-ended questions remain typed. The current project-operation adapters support Linear and repository-local work items; remote credentials belong in the supported adapter environment, not in a setup plan or chat.
 
@@ -111,8 +117,8 @@ Installed releases use bundled dependencies locally. Missing or changed bundled 
 
 ### Native discovery answers in Codex
 
-For a Codex client that supports MCP form input, register an MCP server with the command
-`agent-plugin question serve-codex`. The discovery skill uses the registered
+For a Codex client that supports MCP form input, set the MCP server working directory to the project root and register
+`node .upf-tools/bin/agent-plugin question serve-codex`. The discovery skill uses the registered
 `upf_discovery_question` tool when it needs a direction. The tool displays the question,
 applies the answer and returns the workflow's continuation. Save that state with the session.
 A form timeout after 60 seconds, dismissal or disconnection returns a replacement decision

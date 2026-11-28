@@ -26,7 +26,7 @@ import { bundleResolver, type BundleSource, type ResolvedBundle } from "./bundle
 import { RELEASE_VERSION } from "./release-asset.js";
 import { nodeFetchBytes, releaseBaseUrl } from "./release-download.js";
 import { NODE_UPGRADE_CHECK_IO, runUpgradeCheck } from "./upgrade-check.js";
-import { discoveryState, questionWording, runQuestion } from "./question-command.js";
+import { discoveryStateFor, questionWording, runQuestion } from "./question-command.js";
 import { questionKnowledge, recoveryLauncher } from "./question-knowledge.js";
 import { serveCodexQuestions } from "@agent-plugins/adapter-codex";
 
@@ -46,7 +46,7 @@ Commands:
                                     Check a workflow adapter's readiness (declared, installed, bound)
   upgrade-check <workflow> --framework dir --plugin-root [plugin[@version]=]dir...
                                     Check candidate plugin versions against the adapter and pin them
-  project describe|status|setup|request|bootstrap
+  project describe|status|skill-source|setup|request|bootstrap
                                     Use project operations or plan/apply accepted tooling setup
   design-handoff record|inspect|select|finish
                                     Save and resume a BMAD visual design handoff
@@ -88,9 +88,9 @@ export function run(argv: readonly string[], io: CliIo = NODE_CLI_IO): number | 
       const launcher = recoveryLauncher(rest);
       switch (true) {
         case rest[0] !== "serve-codex": return runQuestion(io, rest);
-        case rest.length === 1: return serveCodexQuestions(discoveryState, questionWording);
+        case rest.length === 1: return serveCodexQuestions(discoveryStateFor(io.cwd()), questionWording);
         case launcher === null: return printError(io, "Use an absolute --knowledge-launcher path.", 2);
-        default: return serveCodexQuestions(discoveryState, questionWording, questionKnowledge(launcher, io.cwd(), process.execPath)); // fp-allow: no-ambient-effect -- CLI process boundary
+        default: return serveCodexQuestions(discoveryStateFor(io.cwd()), questionWording, questionKnowledge(launcher, io.cwd(), process.execPath)); // fp-allow: no-ambient-effect -- CLI process boundary
       }
     }
     case "design-handoff":

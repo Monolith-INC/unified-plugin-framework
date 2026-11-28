@@ -198,3 +198,5 @@ export const releasePayloads = (operation: string, adapter: VendorAdapter, layou
 /** Builds one host's bundle in memory from a plugin source checkout, assembled with the active adapters. */
 export const buildVendorBundle = (sourceRoot: string, adapter: VendorAdapter): Result<VendorBundle> =>
   buildWith(sourceRoot, adapter, ACTIVE_ADAPTERS);
+
+export { isDiscoveryWork, isSelection, isSkillEvidence } from './discovery-work.js';
