@@ -17,6 +17,8 @@ Run `agent-plugin design-handoff inspect <workspace>` first.
 
 For an empty handoff, read the active BMAD UX customization and use its configured creative tools for the brief. Use a visual tool suitable for the choice, such as its design directions or wireframe. Preview the resulting artifact before showing it.
 
+If generation stops early, keep the original brief and decision log in the workspace and leave the completed renderer files in `.working/`. On resume, read that material and run `inspect`. If there is no saved choice set, recover the completed files and finish collecting the options before asking for a selection. If a set is already saved, use its stored order and files.
+
 Prepare an input file with `{"provider":"bmad","paths":["<absolute mockup file>", "..."]}`. Order the paths by how the mockups were shown, independent of generation order. Each path must identify a durable, standalone mockup. For an HTML mockup with companion files, save a screenshot or export it as standalone HTML before recording it. If a displayed option cannot be matched to a file, ask for the original image or a clear selection before advancing.
 
 Run `agent-plugin design-handoff record <workspace> <options.json>` before asking the user to choose. Use its numbered options for the choice. Stop for the user's selection. The saved alternatives live in `.upf-design-handoff/` and are separate from the artifacts BMAD distills. When a BMAD renderer writes alternatives to `.working/`, keep those alternatives out of finalization, and pass only the chosen import as the mockup reference.
