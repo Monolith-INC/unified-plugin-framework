@@ -37,6 +37,7 @@ test("the framework plugin installs each host's assembled skills, naming the onb
     const { target, code, stderr } = await install(framework, vendor);
     assert.equal(code, 0, stderr);
     assert.deepEqual(readdirSync(join(target, "skills")).toSorted(), [
+      "bmad-design-handoff",
       "continuity-checkpoint",
       "continuity-continue",
       "continuity-recover",
@@ -68,7 +69,8 @@ test("the framework plugin installs each host's assembled skills, naming the onb
     ]);
     readdirSync(join(target, "skills")).map((skill) => {
       const text = readFileSync(join(target, "skills", skill, "SKILL.md"), "utf8");
-      assert.match(text, skill.startsWith("discover-") ? /`brainstorming` throughout/
+      assert.match(text, skill === "bmad-design-handoff" ? /agent-plugin design-handoff inspect/
+        : skill.startsWith("discover-") ? /`brainstorming` throughout/
         : skill.startsWith("knowledge-") ? /`(?:setup-project-knowledge|discover-project-knowledge|query-project-knowledge|refresh-project-knowledge|ingest-docs|publish-docs)`/
           : skill.startsWith("project-") ? /agent-plugin project/
             : skill === "repair-workflow" ? /agent-plugin adapter-check/
